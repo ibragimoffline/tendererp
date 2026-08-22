@@ -370,6 +370,21 @@ kodga tegishli.
       javobi "ha" bo'lsa ish hajmi kattalashadi (katalogga ustun).
       Hujjat: `docs/erp_ishga_tushirish.md` "Birinchi kun".
 
+- [x] **4.15. ISHLAB CHIQARISHGA TAYYORGARLIK (1-bosqich)** —
+      `git init` + GitHub (`ibragimoffline/tendererp`), `.gitattributes`
+      (loyihaning qator oxirlari kelishuvi muzlatildi);
+      `run_erp.ps1 -Prod` — frontend QURILADI va uni backendning o'zi
+      uzatadi (bitta jarayon, bitta port; Vite dev serveri ishlab
+      chiqarishda ko'tarilmaydi); `-BindHost` bilan tarmoqqa ochiladi;
+      `/api` prefiksini server kesadi — BITTA build ikkala rejimda
+      ishlaydi; `logs/erp.log` (aylanma) — ilgari xato yashirin oynada
+      yo'qolardi; ikkala jadval vazifasi ro'yxatdan o'tkazildi
+      (`TenderERP-Backup`, `TenderERP-Reminders`) — ular
+      QO'YILMAGAN edi, ya'ni zaxira va eslatmalar umuman ishlamasdi.
+      `check_setup.py` ning KO'R NUQTASI yopildi: u zaxira fayllarini
+      sanab "sog'lom" ko'rsatardi, avtomatika yoqilganini esa
+      tekshirmasdi. Hujjat: `docs/erp_ishga_tushirish.md`.
+
 **Uch savolga javob olindi** — `erp_arxitektura_3.md` 6-bo'lim.
 
 ---

@@ -92,6 +92,9 @@ Eng ko'p beriladigan savollar va javob qayerda yozilgani.
 | Faktura eksporti qani? | ATAYLAB bo'sh: format mijozdan so'raladi | `erp_faktura.md` 1, 8 |
 | Buxgalterdan nima so'raladi? | Uchta savol, tayyor matn bilan | `eksport_savollari.md` |
 | Ma'lumotni qaysi tartibda kiritaman? | Passport → hodimlar → mijozlar → ombor → tannarx | `erp_ishga_tushirish.md` "Birinchi kun" |
+| Ishlab chiqarishda qanday ko'tariladi? | `run_erp.ps1 -Prod` — interfeysni BACKEND uzatadi | `erp_ishga_tushirish.md` "Ishlab chiqarishga qo'yish" |
+| Nega nginx yo'q? | Ichki ERP uchun yana bitta xizmat foydasidan ko'p ish | o'sha yerda |
+| Tarmoqqa ochsam nega kirish ishlamaydi? | `AUTH_COOKIE_SECURE=1` + HTTPS yo'q | o'sha yerda |
 | Bosma shakl yuridik hujjatmi? | **Yo'q** va bu shaklning o'zida yozilgan | `erp_faktura.md` 6c |
 | Shartnoma matni ERP da bormi? | **Yo'q** — ERP faqat ILOVANI (spetsifikatsiya) chiqaradi | `erp_faktura.md` 7c |
 | Akt nimasi bilan fakturadan farq qiladi? | "Bajarildi" deydi; bank rekvizitlari yo'q; yakuniy holat `signed` | `erp_faktura.md` 7b |

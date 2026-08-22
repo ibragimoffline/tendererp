@@ -302,3 +302,80 @@ alohida ko'rsatadi:
 
 Hammasi to'ldirilgach o'sha joyda "hamma ma'lumot kiritilgan" deb
 yoziladi — ya'ni "tekshirdimmi?" degan savol ochiq qolmaydi.
+
+---
+
+## ISHLAB CHIQARISHGA QO'YISH
+
+### Ikki rejim
+
+| Rejim | Buyruq | Kim uzatadi interfeysni |
+|---|---|---|
+| **Ishlab chiqish** | `.\run_erp.ps1` | Vite dev serveri (`:5174`), qayta yig'ish bilan |
+| **Ishlab chiqarish** | `.\run_erp.ps1 -Prod` | **Backendning o'zi** (`:8100`), qurilgan `dist` dan |
+
+`-Prod` da Vite **umuman ko'tarilmaydi**: u qayta yig'ish uchun
+mo'ljallangan vosita, ishlatish uchun emas (sekin va himoyalanmagan).
+
+Bitta jarayon, bitta port. `nginx` qo'shilmadi — ichki ERP uchun yana
+bitta xizmatni o'rnatish, sozlash va yangilash foydasidan ko'ra ko'proq
+ish. Tashqariga chiqarilganda nginx old tomonga qo'yiladi va bu joy
+o'zgarishsiz qoladi.
+
+**`/api` prefiksi:** mijoz kodi doim `/api/...` ga murojaat qiladi.
+Ishlab chiqishda uni Vite proksisi, ishlab chiqarishda esa serverning
+o'zi kesadi. Ya'ni **bitta build ikkala rejimda ham ishlaydi** va "prod
+uchun boshqa build" degan xatolik manbai yo'q.
+
+### Tarmoqqa ochish
+
+```powershell
+.\run_erp.ps1 -Prod -BindHost 0.0.0.0
+```
+
+Default `127.0.0.1` — faqat shu kompyuter. `0.0.0.0` bilan boshqa
+hodimlar `http://<IP>:8100` orqali kiradi.
+
+**DIQQAT — bu yerda jimgina buziladigan joy bor.** HTTPS bo'lmasa
+`.env` dagi `AUTH_COOKIE_SECURE` ni **0** qiling. Aks holda brauzer
+sessiya cookie'sini saqlamaydi va kirish "parol noto'g'ri" demasdan,
+shunchaki **ishlamaydi**. `check_setup.py` 11-bo'limi buni eslatib
+turadi.
+
+### Jadvalga qo'yiladigan ikki vazifa
+
+```powershell
+.\register_backup_task.ps1     # TenderERP-Backup    — har kuni 02:00
+.\register_erp_task.ps1        # TenderERP-Reminders — har kuni 08:30
+```
+
+Ularsiz zaxira ham, eslatmalar ham **umuman ishlamaydi**. Ilgari
+`check_setup.py` zaxira FAYLLARINI sanab "hammasi joyida" deb
+ko'rsatardi — hatto jadvalga qo'yilmagan bo'lsa ham. Endi u vazifaning
+o'zini tekshiradi.
+
+### Jurnal
+
+`logs/erp.log` — aylanma (10 MB × 7 fayl, `.env` dan sozlanadi).
+Ilgari server yashirin oynada ishlardi va xato o'sha yerda yo'qolardi.
+
+Parol, token va CSRF jurnalga **tushmaydi**: ular so'rov tanasida, u
+esa yozilmaydi.
+
+### Yangilash tartibi
+
+```powershell
+git pull
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt   # kerak bo'lsa
+psql ... -f schema_patch_erp_NN.sql                             # yangi patch bo'lsa
+.\run_erp.ps1 -Prod                                             # qayta qurib ko'taradi
+.\.venv\Scripts\python.exe check_setup.py                      # tekshirish
+```
+
+### Hali yo'q (ongli qaror emas, ish)
+
+- **HTTPS** — domen va sertifikat kerak;
+- **avtomatik qayta ishga tushish** — hozir kompyuter o'chsa qo'lda
+  ko'tariladi (Windows xizmati yoki `nssm` bilan hal bo'ladi);
+- **zaxirani boshqa joyga nusxalash** — bitta disk ishdan chiqsa,
+  undagi zaxira ham ketadi.

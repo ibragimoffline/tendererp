@@ -77,6 +77,25 @@ PATCH_COLUMNS = [
 ]
 
 
+def _task_state(name: str):
+    """Windows jadvalidagi vazifa holati (`None` — umuman yo'q).
+
+    PowerShell orqali: `schtasks` chiqishi tilga bog'liq, `Get-ScheduledTask`
+    esa obyekt qaytaradi va uni aniq o'qib bo'ladi."""
+    import subprocess
+    try:
+        r = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             f"(Get-ScheduledTask -TaskName '{name}' "
+             f"-ErrorAction SilentlyContinue).State"],
+            capture_output=True, text=True, timeout=25)
+        out = (r.stdout or "").strip()
+        return out or None
+    except Exception:                               # noqa: BLE001
+        # Windows bo'lmasa yoki huquq yetmasa — tekshirib bo'lmadi.
+        return None
+
+
 def table_exists(schema: str, name: str) -> bool:
     return bool(db.query_one(
         "SELECT 1 AS x FROM information_schema.tables "
@@ -295,6 +314,56 @@ def main() -> int:
                 print(f"        -> {hint}")
         else:
             say(OK, "hamma ma'lumot kiritilgan — tizim to'liq ishlaydi")
+
+        # --- 11. Joylashtirish ---
+        # KO'R NUQTA EDI: 10-bo'lim zaxira FAYLLARINI sanaydi va
+        # "oxirgisi 0 kun oldin" deb SOG'LOM ko'rsatadi — hatto
+        # jadvalga qo'yilmagan bo'lsa ham. Ya'ni tekshiruvning o'zi
+        # yolg'on xotirjamlik berardi: fayl qo'lda olingan bo'lishi
+        # mumkin va ertaga hech kim olmaydi.
+        head("11. Joylashtirish")
+
+        # 1) Jadvalga qo'yilgan vazifalar.
+        for task, what in (("TenderERP-Backup", "kunlik zaxira"),
+                           ("TenderERP-Reminders", "vazifa eslatmalari")):
+            state = _task_state(task)
+            if state is None:
+                say(WARN, f"'{task}' jadvalga qo'yilmagan ({what} ishlamaydi)",
+                    f"register_{'backup' if 'Backup' in task else 'erp'}_task.ps1")
+            elif state.lower() in ("disabled", "o'chirilgan"):
+                say(WARN, f"'{task}' O'CHIRILGAN", "Task Scheduler'dan yoqing")
+            else:
+                say(OK, f"'{task}' jadvalda ({what})")
+
+        # 2) Qurilgan interfeys.
+        import datetime as _dt
+        dist = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "frontend", "dist", "index.html")
+        if os.path.isfile(dist):
+            age_d = (_dt.datetime.now()
+                     - _dt.datetime.fromtimestamp(os.path.getmtime(dist))).days
+            say(OK, f"frontend qurilgan ({age_d} kun oldin)")
+        else:
+            say(WARN, "frontend qurilmagan (frontend/dist yo'q)",
+                "ishlab chiqarishda: run_erp.ps1 -Prod")
+
+        # 3) Cookie va HTTPS — birga ishlamaydigan juftlik.
+        secure = (os.environ.get("AUTH_COOKIE_SECURE", "1").strip()
+                  not in ("0", "false", "no", "off"))
+        if secure:
+            say(OK, "cookie Secure — HTTPS yoki localhost uchun to'g'ri",
+                "tarmoq manzilida (192.168.x.x) HTTP orqali ochsangiz "
+                "kirish ISHLAMAYDI: AUTH_COOKIE_SECURE=0 qiling")
+        else:
+            say(WARN, "AUTH_COOKIE_SECURE=0 — sessiya cookie'si HTTP orqali "
+                      "ham yuboriladi",
+                "faqat ishonchli ichki tarmoqda; tashqariga chiqarsangiz "
+                "HTTPS qo'ying va 1 ga qaytaring")
+
+        # 4) Zaxira BOSHQA joyda ham bormi — buni tekshirib bo'lmaydi,
+        #    lekin eslatib turish kerak.
+        say(OK, "eslatma: zaxira boshqa diskka/bulutga ham nusxalanishi kerak",
+            "bitta disk ishdan chiqsa, undagi zaxira ham ketadi")
 
         # --- 10. Zaxira ---
         head("10. Zaxira nusxasi")

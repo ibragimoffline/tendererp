@@ -39,10 +39,66 @@ from api.erp import (act as erp_act, analytics as erp_analytics,  # noqa: E402
                      submission as erp_sub, tasks as erp_tasks)
 
 
+# =============================================================================
+# JURNAL (log)
+# =============================================================================
+# MUAMMO: server yashirin oynada ishlaydi (`run_erp.ps1`), ya'ni xato
+# bo'lsa u ekranga chiqadi va o'sha yerda YO'QOLADI. "Kecha ishlamadi"
+# degan gapni tekshiradigan hech narsa yo'q edi.
+#
+# Yechim eng soddasi: FAYLGA yozish, aylanma (rotatsiya) bilan.
+# Alohida xizmat (Sentry va sh.k.) qo'shilmaydi — ichki ERP uchun u
+# ortiqcha va tashqariga ma'lumot chiqarardi.
+#
+# NIMA YOZILADI: uvicorn'ning kirish jurnali va ilova xatolari.
+# PAROL, TOKEN va CSRF hech qachon jurnalga tushmaydi — ular so'rov
+# tanasida, u esa yozilmaydi.
+LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                       "logs")
+LOG_KEEP = int(os.environ.get("LOG_KEEP_FILES", "7"))
+LOG_MAX_MB = int(os.environ.get("LOG_MAX_MB", "10"))
+
+
+def _setup_logging() -> str:
+    """Faylga yozishni yoqadi va fayl yo'lini qaytaradi."""
+    import logging
+    from logging.handlers import RotatingFileHandler
+
+    os.makedirs(LOG_DIR, exist_ok=True)
+    path = os.path.join(LOG_DIR, "erp.log")
+
+    fmt = logging.Formatter(
+        "%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S")
+    handler = RotatingFileHandler(path, maxBytes=LOG_MAX_MB * 1024 * 1024,
+                                  backupCount=LOG_KEEP, encoding="utf-8")
+    handler.setFormatter(fmt)
+
+    root = logging.getLogger()
+    # Ikki marta ulanib qolmasin (qayta yuklashda).
+    if not any(isinstance(h, RotatingFileHandler) for h in root.handlers):
+        root.addHandler(handler)
+    root.setLevel(logging.INFO)
+
+    # uvicorn o'z jurnalchilarini alohida yuritadi — ularni ham
+    # shu faylga yo'naltiramiz.
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        lg = logging.getLogger(name)
+        if not any(isinstance(h, RotatingFileHandler) for h in lg.handlers):
+            lg.addHandler(handler)
+    return path
+
+
+LOG_FILE = _setup_logging()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import logging
     db.init_pool()
+    logging.getLogger("erp").info("ERP ishga tushdi | jurnal: %s", LOG_FILE)
     yield
+    logging.getLogger("erp").info("ERP to'xtadi")
     db.close_pool()
 
 
@@ -1359,3 +1415,75 @@ def erp_opportunity_compliance(opp_id: int, user: Dict[str, Any] = Depends(me)):
     res["client"] = client
     res["doc_source"] = "client" if client else "company"
     return res
+
+
+# =============================================================================
+# ISHLAB CHIQARISH REJIMI — interfeysni SHU SERVER uzatadi
+# =============================================================================
+# Ishlab chiqishda ikki jarayon bor: Vite (:5174) sahifani beradi va
+# `/api` ni backendga uzatadi. Ishlab chiqarishda esa Vite dev serverini
+# qoldirish MUMKIN EMAS — u qayta yig'ish uchun mo'ljallangan, sekin va
+# himoyalanmagan.
+#
+# Yechim eng soddasi: qurilgan `frontend/dist` ni SHU FastAPI uzatadi.
+# Bitta jarayon, bitta port, CORS ham, proksi ham kerak emas.
+#
+# NEGA nginx EMAS: ichki ERP uchun yana bitta xizmatni o'rnatish,
+# sozlash va yangilash — foydasidan ko'ra ko'proq ish. Kompaniya
+# tashqariga chiqarmoqchi bo'lsa, o'shanda nginx qo'shiladi va bu joy
+# o'zgarishsiz qolaveradi.
+#
+# `/api` PREFIKSI: mijoz kodi doim `/api/...` ga murojaat qiladi
+# (Vite proksisi shunga sozlangan). Ishlab chiqarishda proksi yo'q,
+# shuning uchun prefiksni SERVER kesadi — bitta build ikkala rejimda
+# ham ishlaydi va "prod uchun boshqa build" degan xatolik manbai
+# yo'qoladi.
+UI_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                      "frontend", "dist")
+
+
+@app.middleware("http")
+async def strip_api_prefix(request: Request, call_next):
+    """`/api/erp/...` -> `/erp/...`. Mijoz kodi o'zgarmaydi."""
+    p = request.scope.get("path", "")
+    if p.startswith("/api/"):
+        request.scope["path"] = p[4:]
+    elif p == "/api":
+        request.scope["path"] = "/"
+    return await call_next(request)
+
+
+def _mount_ui() -> bool:
+    """Qurilgan interfeysni ulash. `dist` yo'q bo'lsa — JIM o'tkazamiz:
+    ishlab chiqishda u kerak emas va uning yo'qligi xato emas."""
+    index = os.path.join(UI_DIR, "index.html")
+    if not os.path.isfile(index):
+        return False
+
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
+    # Statik fayllar (`/assets/...`) — o'z yo'lida.
+    app.mount("/assets", StaticFiles(directory=os.path.join(UI_DIR, "assets")),
+              name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa(full_path: str):
+        """SPA: manzilni brauzer emas, ilova hal qiladi.
+
+        API yo'llari BU YERGA YETIB KELMAYDI — ular yuqorida
+        ro'yxatdan o'tgan va Starlette tartib bo'yicha moslashtiradi.
+        Noma'lum `/erp/...` esa 404 bo'lishi kerak, `index.html` emas:
+        aks holda sinov ham, mijoz kodi ham xatoni sezmay qolardi."""
+        if full_path.startswith(("erp/", "health", "docs", "openapi")):
+            raise HTTPException(status_code=404, detail="Topilmadi.")
+        f = os.path.join(UI_DIR, full_path)
+        if full_path and os.path.isfile(f):
+            return FileResponse(f)
+        return FileResponse(index)
+
+    return True
+
+
+#: Interfeys ulandimi — `/health` shuni aytadi (joylashtirishda kerak).
+UI_MOUNTED = _mount_ui()
