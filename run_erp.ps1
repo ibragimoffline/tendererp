@@ -46,6 +46,9 @@ if ($Stop) {
 }
 
 # --- 0) Ishlab chiqarish: frontendni QURAMIZ ---------------------------------
+$py = Join-Path $Root '.venv\Scripts\python.exe'
+if (-not (Test-Path $py)) { throw "Virtual muhit yo'q: $py  (python -m venv .venv)" }
+
 if ($Prod) {
     Write-Host "`n[0/2] Frontend qurilyapti (ishlab chiqarish)" -ForegroundColor Cyan
     $fe0 = Join-Path $Root 'frontend'
@@ -57,14 +60,18 @@ if ($Prod) {
         & npm.cmd run build
         if ($LASTEXITCODE -ne 0) { throw "npm run build xato bilan tugadi" }
     } finally { Pop-Location }
-    Write-Host "[OK] frontend/dist tayyor"
+    # "Build o'tdi" degani "ishlaydi" degani EMAS: bir marta Tailwind
+    # umuman ishga tushmagan va build baribir muvaffaqiyatli tugagan.
+    & $py (Join-Path $Root 'check_build.py')
+    if ($LASTEXITCODE -ne 0) {
+        throw "Qurilgan interfeys buzuq - yuqoridagi ro'yxatga qarang"
+    }
+    Write-Host "[OK] frontend/dist tayyor va tekshirildi"
 }
 
 # --- 1) Backend --------------------------------------------------------------
 Write-Host "`n[1/2] ERP backend (:8100)" -ForegroundColor Cyan
 Stop-OnPort 8100
-$py = Join-Path $Root '.venv\Scripts\python.exe'
-if (-not (Test-Path $py)) { throw "Virtual muhit yo'q: $py  (python -m venv .venv)" }
 Start-Process -FilePath $py `
     -ArgumentList '-m', 'uvicorn', 'api.main:app', '--port', '8100', '--host', $BindHost `
     -WorkingDirectory $Root -WindowStyle Hidden `

@@ -342,7 +342,8 @@ def main() -> int:
         if os.path.isfile(dist):
             age_d = (_dt.datetime.now()
                      - _dt.datetime.fromtimestamp(os.path.getmtime(dist))).days
-            say(OK, f"frontend qurilgan ({age_d} kun oldin)")
+            say(OK, f"frontend qurilgan ({age_d} kun oldin)",
+                "natijasi to'g'rimi: check_build.py")
         else:
             say(WARN, "frontend qurilmagan (frontend/dist yo'q)",
                 "ishlab chiqarishda: run_erp.ps1 -Prod")

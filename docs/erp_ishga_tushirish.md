@@ -379,3 +379,54 @@ psql ... -f schema_patch_erp_NN.sql                             # yangi patch bo
   ko'tariladi (Windows xizmati yoki `nssm` bilan hal bo'ladi);
 - **zaxirani boshqa joyga nusxalash** — bitta disk ishdan chiqsa,
   undagi zaxira ham ketadi.
+
+---
+
+## "BUILD O'TDI" DEGANI "ISHLAYDI" DEGANI EMAS
+
+```
+.venv/Scripts/python.exe check_build.py
+```
+
+`run_erp.ps1 -Prod` buni O'ZI yurgizadi va xato bo'lsa serverni
+ko'tarmaydi.
+
+### Nega bu tekshiruv bor
+
+`frontend/vite.config.ts` da `plugins` ro'yxati tushib qolgan edi:
+`react` va `tailwindcss` import qilingan, lekin ro'yxatga
+qo'shilmagan. Tailwind umuman ishga tushmagan — birorta utilita sinfi
+(`.flex`, `.rounded-lg`) yaratilmagan va interfeys **butunlay
+bezaksiz** chiqqan.
+
+Eng yomoni: `tsc` ham, `npm run build` ham **muvaffaqiyatli** tugagan.
+Utilitasiz CSS ham to'g'ri CSS. Ya'ni hech qanday vosita xato
+ko'rsatmagan va buzuqlik haftalab sezilmagan — u faqat EKRANDA
+ko'rinardi.
+
+### Nima tekshiriladi
+
+| Nima | Nega |
+|---|---|
+| `plugins` ro'yxatida `react()` va `tailwindcss()` | aynan o'sha xato |
+| Import qilingan plagin **ishlatilganmi** | uning izi |
+| CSS da `.flex`, `.grid`, `.rounded-lg`, `.bg-card` | Tailwind haqiqatan yurganmi |
+| CSS da `@custom-variant` **qolmaganmi** | xom fayl uzatilyaptimi |
+| `.dark` qoidalari | qorong'i mavzu qurilganmi |
+| JS hajmi > 100 KB | qurilish yarim qolmaganmi |
+| `<head>` da mavzu skripti | chaqnash bo'lmasin |
+
+Qo'riqchining o'zi ham tekshirilgan: `plugins` qatori vaqtincha olib
+tashlanganda **5 ta xato** bilan yiqiladi va "ishlab chiqarishga
+qo'ymang" deb aytadi.
+
+### ESLint nega yo'q
+
+Qo'shishga urinildi. `typescript-eslint` **TypeScript 7 ni butunlay
+rad etadi** — ishga tushishdan bosh tortadi (peer talab: `<6.1`).
+Uni majburlab o'rnatish ham yordam bermadi.
+
+U qo'llab-quvvatlaganda `no-unused-vars` shu xatoni ham ushlagan
+bo'lardi (import bor, ishlatilishi yo'q). Shuning uchun bu — vaqtincha
+holat, qaror emas: `typescript-eslint` TS 7 ni qo'llaganda qaytib
+ko'riladi.

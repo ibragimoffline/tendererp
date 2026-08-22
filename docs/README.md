@@ -94,6 +94,8 @@ Eng ko'p beriladigan savollar va javob qayerda yozilgani.
 | Ma'lumotni qaysi tartibda kiritaman? | Passport → hodimlar → mijozlar → ombor → tannarx | `erp_ishga_tushirish.md` "Birinchi kun" |
 | Ishlab chiqarishda qanday ko'tariladi? | `run_erp.ps1 -Prod` — interfeysni BACKEND uzatadi | `erp_ishga_tushirish.md` "Ishlab chiqarishga qo'yish" |
 | Nega nginx yo'q? | Ichki ERP uchun yana bitta xizmat foydasidan ko'p ish | o'sha yerda |
+| Interfeys to'g'ri qurilganini kim tekshiradi? | `check_build.py` — `-Prod` uni o'zi yurgizadi | `erp_ishga_tushirish.md` "Build o'tdi" |
+| Nega ESLint yo'q? | `typescript-eslint` TS 7 ni rad etadi — vaqtincha holat | o'sha yerda |
 | Tarmoqqa ochsam nega kirish ishlamaydi? | `AUTH_COOKIE_SECURE=1` + HTTPS yo'q | o'sha yerda |
 | Bosma shakl yuridik hujjatmi? | **Yo'q** va bu shaklning o'zida yozilgan | `erp_faktura.md` 6c |
 | Shartnoma matni ERP da bormi? | **Yo'q** — ERP faqat ILOVANI (spetsifikatsiya) chiqaradi | `erp_faktura.md` 7c |
