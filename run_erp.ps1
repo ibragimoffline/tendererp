@@ -56,10 +56,23 @@ if ($Prod) {
         throw "npm install bajarilmagan: $fe0"
     }
     Push-Location $fe0
+    # DIQQAT: PowerShell 5.1 tashqi dasturning stderr qatorini XATO deb
+    # hisoblaydi ($ErrorActionPreference = 'Stop' bilan skript o'sha
+    # yerda uziladi). Vite esa ogohlantirishlarni stderr ga yozadi va
+    # ular xato EMAS. Haqiqat - CHIQISH KODIDA, matnda emas.
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     try {
+        # Interfeys sinovi QURISHDAN OLDIN: buzuq kodni qurib, keyin
+        # tekshirishning ma'nosi yo'q.
+        & npm.cmd run test
+        if ($LASTEXITCODE -ne 0) { throw "interfeys sinovi yiqildi" }
         & npm.cmd run build
         if ($LASTEXITCODE -ne 0) { throw "npm run build xato bilan tugadi" }
-    } finally { Pop-Location }
+    } finally {
+        $ErrorActionPreference = $prev
+        Pop-Location
+    }
     # "Build o'tdi" degani "ishlaydi" degani EMAS: bir marta Tailwind
     # umuman ishga tushmagan va build baribir muvaffaqiyatli tugagan.
     & $py (Join-Path $Root 'check_build.py')

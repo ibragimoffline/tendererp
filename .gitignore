@@ -10,3 +10,6 @@ dist/
 # tushmasligi kerak va hajmi ham katta.
 backups/
 logs/
+
+# TypeScript build keshi - qurilish natijasi, kod emas
+*.tsbuildinfo

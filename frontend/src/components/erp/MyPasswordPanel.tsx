@@ -66,12 +66,12 @@ export default function MyPasswordPanel({ userId, onClose }: {
         </div>
 
         <div className="space-y-3">
-          <Field label="Joriy parol" value={cur} onChange={setCur} autoFocus
-            autoComplete="current-password" />
-          <Field label="Yangi parol" value={pw1} onChange={setPw1}
+          <Field id="pw-cur" label="Joriy parol" value={cur} onChange={setCur}
+            autoFocus autoComplete="current-password" />
+          <Field id="pw-new" label="Yangi parol" value={pw1} onChange={setPw1}
             autoComplete="new-password" />
-          <Field label="Yangi parol (takror)" value={pw2} onChange={setPw2}
-            autoComplete="new-password" />
+          <Field id="pw-rep" label="Yangi parol (takror)" value={pw2}
+            onChange={setPw2} autoComplete="new-password" />
           {mismatch && (
             <p className="text-caption text-destructive">
               Ikki nusxa bir xil emas.
@@ -110,7 +110,13 @@ export default function MyPasswordPanel({ userId, onClose }: {
   )
 }
 
-function Field({ label, value, onChange, ...rest }: {
+/** Maydon YORLIQ bilan bog'langan (`htmlFor` + `id`).
+ *
+ *  Ilgari yorliq oddiy `<div>` edi: ko'zga bir xil ko'rinardi, lekin
+ *  ekran o'quvchisi uchun maydon NOMSIZ qolardi va yorliqni bosish ham
+ *  ishlamasdi. Buni interfeys sinovi topdi. */
+function Field({ id, label, value, onChange, ...rest }: {
+  id: string
   label: string
   value: string
   onChange: (v: string) => void
@@ -119,10 +125,11 @@ function Field({ label, value, onChange, ...rest }: {
 }) {
   return (
     <div>
-      <div className="mb-1 text-caption font-semibold text-muted-foreground">
+      <label htmlFor={id}
+        className="mb-1 block text-caption font-semibold text-muted-foreground">
         {label}
-      </div>
-      <Input type="password" value={value}
+      </label>
+      <Input id={id} type="password" value={value}
         onChange={(e) => onChange(e.target.value)} {...rest} />
     </div>
   )

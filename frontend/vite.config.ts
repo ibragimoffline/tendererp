@@ -1,5 +1,8 @@
 import path from 'node:path'
-import { defineConfig } from 'vite'
+// `defineConfig` VITEST dan olinadi: `test` bo'limining turi shu
+// paketda e'lon qilingan. `vite` dan olinsa `tsc` uni notanish
+// kalit deb hisoblaydi va qurilish yiqiladi.
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
@@ -18,6 +21,14 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },
+  },
+  // SINOV MUHITI — `jsdom`, chunki komponentlar DOM ga tayanadi.
+  // `globals: true` YO'Q: `describe`/`it` ataylab import qilinadi, aks
+  // holda fayl qayerdan kelganini o'qib bo'lmaydi.
+  test: {
+    environment: 'jsdom',
+    include: ['src/**/*.test.{ts,tsx}'],
+    restoreMocks: true,
   },
   server: {
     port: 5174,

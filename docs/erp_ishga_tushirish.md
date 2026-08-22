@@ -430,3 +430,53 @@ U qo'llab-quvvatlaganda `no-unused-vars` shu xatoni ham ushlagan
 bo'lardi (import bor, ishlatilishi yo'q). Shuning uchun bu — vaqtincha
 holat, qaror emas: `typescript-eslint` TS 7 ni qo'llaganda qaytib
 ko'riladi.
+
+---
+
+## INTERFEYS SINOVI
+
+```
+cd frontend
+npm test          # bir marta
+npm run test:watch
+```
+
+`run_erp.ps1 -Prod` uni **qurishdan oldin** yurgizadi: buzuq kodni
+qurib, keyin tekshirishning ma'nosi yo'q.
+
+### Nima tekshiriladi — va nima YO'Q
+
+Backendda 875 tekshiruv bor edi, frontendda **bittasi ham yo'q**. Ya'ni
+"aralash valyutada summa ko'rsatilmaydi", "hisob to'liq emas deb
+aytiladi", "brokerga pul bloklari ko'rinmaydi" degan qoidalar serverda
+tekshirilardi, **ekranda esa hech kim tekshirmasdi**. Bitta noto'g'ri
+`&&` va qoida jimgina yo'qoladi.
+
+Shuning uchun sinov komponentlarni emas, **qarorlarni** tekshiradi:
+
+| Qoida | Qayerda |
+|---|---|
+| Hisob to'liq bo'lmasa OCHIQ aytiladi + "haqiqiy foyda bundan kam" | `ProfitLine` |
+| QQS daromaddan ALOHIDA | `ProfitLine` |
+| Pul harakati yo'q -> blok UMUMAN chiqmaydi | `ProfitLine` |
+| Aralash valyutada umumiy yig'indi YO'Q + sababi | `ProfitPanel` |
+| Aralashda panel pul yig'indilarini yashiradi, SANOQ qoladi | `Dashboard` |
+| Brokerga pul/audit so'rovlari UMUMAN yuborilmaydi | `Dashboard` |
+| Audit toza bo'lsa ham buni AYTADI | `AuditPanel` |
+| "ERP dan tashqarida" va "chiqarilgandan keyin" belgilari | `AuditPanel` |
+| Parol: nusxalar mos kelmasa tugma o'chiq | `MyPasswordPanel` |
+| Yopilgan sessiyalar soni aytiladi | `MyPasswordPanel` |
+| Parol uzunligi sharti MIJOZDA takrorlanmaydi | `MyPasswordPanel` |
+
+**Ranglar, oraliqlar va joylashuv tekshirilmaydi.** Ular ko'z bilan
+ko'riladi; sinov ularni ushlashga urinsa, har dizayn tuzatishida
+yiqilib, foydadan ko'ra ko'proq to'sqinlik qilardi.
+
+`api` moduli almashtiriladi — sinov na tarmoqqa, na bazaga chiqadi.
+
+### Birinchi yurishda topilgani
+
+`MyPasswordPanel` da maydonlar yorliq bilan **bog'lanmagan** edi:
+yorliq oddiy `<div>` bo'lgani uchun ekran o'quvchisi uchun maydon
+nomsiz qolardi va yorliqni bosish ham ishlamasdi. Ko'zga esa hammasi
+joyida ko'rinardi. Tuzatildi (`htmlFor` + `id`).

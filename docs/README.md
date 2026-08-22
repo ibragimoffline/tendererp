@@ -96,6 +96,8 @@ Eng ko'p beriladigan savollar va javob qayerda yozilgani.
 | Nega nginx yo'q? | Ichki ERP uchun yana bitta xizmat foydasidan ko'p ish | o'sha yerda |
 | Interfeys to'g'ri qurilganini kim tekshiradi? | `check_build.py` — `-Prod` uni o'zi yurgizadi | `erp_ishga_tushirish.md` "Build o'tdi" |
 | Nega ESLint yo'q? | `typescript-eslint` TS 7 ni rad etadi — vaqtincha holat | o'sha yerda |
+| Interfeys qoidalarini kim tekshiradi? | `npm test` — 12 sinov, QARORLAR bo'yicha | `erp_ishga_tushirish.md` "Interfeys sinovi" |
+| Nega ranglar sinovda yo'q? | Har dizayn tuzatishida yiqilib, to'sqinlik qilardi | o'sha yerda |
 | Tarmoqqa ochsam nega kirish ishlamaydi? | `AUTH_COOKIE_SECURE=1` + HTTPS yo'q | o'sha yerda |
 | Bosma shakl yuridik hujjatmi? | **Yo'q** va bu shaklning o'zida yozilgan | `erp_faktura.md` 6c |
 | Shartnoma matni ERP da bormi? | **Yo'q** — ERP faqat ILOVANI (spetsifikatsiya) chiqaradi | `erp_faktura.md` 7c |
