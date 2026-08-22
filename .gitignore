@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+node_modules/
+dist/
+*.log
+
+# Zaxira nusxalari (backup_erp.ps1). Ular MA'LUMOT - kodga
+# tushmasligi kerak va hajmi ham katta.
+backups/

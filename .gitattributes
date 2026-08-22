@@ -1,0 +1,18 @@
+# QATOR OXIRLARI — loyihaning kelishuviga MOSLASHTIRILGAN.
+#
+# Bu yerda "hammasi LF" degan odatiy qoida ISHLAMAYDI: loyihada ataylab
+# ikki xil uslub bor va u tekshirib turiladi —
+#   api/*.py, *.ps1  -> CRLF (PowerShell 5.1 BOM'siz .ps1 ni ANSI deb
+#                       o'qiydi; Windows'da yozilgan backend shu uslubda)
+#   _tests, frontend, docs, *.sql -> LF
+#
+# `text=auto` bo'lsa git ularni o'zi normallashtirib, kelishuvni buzardi
+# va har commitda "butun fayl o'zgardi" degan farq chiqardi. Shuning
+# uchun matn fayllari `-text`: git qanday bo'lsa shunday saqlaydi.
+* -text
+
+# Ikkilik fayllar — aniq belgilanadi.
+*.png binary
+*.jpg binary
+*.woff2 binary
+*.dump binary
