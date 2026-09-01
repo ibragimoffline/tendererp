@@ -83,12 +83,20 @@ cheklisti (P0-8) **mijoz** hujjatlariga qarab ishlaydi.
 - `erp.client_document` — mijoz hujjatlari (guvohnoma, litsenziya,
   sertifikat...) — `company_document` (P0-8) bilan **bir xil** `doc_type`
   kanonik ro'yxati (`compliance.DOC_TYPES`) ishlatiladi.
-- **Cheklist integratsiyasi:** `GET /tenders/{id}/compliance?client_id=N`
-  — `compliance.check()` ga ixtiyoriy `client_id` parametri; berilsa
-  `company_document` o'rniga `erp.client_document` bilan solishtiradi.
-  Bu `api/compliance.py` ga **kichik** o'zgarish (manba jadvalini tanlash),
-  qoidalar o'zgarmaydi. Opportunity kartasi cheklistni doim o'z `client_id`
-  bilan chaqiradi.
+- **Cheklist integratsiyasi:** ~~`compliance.check()` ga `client_id`~~
+  — **BOSHQACHA BAJARILDI.** `client_id` berilsa `api/compliance.py`
+  `erp.*` dan o'qishi kerak bo'lardi, ya'ni tender-ai ERP sxemasini
+  bilib qolardi. Buning o'rniga **hujjatlar RO'YXATI uzatiladi**:
+  `compliance.check(tender_id, docs=[...])` — qoidalar manbadan
+  mustaqil sof funksiya bo'lib qoladi (`api/tenderai.py` ->
+  `compliance()`).
+
+  **2026-09-02 dan beri ikkinchi yo'l ham bor:** ERP
+  `erp.v_client_document` shartnoma-view ini chop etdi
+  (`schema_patch_erp_19.sql`, ochiq qarz №5) va u AYNAN shu
+  ro'yxatni beradi. Tender-AI tayyor bo'lganda HTTP o'rniga view dan
+  o'qiydi — o'tish bir tomonlama va ERP uchun sezilmaydigan
+  (`erp_integratsiya_6.md`).
 - Mijozlar sahifasi: ro'yxat, passport kartasi, hujjatlari, shu mijozning
   barcha opportunity'lari va natijalari (yutish foizi).
 - Mijoz bo'yicha hisobot `GET /erp/stats` ga qo'shiladi.

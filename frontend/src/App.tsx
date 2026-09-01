@@ -12,7 +12,8 @@ import InvoicePage from './components/erp/InvoicePage'
 import LoginPage from './components/erp/LoginPage'
 import MyPasswordPanel from './components/erp/MyPasswordPanel'
 import TakeTenderDialog from './components/erp/TakeTenderDialog'
-import { ErpError, SchemaMissing } from './components/erp/erpShared'
+import { ErpError, SchemaMissing, can, permLevel, roleAtLeast, setPerms } from './components/erp/erpShared'
+import NotificationBell from './components/erp/NotificationBell'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/theme'
@@ -159,8 +160,17 @@ export default function App() {
   // KIRISH. `undefined` — hali tekshirilmadi (token bor, so'rov ketyapti);
   // `null` — kirilmagan. Ikkisini ajratmasak, sahifa har yangilanganda
   // kirish ekrani bir lahza chaqnab ketardi.
-  const [user, setUser] = useState<AuthUser | null | undefined>(
+  const [user, setUserState] = useState<AuthUser | null | undefined>(
     () => (getToken() ? undefined : null))
+
+  /** Foydalanuvchi bilan birga uning HUQUQLAR kesimi ham saqlanadi
+   *  (`erpShared.setPerms`). Ikkisi bitta joyda o'rnatiladi: aks holda
+   *  kirish bir yo'ldan (login), huquq boshqasidan (me) kelib, ular
+   *  ajralib qolishi mumkin edi. */
+  function setUser(u: AuthUser | null | undefined) {
+    setPerms(u && typeof u === 'object' ? u.perms : null)
+    setUserState(u)
+  }
 
   useEffect(() => {
     // 401 — sessiya tugadi: kirish ekraniga qaytamiz (api.ts chaqiradi).
@@ -199,10 +209,12 @@ export default function App() {
   if (!user) return <LoginPage onLogin={setUser} />
 
   // Tahlil odamlar haqidagi ko'rsatkichni ham beradi — brokerga ko'rsatilmaydi
-  const isManager = user.role === 'manager' || user.role === 'admin'
-  // Hodimlar ekrani — parol va rol; faqat administrator.
+  const isManager = roleAtLeast(user.role, 'menejer')
+  // Bo'limlar HUQUQ bo'yicha yashiriladi (rol bo'yicha emas): "kim
+  // ko'radi" degan qaror serverdagi matritsada, bu yerda faqat uning
+  // natijasi ishlatiladi.
   const nav = NAV.filter((n) => (n.key !== 'company' || isManager)
-    && (n.key !== 'staff' || user.role === 'admin'))
+    && (n.key !== 'staff' || can('tizim.hodim')))
   const current = NAV.find((n) => n.key === view)
 
   return (
@@ -265,6 +277,11 @@ export default function App() {
               </div>
             </div>
           </div>
+
+          {/* BILDIRISHNOMA — yo'naltirish oqimi kartani o'zi
+              ochadi, ya'ni "sizga ish berildi" degan gap biror
+              joyda aytilishi kerak (`api/erp/xabar.py`). */}
+          <NotificationBell onOpenOpportunity={openOpportunity} />
 
           <ThemeSwitch theme={theme} onChange={setTheme} />
           {/* O'Z parolini almashtirish — HAR KIM uchun (auth-6).
@@ -332,6 +349,19 @@ export default function App() {
 
         {error && <ErpError msg={error} />}
 
+        {/* EGALIK: "o'z ishlarim" HISOB HODIMGA bog'langanda ishlaydi
+            (`api/erp/egalik.py`). Bog'lanmagan bo'lsa ro'yxatlar bo'sh
+            keladi — sababini AYTAMIZ, aks holda odam "ma'lumot
+            yo'qoldi" deb o'ylardi. */}
+        {permLevel('karta.korish') === 'own' && !user.broker_id && (
+          <div className="mb-3 rounded-lg border border-soon/40 bg-soon-soft px-3 py-2.5 text-body text-soon-strong">
+            <span className="font-semibold">Hisobingiz hodimga bog'lanmagan.</span>{' '}
+            Shuning uchun kartalar, mijozlar va hujjatlar ro'yxati bo'sh.
+            Administrator "Hodimlar" ekranida hisobingizni hodim yozuviga
+            bog'lashi kerak.
+          </div>
+        )}
+
         {/* Tender-AI yiqilgan bo'lsa ERP ISHLAYVERADI: mavjud kartalar
             ochiladi, faqat cheklist va yangi karta olish ishlamaydi. Buni
             yashirmaymiz. */}
@@ -366,13 +396,24 @@ export default function App() {
           )}
           {view === 'stock' && <StockPage />}
           {view === 'invoices' && <InvoicePage />}
-          {view === 'staff' && user.role === 'admin' && <StaffPage />}
+          {view === 'staff' && can('tizim.hodim') && <StaffPage />}
         </>)}
       </main>
 
       {/* Tender-AI dan "ERP da ishga olish" bilan kelingan bo'lsa forma
           darhol ochiladi — foydalanuvchi tenderni qidirib o'tirmasin. */}
-      {takeOpen && takeTender !== null && (
+      {/* Karta yaratish — rahbar-menejer amali (`karta.yaratish`).
+          Tender-AI dan "ERP da ishga olish" havolasi bilan kelgan
+          brokerga forma OCHILMAYDI: u to'ldirib bo'lib, oxirida 403
+          olardi. Buning o'rniga nima qilish kerakligi aytiladi. */}
+      {takeOpen && takeTender !== null && !can('karta.yaratish') && (
+        <div className="fixed inset-x-0 bottom-4 mx-auto w-fit rounded-lg border bg-card px-4 py-3 text-body shadow">
+          Tenderni ishga olishni rahbar yoki menejer bajaradi.
+          <button type="button" className="ml-3 text-caption underline"
+            onClick={() => setTakeOpen(false)}>yopish</button>
+        </div>
+      )}
+      {takeOpen && takeTender !== null && can('karta.yaratish') && (
         <TakeTenderDialog
           tenderId={takeTender}
           onClose={() => setTakeOpen(false)}

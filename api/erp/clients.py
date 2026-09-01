@@ -80,7 +80,10 @@ SELECT {_CLIENT_COLS},
        (SELECT count(*) FROM erp.client_document d WHERE d.client_id = c.id) AS doc_n
 FROM erp.client_company c
 LEFT JOIN erp.opportunity o ON o.client_id = c.id
-WHERE (%(q)s::text IS NULL OR c.name ILIKE '%%' || %(q)s || '%%'
+WHERE (%(owner_broker_id)s::int IS NULL OR EXISTS (
+          SELECT 1 FROM erp.opportunity oo
+           WHERE oo.client_id = c.id AND oo.broker_id = %(owner_broker_id)s))
+  AND (%(q)s::text IS NULL OR c.name ILIKE '%%' || %(q)s || '%%'
                            OR c.inn  ILIKE '%%' || %(q)s || '%%')
   AND (%(active_only)s::bool IS NOT TRUE OR c.active)
 GROUP BY c.id
@@ -246,10 +249,17 @@ def _params(data: dict, fields, **extra) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Amallar — korxona
 # ---------------------------------------------------------------------------
-def list_(q: Optional[str] = None, active_only: bool = False) -> List[dict]:
+def list_(q: Optional[str] = None, active_only: bool = False,
+          owner_broker_id: Optional[int] = None) -> List[dict]:
+    """`owner_broker_id` — FAQAT shu hodimning kartalari bo'lgan mijozlar.
+
+    Broker mijozni O'Z ishi orqali ko'radi (huquqlar matritsasida
+    `mijoz.korish` = `own`): mijozlar ro'yxati kompaniyaning butun
+    mijoz bazasi emas."""
     _need_schema2()
     out = []
-    for r in db.query(CLIENT_LIST_SQL, {"q": q or None, "active_only": active_only}):
+    for r in db.query(CLIENT_LIST_SQL, {"q": q or None, "active_only": active_only,
+                                        "owner_broker_id": owner_broker_id}):
         item = shape(r)
         item.update({"opp_n": r["opp_n"], "won_n": r["won_n"], "lost_n": r["lost_n"],
                      "open_n": r["open_n"], "doc_n": r["doc_n"],

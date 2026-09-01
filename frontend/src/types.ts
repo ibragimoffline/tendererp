@@ -783,12 +783,20 @@ export interface ErpAnalytics {
 // Kimlik (auth) — foydalanuvchilar TENDER-AI da, ERP faqat tekshiradi
 // ===========================================================================
 
+/** Huquq darajasi (`api/erp/perm.py`): to'liq / faqat o'ziniki / faqat
+ *  o'qish / yo'q. */
+export type PermLevel = 'full' | 'own' | 'read' | null
+
 export interface AuthUser {
   id: number
   username: string
   full_name: string
-  role: 'admin' | 'manager' | 'broker'
+  role: 'admin' | 'rahbar' | 'menejer' | 'broker'
   role_label: Nullable<string>
+  /** Serverdagi HUQUQLAR MATRITSASINING shu odam uchun kesimi
+   *  (`GET /erp/auth/me`). Interfeys tugmani shundan hal qiladi —
+   *  o'z ro'yxatini tutmaydi. */
+  perms?: Record<string, PermLevel>
   /** erp.broker.id bilan bog'lanish (bo'lsa) */
   broker_id: Nullable<number>
   email: Nullable<string>
@@ -1230,9 +1238,77 @@ export interface LoginAttempt {
 export interface StaffAccount {
   id: number
   username: string
-  role: 'admin' | 'manager' | 'broker'
+  role: 'admin' | 'rahbar' | 'menejer' | 'broker'
   active: boolean
   last_login_at: Nullable<string>
+}
+
+/** TAHLIL bo'limi. Yiqilgan bo'lim YASHIRILMAYDI: `ok=false` va
+ *  `xato` bilan keladi (Tender-AI `api/topshiriq.py`). */
+export interface TahlilBolim<T = unknown> {
+  ok: boolean
+  data?: T
+  xato?: string
+}
+
+/** TENDER-AI TAHLILI — qaror paytidagi SNAPSHOT
+ *  (`erp.opportunity_analysis`). ERP uni qayta hisoblamaydi. */
+export interface ErpTahlil {
+  id: number
+  topshiriq_id: Nullable<number>
+  /** Qaror qanchalik ishonchli edi (Tender-AI lug'ati) */
+  ishonch: Nullable<string>
+  captured_at: Nullable<string>
+  payload: Record<string, TahlilBolim | string | number>
+}
+
+/** BILDIRISHNOMA (`erp.notification`). Hodimga qaratilgan: Tender-AI
+ *  dagi xabar KOMPANIYA darajasida va odamni bilmaydi. */
+export interface ErpNotification {
+  id: number
+  kind: string
+  /** Odam o'qiydigan tur nomi (serverdan) */
+  kind_label: string
+  matn: string
+  opportunity_id: Nullable<number>
+  opportunity_title: Nullable<string>
+  /** `localhost` bo'lsa serverda YOZILMAYDI — buzuq havola bermaslik uchun */
+  havola: Nullable<string>
+  created_at: string
+  read_at: Nullable<string>
+}
+
+/** TENDER-AI YO'NALTIRISH OQIMINING holati
+ *  (`GET /erp/topshiriq/holat`). Sozlanmagan holat ham OCHIQ
+ *  aytiladi: `sabab` — "nega hech narsa kelmayapti" degan savolga
+ *  javob. */
+export interface TopshiriqHolat {
+  ready: boolean
+  /** Biz qaysi Tender-AI ijarachisimiz. `null` — xarita yo'q */
+  tai_company_id: Nullable<number>
+  /** Fon tinglovchisi tirikmi (`LISTEN`) */
+  tinglovchi: boolean
+  oraliq: number
+  oxirgi_xato: Nullable<string>
+  sabab?: string
+  kutayotgan?: number
+  kartalar?: number
+}
+
+/** TIZIM SOZLAMASI (`erp.setting`). Ta'rifi va STANDART qiymati
+ *  serverda (`api/erp/sozlama.py`) — ekran ro'yxatni o'zi tutmaydi. */
+export interface Setting {
+  key: string
+  value: boolean
+  /** Kod bergan standart qiymat (o'zgartirilmagan bo'lsa shu ishlaydi) */
+  default: boolean
+  label: string
+  /** "Yoqsam nima o'zgaradi" — ekranda ko'rsatiladi */
+  help: string
+  /** Bazada yozuvi bormi (ya'ni standartdan o'zgartirilganmi) */
+  changed: boolean
+  updated_by: Nullable<string>
+  updated_at: Nullable<string>
 }
 
 /** HODIM + unga bog'langan HISOB. Ikkisi alohida tushuncha: hodim

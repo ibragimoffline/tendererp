@@ -7,7 +7,7 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import type { ErpBroker, MyTask, MyTasks } from '@/types'
-import { ALL, ErpError } from './erpShared'
+import { ALL, ErpError, permLevel } from './erpShared'
 
 //: Filtrda "sukut" qiymati. Radix Select bo'sh satrni qabul qilmaydi.
 const SELF = '__self__'
@@ -52,6 +52,11 @@ export default function MyTasksPage({ brokers, onOpenOpportunity }: MyTasksPageP
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
+        {/* EGALIK: brokerga faqat O'ZINIKI ko'rinadi (server ham shunday
+            filtrlaydi, `api/erp/egalik.py`). Boshqa hodimni tanlash
+            imkonini QOLDIRSAK, tanlov ishlamas edi — ro'yxat baribir
+            o'zinikini qaytarardi va bu "buzuq filtr" bo'lib ko'rinardi. */}
+        {permLevel('hisobot.deadline') !== 'own' && (
         <Select value={brokerId || SELF} onValueChange={(v) => setBrokerId(v === SELF ? '' : v)}>
           <SelectTrigger className="h-9 w-auto min-w-44 bg-card text-body">
             <SelectValue />
@@ -68,6 +73,7 @@ export default function MyTasksPage({ brokers, onOpenOpportunity }: MyTasksPageP
             ))}
           </SelectContent>
         </Select>
+        )}
 
         <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
           <SelectTrigger className="h-9 w-auto min-w-36 bg-card text-body">

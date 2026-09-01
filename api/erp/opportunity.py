@@ -46,13 +46,20 @@ LOST_REASONS = [
 ]
 LOST_REASON_LABEL = dict(LOST_REASONS)
 
-# frontend/src/format.ts dagi sourceUrl() bilan BIR XIL naqsh.
-# MUHIM: manbadagi ASL id (tender.source_id) ishlatiladi — bizning t.id global
-# (source_id + platforma ofseti) va manba saytida mavjud emas.
-SOURCE_URL = {
-    "xt-xarid": "https://xt-xarid.uz/procedure/{id}/core",
-    "uzex":     "https://etender.uzex.uz/lot/{id}",
-}
+# MANBA HAVOLASI — BAZADAN, kodda lug'at emas.
+#
+# Ilgari bu yerda `SOURCE_URL` lug'ati turardi: platforma -> URL
+# shabloni. U tender-ai dagi `v_tender_manba` view i bilan IKKINCHI
+# NUSXA edi va ular ajralib ketishi mumkin edi (yangi platforma
+# qo'shilsa yoki manba saytining manzili o'zgarsa — bir tomonda
+# yangilanadi, ikkinchisida yo'q). `erp_rollar.md` §10: "SOURCE_URL
+# lug'ati o'chadi, manba_url bazadan".
+#
+# ZAXIRA yo'q: view bo'lmasa havola BERILMAYDI. Noto'g'ri havola
+# "bor, lekin ochilmaydi" degan holat yaratardi — havola yo'qligi
+# ochiqroq.
+MANBA_SQL = ("SELECT ommaviy_url FROM v_tender_manba "
+             "WHERE ichki_id = %(id)s")
 
 
 class ErpError(Exception):
@@ -147,6 +154,10 @@ OPP_LIST_SQL = f"""
 SELECT {_OPP_COLS} {_OPP_FROM}
 WHERE (%(status)s::text IS NULL OR o.status = %(status)s)
   AND (%(broker_id)s::int IS NULL OR o.broker_id = %(broker_id)s)
+  -- "TAQSIMLANMAGAN": Tender-AI yo'naltirishi hodimni topa olmasa
+  -- karta baribir ochiladi (`api/erp/topshiriq.py`) va u YO'QOLMASLIGI
+  -- kerak. Menejer aynan shu ro'yxatni ochadi.
+  AND (%(unassigned)s::bool IS NOT TRUE OR o.broker_id IS NULL)
   AND (%(client_id)s::int IS NULL OR o.client_id = %(client_id)s)
   AND (%(q)s::text IS NULL OR o.title ILIKE '%%' || %(q)s || '%%'
                            OR o.customer_name ILIKE '%%' || %(q)s || '%%'
@@ -274,15 +285,27 @@ def _check_fields(data: dict) -> None:
 # ---------------------------------------------------------------------------
 # Amallar
 # ---------------------------------------------------------------------------
+def _manba_url(tender_id: int) -> Optional[str]:
+    """Manbadagi e'lon havolasi — `v_tender_manba` dan.
+
+    View yo'q bo'lsa (eski o'rnatma) `None`: ERP yiqilmaydi, havola
+    ko'rsatilmaydi, xolos."""
+    try:
+        r = db.query_one(MANBA_SQL, {"id": tender_id})
+    except Exception:                           # noqa: BLE001
+        return None
+    return (r or {}).get("ommaviy_url")
+
+
 def _tender_snapshot(tender_id: int) -> dict:
     """Tenderdan 9 maydon. ERP ajratilsa — SHU BITTA funksiya HTTP chaqiruviga
     almashadi."""
     t = db.query_one(TENDER_SNAPSHOT_SQL, {"id": tender_id})
     if not t:
         raise ErpError("Tender topilmadi.", 404)
-    # Manbadagi asl raqam: havola ham, ko'rsatiladigan raqam ham shundan.
+    # Manbadagi asl raqam: KO'RSATILADIGAN raqam shundan (bizning
+    # `t.id` global va manba saytida mavjud emas).
     ref = t["source_id"] or t["id"]
-    url_tpl = SOURCE_URL.get(t["source_platform"] or "")
     return {
         "tender_id": t["id"],
         "source_platform": t["source_platform"],
@@ -294,7 +317,7 @@ def _tender_snapshot(tender_id: int) -> dict:
         "currency": (t["currency"] or "").strip() or None,
         "deadline_at": t["deadline_at"],
         "region_name": t["region_name"],
-        "source_url": url_tpl.format(id=ref) if url_tpl else None,
+        "source_url": _manba_url(tender_id),
     }
 
 
@@ -378,11 +401,15 @@ def diff_with_tender(opp_id: int) -> dict:
             "source": source, "suggest_close": suggest_close}
 
 
-def list_(status=None, broker_id=None, client_id=None, q=None, open_only=False):
+def list_(status=None, broker_id=None, client_id=None, q=None,
+          open_only=False, unassigned=False):
+    """`unassigned` — mas'uli yo'q kartalar (Tender-AI yo'naltirishi
+    hodimni topa olmagan yoki karta hali taqsimlanmagan)."""
     _need_schema()
     rows = db.query(OPP_LIST_SQL, {"status": status, "broker_id": broker_id,
                                    "client_id": client_id, "q": q or None,
-                                   "open_only": open_only})
+                                   "open_only": open_only,
+                                   "unassigned": bool(unassigned)})
     return [shape(r) for r in rows]
 
 
@@ -438,6 +465,9 @@ def update(opp_id: int, data: dict) -> dict:
     """Faqat xodim maydonlari. Snapshot va status tegilmaydi."""
     _need_schema()
     _check_fields(data)
+    # MAS'UL O'ZGARDIMI — xabar uchun kerak (pastga qarang).
+    oldingi = db.query_one("SELECT broker_id, title FROM erp.opportunity "
+                           "WHERE id = %(id)s", {"id": opp_id})
     row = db.execute_returning(OPP_UPDATE_SQL, {
         **{k: data.get(k) for k in ("broker_id", "client_id", "priority",
                                     "win_probability", "note", "next_task",
@@ -445,7 +475,48 @@ def update(opp_id: int, data: dict) -> dict:
         "id": opp_id})
     if not row:
         raise ErpError("Karta topilmadi.", 404)
+    # KARTA O'TKAZILDI — yangi mas'ulga xabar. Import SHU YERDA:
+    # modul darajasida qilinsa `xabar` -> `opportunity` aylanma
+    # bog'lanish xavfi paydo bo'lardi (`stock` bilan bir xil naqsh).
+    yangi = data.get("broker_id")
+    if oldingi and yangi and yangi != oldingi.get("broker_id"):
+        from api.erp import xabar as _xabar
+        _xabar.brokerga(yangi, "otkazildi",
+                        f"Karta sizga o'tkazildi: "
+                        f"{oldingi.get('title') or f'#{opp_id}'}.", opp_id)
     return get(opp_id)
+
+
+def taqsimlash_sorovi(opp_id: int, izoh: Optional[str],
+                      kim: Optional[str]) -> dict:
+    """"Bu ish menga to'g'ri kelmadi" — MENEJERGA so'rov.
+
+    Broker kartani o'zi boshqa hodimga o'tkaza olmaydi (huquqlar
+    matritsasi): aks holda ish jimgina bir-biriga surilardi va
+    "kim mas'ul" degan savol javobsiz qolardi.
+
+    So'rov TARIXGA yoziladi va menejerga xabar boradi. Ya'ni u
+    og'zaki emas — keyin "aytgan edim" degan bahs bo'lmaydi.
+    """
+    _need_schema()
+    cur = db.query_one("SELECT id, status, title, broker_id "
+                       "FROM erp.opportunity WHERE id = %(id)s", {"id": opp_id})
+    if not cur:
+        raise ErpError("Karta topilmadi.", 404)
+    matn = (izoh or "").strip()
+    if not matn:
+        raise ErpError("Sabab majburiy: menejer nima qilishini bilishi kerak.")
+    db.execute_returning(HISTORY_INSERT_SQL, {
+        "opportunity_id": opp_id, "from_status": cur["status"],
+        "to_status": cur["status"], "changed_by": kim,
+        "note": f"Qayta taqsimlash so'raldi: {matn[:500]}"})
+    from api.erp import xabar as _xabar
+    nom = cur.get("title") or f"#{opp_id}"
+    n = _xabar.menejerlarga(
+        "otkazildi", f"Qayta taqsimlash so'rovi: {nom}. "
+                     f"So'radi: {kim or 'noma`lum'}. Sabab: {matn[:300]}",
+        opp_id)
+    return {"ok": True, "xabar_ketdi": n, "opportunity_id": opp_id}
 
 
 def set_status(opp_id: int, status: str, changed_by: Optional[str],

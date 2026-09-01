@@ -58,7 +58,6 @@ TEST_USER = {"id": 0, "username": "zztest", "full_name": "ZZTEST Sinov",
 def _auth_override(app):
     from api import main as _main
     app.dependency_overrides[_main.me] = lambda: TEST_USER
-    app.dependency_overrides[_main.manager] = lambda: TEST_USER
 
 
 _fail = 0

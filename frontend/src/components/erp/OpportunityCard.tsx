@@ -24,7 +24,8 @@ import TaskList from './TaskList'
 import ReservePanel from './ReservePanel'
 import InvoiceLinks from './InvoiceLinks'
 import ProfitLine from './ProfitLine'
-import { ErpError, OPP_LABEL, StatusBadge } from './erpShared'
+import { ErpError, OPP_LABEL, StatusBadge, can } from './erpShared'
+import TahlilPanel from './TahlilPanel'
 
 // OPPORTUNITY KARTASI (drawer).
 //
@@ -67,6 +68,10 @@ export default function OpportunityCard(props: OpportunityCardProps) {
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<OpportunityInput | null>(null)
   const [saving, setSaving] = useState(false)
+  // "Qayta taqsimlashni so'rash" — brokerda kartani o'tkazish
+  // huquqi yo'q, lekin so'rovi IZ QOLDIRISHI kerak.
+  const [sorov, setSorov] = useState<string | null>(null)
+  const [sorovNatija, setSorovNatija] = useState<string | null>(null)
   const [ask, setAsk] = useState<ErpStatus | null>(null)
   // Snapshot jonli tenderdan farq qiladimi — karta bilan birga yuklanadi
   // (bitta yengil so'rov) va SNAPSHOTNI O'ZGARTIRMAYDI.
@@ -258,12 +263,63 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {statuses.map((s) => (
+                        {/* YAKUNIY status (yutildi / yutqazildi / rad) —
+                            alohida huquq (`karta.yopish`) va u kompaniya
+                            sozlamasi bilan brokerdan olib qo'yilishi
+                            mumkin ("Broker kartani o'zi yakunlaydi").
+                            Ro'yxatdan CHIQARIB tashlanadi: tanlanib
+                            403 olinadigan variant — yolg'on va'da. */}
+                        {statuses.filter((s) => !s.final || can('karta.yopish'))
+                          .map((s) => (
                           <SelectItem key={s.code} value={s.code}>{s.label}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {/* Broker mas'ulni O'ZI o'zgartira olmaydi
+                      (`karta.biriktirish` unda yo'q), lekin
+                      "menga to'g'ri kelmadi" deya oladi — aks holda
+                      u menejerni og'zaki qidiradi va iz qolmaydi. */}
+                  {!can('karta.biriktirish') && can('karta.taqsimlash_sorovi') && (
+                    <div className="rounded-md border border-dashed p-2">
+                      {sorov === null ? (
+                        <button type="button"
+                          className="text-caption underline"
+                          onClick={() => { setSorov(''); setSorovNatija(null) }}>
+                          Qayta taqsimlashni so'rash
+                        </button>
+                      ) : (
+                        <div className="space-y-2">
+                          <Input autoFocus placeholder="Sabab (majburiy)"
+                            value={sorov}
+                            onChange={(e) => setSorov(e.target.value)} />
+                          <div className="flex gap-2">
+                            <Button size="sm" disabled={!sorov.trim()}
+                              onClick={async () => {
+                                try {
+                                  await api.requestReassign(o.id, sorov)
+                                  setSorov(null)
+                                  setSorovNatija('So‘rov menejerga yuborildi.')
+                                  // Tarixda ko'rinishi uchun kartani
+                                  // qayta o'qiymiz.
+                                  apply(await api.opportunity(o.id))
+                                } catch (e) {
+                                  setSorovNatija((e as Error).message)
+                                }
+                              }}>Yuborish</Button>
+                            <Button size="sm" variant="outline"
+                              onClick={() => setSorov(null)}>Bekor</Button>
+                          </div>
+                        </div>
+                      )}
+                      {sorovNatija && (
+                        <div className="mt-1 text-caption text-muted-foreground">
+                          {sorovNatija}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="flex gap-2">
                     <div className="flex-1">
@@ -369,6 +425,11 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                 <ContractList oppId={o.id} statuses={contractStatuses}
                   submissions={[]} createdBy={o.broker?.name ?? null} />
               )}
+
+              {/* --- TENDER-AI TAHLILI (qaror paytidagi surat) ---
+                  Qo'lda ochilgan kartada bo'lmaydi va u holda blok
+                  umuman ko'rsatilmaydi. */}
+              <TahlilPanel oppId={o.id} />
 
               {/* --- TARIX --- */}
               <section className="mt-5">

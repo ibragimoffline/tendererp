@@ -16,7 +16,7 @@ import type {
   ClientContactInput, ClientDocument, ClientDocumentInput, ClientFull,
   ClientInput, DocumentType, ImportResult,
 } from '@/types'
-import { ErpError } from './erpShared'
+import { ErpError, can } from './erpShared'
 
 // KORXONA PASSPORTI (drawer). `id === null` bo'lsa — yangi korxona yaratish.
 //
@@ -212,9 +212,11 @@ export default function ClientCard({ id, onClose, onSaved, onOpenOpportunity }: 
                       Faol (ro'yxatlarda ko'rinadi)
                     </label>
                   </div>
-                  <Button size="sm" className="mt-4" disabled={saving} onClick={save}>
-                    {saving ? 'Saqlanmoqda…' : 'Saqlash'}
-                  </Button>
+                  {can('mijoz.tahrirlash') && (
+                    <Button size="sm" className="mt-4" disabled={saving} onClick={save}>
+                      {saving ? 'Saqlanmoqda…' : 'Saqlash'}
+                    </Button>
+                  )}
                 </>
               )}
 
@@ -327,10 +329,12 @@ function Contacts({ c, onChanged, onError }: {
             <span className="text-caption text-muted-foreground">{k.position || '—'}</span>
             <span className="tabular text-caption">{k.phone || ''}</span>
             <span className="text-caption">{k.email || ''}</span>
-            <button type="button" className="ml-auto text-caption text-urgent-strong hover:underline"
-              onClick={() => run(api.deleteContact(k.id))}>
-              o'chirish
-            </button>
+            {can('mijoz.aloqa') && (
+              <button type="button" className="ml-auto text-caption text-urgent-strong hover:underline"
+                onClick={() => run(api.deleteContact(k.id))}>
+                o'chirish
+              </button>
+            )}
           </li>
         ))}
         {c.contacts.length === 0 && (
@@ -338,11 +342,11 @@ function Contacts({ c, onChanged, onError }: {
         )}
       </ul>
 
-      {add === null ? (
+      {add === null ? (can('mijoz.aloqa') && (
         <Button variant="outline" size="sm" onClick={() => setAdd({ full_name: '' })}>
           <Icon name="plus" size={13} /> Aloqa shaxsi
         </Button>
-      ) : (
+      )) : (
         <div className="space-y-2 rounded-md border p-3">
           <div className="grid gap-2 sm:grid-cols-2">
             <Input autoFocus placeholder="Ism familiya" value={add.full_name}
@@ -419,10 +423,12 @@ function Documents({ c, onChanged, onError }: {
             <span className="tabular text-caption text-muted-foreground">
               {d.valid_until ? `gacha ${d.valid_until}` : 'muddatsiz'}
             </span>
-            <button type="button" className="ml-auto text-caption text-urgent-strong hover:underline"
-              onClick={() => remove(d)}>
-              o'chirish
-            </button>
+            {can('mijoz.hujjat') && (
+              <button type="button" className="ml-auto text-caption text-urgent-strong hover:underline"
+                onClick={() => remove(d)}>
+                o'chirish
+              </button>
+            )}
           </li>
         ))}
         {c.documents.length === 0 && (
@@ -430,11 +436,11 @@ function Documents({ c, onChanged, onError }: {
         )}
       </ul>
 
-      {add === null ? (
+      {add === null ? (can('mijoz.hujjat') && (
         <Button variant="outline" size="sm" onClick={() => setAdd(EMPTY_DOC)}>
           <Icon name="plus" size={13} /> Hujjat
         </Button>
-      ) : (
+      )) : (
         <div className="space-y-2 rounded-md border p-3">
           <div className="grid gap-2 sm:grid-cols-2">
             <Select value={add.doc_type || undefined}

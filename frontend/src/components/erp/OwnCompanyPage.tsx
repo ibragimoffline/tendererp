@@ -8,7 +8,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import type { ContractRow, OwnCompany, OwnCompanyInput } from '@/types'
-import { ErpError } from './erpShared'
+import { ErpError, can } from './erpShared'
 
 // BIZNING KOMPANIYA + SHARTNOMALAR RO'YXATI (5A-1).
 //
@@ -152,9 +152,19 @@ export default function OwnCompanyPage({ onOpenOpportunity }: {
         </div>
 
         <div className="mt-4 flex items-center gap-3">
-          <Button size="sm" disabled={busy} onClick={save}>
-            {busy ? 'Saqlanmoqda…' : 'Saqlash'}
-          </Button>
+          {/* Rekvizitni O'ZGARTIRISH — administrator va rahbar ishi
+              (`tizim.kompaniya`). Qolganlar ko'radi: faktura va
+              shartnoma chop etishda kerak. Tugmani ko'rsatib qo'yish
+              esa 403 va'da qilardi. */}
+          {can('tizim.kompaniya') ? (
+            <Button size="sm" disabled={busy} onClick={save}>
+              {busy ? 'Saqlanmoqda…' : 'Saqlash'}
+            </Button>
+          ) : (
+            <span className="text-caption text-muted-foreground">
+              Rekvizitlarni administrator yoki rahbar o'zgartiradi.
+            </span>
+          )}
           {saved && <span className="text-caption text-ok-strong">Saqlandi</span>}
           {own?.updated_at && (
             <span className="text-caption text-muted-foreground">

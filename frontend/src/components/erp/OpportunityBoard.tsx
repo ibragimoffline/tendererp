@@ -3,7 +3,7 @@ import { useFormat, DEADLINE_CLASS } from '@/format'
 import { cn } from '@/lib/utils'
 import type { ErpStatus, Opportunity } from '@/types'
 import StatusChangeDialog from './StatusChangeDialog'
-import { OPP_LABEL, PriorityBadge } from './erpShared'
+import { OPP_LABEL, PriorityBadge, can } from './erpShared'
 
 // KANBAN — 9 ustun, ustunlar `/erp/meta` dan (frontendda ro'yxat takrorlanmaydi).
 //
@@ -43,6 +43,10 @@ export default function OpportunityBoard(
     const o = items.find((x) => x.id === dragId)
     setDragId(null)
     if (!o || o.status === to.code) return
+    // Yakuniy ustunga tashlash — `karta.yopish` huquqi (kompaniya
+    // sozlamasi bilan brokerdan olinishi mumkin). Huquq bo'lmasa
+    // karta O'Z JOYIDA qoladi: server ham 403 berardi.
+    if ((to.final || o.is_final) && !can('karta.yopish')) return
     if (to.final || o.is_final) { setAsk({ o, to }); return }
     move(o, to, null)
   }

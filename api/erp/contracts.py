@@ -109,6 +109,8 @@ LEFT JOIN erp.broker b ON b.id = o.broker_id
 WHERE (%(status)s::text IS NULL OR k.status = %(status)s)
   AND (%(client_id)s::int IS NULL OR o.client_id = %(client_id)s)
   AND (%(open_only)s::bool IS NOT TRUE OR k.status NOT IN ('done','terminated'))
+  -- EGALIK: shartnoma KARTANING ishi (api/erp/egalik.py).
+  AND (%(owner_broker_id)s::int IS NULL OR o.broker_id = %(owner_broker_id)s)
 ORDER BY k.signed_at DESC NULLS LAST, k.id DESC
 """
 
@@ -256,10 +258,12 @@ def list_for(opp_id: int) -> List[dict]:
 
 
 def list_(status: Optional[str] = None, client_id: Optional[int] = None,
-          open_only: bool = False) -> List[dict]:
+          open_only: bool = False,
+          owner_broker_id: Optional[int] = None) -> List[dict]:
     _need_schema5()
     return [_shape_row(r) for r in db.query(CONTRACT_LIST_SQL, {
-        "status": status, "client_id": client_id, "open_only": open_only})]
+        "status": status, "client_id": client_id, "open_only": open_only,
+        "owner_broker_id": owner_broker_id})]
 
 
 def get(contract_id: int) -> dict:

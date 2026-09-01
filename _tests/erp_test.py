@@ -54,7 +54,6 @@ TEST_USER = {"id": 0, "username": "zztest", "full_name": "ZZTEST Sinov",
 def _auth_override(app):
     from api import main as _main
     app.dependency_overrides[_main.me] = lambda: TEST_USER
-    app.dependency_overrides[_main.manager] = lambda: TEST_USER
 
 _fail = 0
 _pass = 0
@@ -216,13 +215,18 @@ def test_db():
             check(not wrong, "view dagi nomlar kod bilan bir xil", str(wrong))
             # Ustunlar SHARTNOMA: tender-ai aynan shularni o'qiydi
             # (`tender-ai/api/erp_status.py`).
+            #
+            # `assignee_full_name` schema_patch_erp_19.sql da OXIRIGA
+            # qo'shildi — eski o'quvchi buzilmaydi. Ustunlar TARTIBI
+            # va qolgan uch shartnoma-view `_tests/erp15_test.py` da
+            # qulflangan; bu yerda faqat shu view ning to'plami.
             cols = {r["column_name"] for r in db.query(
                 "SELECT column_name FROM information_schema.columns "
                 "WHERE table_schema='erp' AND table_name='v_tender_status'")}
             eq("view ustunlari (shartnoma)", cols,
                {"opportunity_id", "tender_id", "status", "status_label",
                 "priority", "broker_name", "client_name", "created_at",
-                "updated_at"})
+                "updated_at", "assignee_full_name"})
 
         try:
             # --- lug'atlar -------------------------------------------------
@@ -267,6 +271,23 @@ def test_db():
                str(live["source_id"] or tid))
             check(snap["source_url"] is None or str(live["source_id"] or tid) in snap["source_url"],
                   "manba havolasi asl id bilan qurilgan", str(snap["source_url"]))
+            # MANBA HAVOLASI BAZADAN (`v_tender_manba`), kodda lug'at
+            # EMAS: ilgari `SOURCE_URL` lug'ati tender-ai dagi view
+            # bilan ikkinchi nusxa edi va ular ajralib ketishi mumkin
+            # edi (`erp_rollar.md` §10).
+            import inspect
+            src = inspect.getsource(O)
+            # IZOHLARSIZ matn: izohda `SOURCE_URL` BOR (nega olib
+            # tashlangani yozilgan) va u kod bilan adashmasligi kerak.
+            sof = chr(10).join(q for q in src.split(chr(10))
+                               if not q.strip().startswith("#"))
+            check("SOURCE_URL" not in sof, "kodda SOURCE_URL lug'ati QOLMAGAN")
+            check("v_tender_manba" in src, "havola v_tender_manba dan olinadi")
+            bazada = db.query_one("SELECT ommaviy_url FROM v_tender_manba "
+                                  "WHERE ichki_id = %(i)s", {"i": tid})
+            if bazada:
+                eq("havola bazadagi bilan AYNAN bir xil",
+                   snap["source_url"], bazada["ommaviy_url"])
 
             # --- takror va 404/400 ------------------------------------------
             r = c.post(f"/erp/tenders/{tid}/take", json=body)

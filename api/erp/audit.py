@@ -19,7 +19,7 @@ to'g'ridan-to'g'ri javob beradi — kimga ishonishdan qat'i nazar.
 holat YASHIRILMAYDI va alohida sanaladi: aynan shunday qatorlar eng
 qiziq.
 
-Kim ko'radi: `manager`. Jurnalda pul hujjatlarining ichki tarixi bor.
+Kim ko'radi: `menejer` va undan yuqori. Jurnalda pul hujjatlarining ichki tarixi bor.
 """
 from __future__ import annotations
 

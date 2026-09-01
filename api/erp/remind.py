@@ -103,9 +103,65 @@ def _about(t: Dict[str, Any]) -> str:
     return f" ({' · '.join(parts)})" if parts else ""
 
 
+def _hodimlarga(data: Dict[str, Any]) -> int:
+    """HAR HODIMGA o'z ishlari haqida xabar (`api/erp/xabar.py`).
+
+    NEGA KOMPANIYA XABARIDAN TASHQARI: Telegram guruhiga tushgan
+    umumiy ro'yxatda odam o'zinikini qidirib topishi kerak — va
+    ko'pincha topmaydi. Bu yerda har kim faqat O'ZINIKINI oladi.
+
+    Menejer esa umumiy sonni oladi: kimdir kechikayotganini bilishi
+    kerak, lekin har vazifa uchun alohida xabar olishi shart emas."""
+    from api.erp import xabar
+
+    yuborildi = 0
+    #: broker_id -> [matn]
+    kimga: Dict[Any, list] = {}
+    for t in data["tasks"]:
+        if not t.get("broker_id"):
+            continue
+        kech = "KECHIKKAN: " if t.get("overdue") else ""
+        kimga.setdefault(t["broker_id"], []).append(
+            (t.get("opportunity_id"),
+             f"{kech}vazifa muddati: {t['title']}{_about(t)}"))
+    for o in data["deadlines"]:
+        if not o.get("broker_id"):
+            continue
+        kimga.setdefault(o["broker_id"], []).append(
+            (o["id"], f"Tender muddati yaqin: {(o.get('title') or '')[:60]} "
+                      f"({_when(o.get('deadline_at'))})"))
+
+    for broker_id, qatorlar in kimga.items():
+        for opp_id, matn in qatorlar:
+            if xabar.brokerga(broker_id, "muddat", matn, opp_id):
+                yuborildi += 1
+
+    # Egasiz qatorlar ham bor (karta hech kimga biriktirilmagan) —
+    # ular menejerga ketadi, aks holda hech kim ko'rmaydi.
+    egasiz = ([t for t in data["tasks"] if not t.get("broker_id")]
+              + [o for o in data["deadlines"] if not o.get("broker_id")])
+    if egasiz:
+        xabar.menejerlarga(
+            "muddat", f"Mas'uli yo'q {len(egasiz)} ta muddat yaqinlashdi — "
+            "kartalarni taqsimlash kerak.")
+    return yuborildi
+
+
 def run(days: int = 1, deadline_days: int = 3, dry_run: bool = False) -> Dict[str, Any]:
-    """Eslatilishi kerak bo'lganlarni topadi, bitta xabar yuboradi va
-    yuborilganlarni belgilaydi."""
+    """Eslatilishi kerak bo'lganlarni topadi, xabar beradi va
+    yuborilganlarni belgilaydi.
+
+    IKKI KANAL, IKKI ISHONCHLILIK (2026-09-02 da o'zgardi):
+
+      * ERP ICHIDAGI bildirishnoma — ASOSIY. U ERP ning o'z
+        jadvalida (`erp.notification`) va tashqi xizmatga bog'liq
+        emas. Belgilash (`mark_reminded`) shunga qarab qilinadi.
+      * Tender-AI orqali Telegram/email — QO'SHIMCHA. U yiqilsa
+        eslatma baribir odamga yetadi; xato javobda ochiq qaytadi.
+
+    Ilgari belgilash TASHQI kanalga bog'liq edi: Tender-AI o'chgan
+    bo'lsa hech kim hech narsa olmasdi. Endi ERP o'z ishini o'zi
+    bajaradi."""
     data = erp_tasks.due_reminders(days=days, deadline_days=deadline_days)
     n = len(data["tasks"]) + len(data["deadlines"])
     out: Dict[str, Any] = {"tasks": len(data["tasks"]),
@@ -121,19 +177,23 @@ def run(days: int = 1, deadline_days: int = 3, dry_run: bool = False) -> Dict[st
         out["message"] = "Quruq yurish — yuborilmadi, belgilanmadi."
         return out
 
+    # 1. ASOSIY KANAL — ERP ichidagi bildirishnoma.
+    out["xabarlar"] = _hodimlarga(data)
+
+    # 2. QO'SHIMCHA — kompaniya kanali (Telegram/email) Tender-AI orqali.
     try:
         res = tenderai.notify("Tender ERP — eslatma", text)
+        out["sent"] = bool(res.get("ok"))
+        out["channels"] = {k: v for k, v in res.items() if k != "ok"}
     except tenderai.TenderAiUnavailable as e:
-        # Yuborilmadi -> BELGILANMAYDI. Keyingi yurishda qayta uriniladi.
+        # YIQILSA HAM eslatma odamga YETDI (1-qadam). Xato
+        # yashirilmaydi, lekin belgilashni to'xtatmaydi — aks holda
+        # ertaga hamma xabar TAKRORLANARDI.
         out["error"] = str(e)
-        return out
 
-    out["sent"] = bool(res.get("ok"))
-    out["channels"] = {k: v for k, v in res.items() if k != "ok"}
-    if out["sent"]:
-        out["marked"] = erp_tasks.mark_reminded(
-            [t["id"] for t in data["tasks"]],
-            [o["id"] for o in data["deadlines"]])
+    out["marked"] = erp_tasks.mark_reminded(
+        [t["id"] for t in data["tasks"]],
+        [o["id"] for o in data["deadlines"]])
     return out
 
 

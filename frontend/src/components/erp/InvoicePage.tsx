@@ -10,7 +10,7 @@ import {
 import Icon from '../Icon'
 import { cn } from '@/lib/utils'
 import type { ClientRow, Invoice, InvoiceLine } from '@/types'
-import { ErpError } from './erpShared'
+import { ErpError, can } from './erpShared'
 import InvoicePrint from './InvoicePrint'
 import ActPanel from './ActPanel'
 
@@ -142,6 +142,9 @@ export default function InvoicePage() {
             <Input className="max-w-40" value={newNumber}
               onChange={(e) => setNewNumber(e.target.value)} />
           </div>
+          {/* Qoralama — broker ham yasaydi (o'z kartasi bo'yicha).
+              CHIQARISH esa quyida: raqam beriladi va hujjat muzlaydi. */}
+          {can('hujjat.qoralama') && (
           <Button size="sm" disabled={busy || !newClient}
             onClick={() => run(async () => {
               const inv = await api.createInvoice({
@@ -153,6 +156,7 @@ export default function InvoicePage() {
             }, 'Qoralama yaratildi')}>
             <Icon name="plus" size={13} /> Yaratish
           </Button>
+          )}
           {client && client.vat_payer == null && (
             <span className="text-caption text-soon-strong">
               Bu mijozning QQS holati so'ralmagan — stavka 0 bo'ladi.
@@ -393,14 +397,19 @@ function InvoiceDetail({ inv, busy, methods, line, setLine, pay, setPay, run,
                   <span className="tabular ml-auto text-muted-foreground">
                     {p.paid_at ? f.dateFmt(p.paid_at) : ''} · {p.created_by || '—'}
                   </span>
-                  <Button size="sm" variant="ghost" disabled={busy}
-                    onClick={() => run(() => api.deletePayment(p.id), '')}>
-                    <Icon name="close" size={12} />
-                  </Button>
+                  {can('hujjat.tolov') && (
+                    <Button size="sm" variant="ghost" disabled={busy}
+                      onClick={() => run(() => api.deletePayment(p.id), '')}>
+                      <Icon name="close" size={12} />
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>
           )}
+          {/* TO'LOV QAYDI — pul harakati, broker ishi emas
+              (`hujjat.tolov`, erp_rollar.md §3.4). */}
+          {can('hujjat.tolov') && (
           <div className="flex flex-wrap items-end gap-2">
             <Input className="max-w-32" placeholder="Summa" inputMode="decimal"
               value={pay.amount}
@@ -432,6 +441,7 @@ function InvoiceDetail({ inv, busy, methods, line, setLine, pay, setPay, run,
               To'liq to'langanda holat o'zi "To'landi" bo'ladi
             </span>
           </div>
+          )}
         </div>
       )}
 
@@ -454,7 +464,12 @@ function InvoiceDetail({ inv, busy, methods, line, setLine, pay, setPay, run,
 
       {next.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-2">
-          {next.map((st) => (
+          {/* Chiqarish va bekor qilish — rahbar-menejer amallari.
+              Ro'yxatdan brokerga ruxsat berilmaganlari CHIQARIB
+              TASHLANADI (o'chirilgan tugma "keyinroq bo'ladi" degan
+              yolg'on va'da bo'lardi). */}
+          {next.filter((st) => can(st === 'cancelled'
+            ? 'hujjat.bekor' : 'hujjat.chiqarish')).map((st) => (
             <Button key={st} size="sm"
               variant={st === 'cancelled' ? 'outline' : 'default'}
               disabled={busy}

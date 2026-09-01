@@ -23,6 +23,8 @@ const api = {
   stats: vi.fn(), analytics: vi.fn(), myTasks: vi.fn(), invoiceStats: vi.fn(),
   profit: vi.fn(), audit: vi.fn(), opportunities: vi.fn(),
   cardProfit: vi.fn(), setUserPassword: vi.fn(), loginAttempts: vi.fn(),
+  stock: vi.fn(), stockProduct: vi.fn(), seedOpening: vi.fn(),
+  tahlil: vi.fn(),
 }
 vi.mock('@/api', () => ({ api, ApiError: class extends Error {} }))
 
@@ -32,6 +34,10 @@ const { default: ProfitPanel } = await import('../components/erp/ProfitPanel')
 const { default: AuditPanel } = await import('../components/erp/AuditPanel')
 const { default: MyPasswordPanel } =
   await import('../components/erp/MyPasswordPanel')
+const { default: StockPage } = await import('../components/erp/StockPage')
+const { default: MyTasksPage } = await import('../components/erp/MyTasksPage')
+const { default: TahlilPanel } = await import('../components/erp/TahlilPanel')
+const { setPerms } = await import('../components/erp/erpShared')
 
 const MANAGER: AuthUser = {
   id: 1, username: 'a', full_name: 'A', role: 'admin',
@@ -39,6 +45,7 @@ const MANAGER: AuthUser = {
   email: null, active: true, last_login_at: null,
 }
 const BROKER: AuthUser = { ...MANAGER, role: 'broker', role_label: 'Broker' }
+const MENEJER: AuthUser = { ...MANAGER, role: 'menejer', role_label: 'Menejer' }
 
 const EMPTY_STATS = {
   currency: 'UZS', currencies: ['UZS'], mixed_currency: false,
@@ -52,7 +59,7 @@ const EMPTY_STATS = {
 // `afterEach` ini avtomatik ulay olmaydi. Usiz oldingi sinovning
 // ekrani DOM da qolib, "bir nechta bir xil tugma topildi" degan
 // aldamchi xato chiqadi.
-afterEach(cleanup)
+afterEach(() => { cleanup(); setPerms(null) })
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -158,6 +165,23 @@ describe('Rol: broker kompaniya ko‘rsatkichlarini KO‘RMAYDI', () => {
     expect(api.stats).not.toHaveBeenCalled()
   })
 
+  // MENEJER — 17-patchda ajratilgan yangi rol. U kundalik ishning
+  // egasi, ya'ni kompaniya ko'rsatkichini KO'RADI. Bu tekshiruv
+  // aynan shuning uchun bor: rol qo'shilganda ekrandagi shart
+  // (`roleAtLeast`) unutilsa, menejer brokerning ekranini olardi va
+  // buni hech kim sezmasdi.
+  it('menejerga ham kompaniya ko‘rsatkichlari so‘raladi', async () => {
+    api.stats.mockResolvedValue(EMPTY_STATS)
+    api.myTasks.mockResolvedValue({
+      broker_id: null, self_broker_id: null, days: 7,
+      overdue: [], today: [], later: [], total: 0,
+    })
+    render(<Dashboard user={MENEJER} onOpenOpportunity={() => {}}
+      onGo={() => {}} />)
+    await screen.findByText(/Yutish foizi/i)
+    expect(api.profit).toHaveBeenCalled()
+  })
+
   it('rahbarga kompaniya ko‘rsatkichlari so‘raladi', async () => {
     api.stats.mockResolvedValue(EMPTY_STATS)
     api.myTasks.mockResolvedValue({
@@ -246,5 +270,105 @@ describe('Parol almashtirish (auth-6)', () => {
     await u.type(screen.getByLabelText(/takror/i), 'qisqa')
     await u.click(screen.getByRole('button', { name: /almashtirish/i }))
     expect(await screen.findByText(/kamida 10 belgi/i)).toBeTruthy()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// HUQUQ: tugma KO'RSATILMAYDI (bosilganda 403 beradigan tugma — yolg'on
+// va'da). Matritsa serverda (`api/erp/perm.py`), ekran uni `/erp/auth/me`
+// javobidan oladi; bu yerda aynan shu bog'lanish tekshiriladi.
+const STOCK = {
+  items: [{
+    product_id: 1, product_name: 'Nasos', unit: 'dona', qty: 0, reserved: 0,
+    available: 0, reserve_count: 0, updated_at: null, move_count: 0,
+    in_catalog: true, import_qty: 7, import_at: null,
+  }],
+  kinds: [{ code: 'in', label: 'Kirim' }],
+  reserve_states: [], negative: [], over_reserved: [],
+}
+
+describe('Huquq: ruxsat yo‘q amal EKRANDA ham yo‘q', () => {
+  it('ombor harakati yo‘q bo‘lsa — ko‘chirish tugmasi ko‘rsatilmaydi', async () => {
+    setPerms({ 'ombor.korish': 'read' })
+    api.stock.mockResolvedValue(STOCK)
+    render(<StockPage />)
+    await screen.findByText(/Qoldiqlar/i)
+    expect(screen.queryByText(/Import qoldiqlarini/i)).toBeNull()
+  })
+
+  it('ruxsat bo‘lsa — o‘sha tugma chiqadi', async () => {
+    setPerms({ 'ombor.korish': 'full', 'ombor.harakat': 'full' })
+    api.stock.mockResolvedValue(STOCK)
+    render(<StockPage />)
+    expect(await screen.findByText(/Import qoldiqlarini/i)).toBeTruthy()
+  })
+})
+
+// EGALIK (`api/erp/egalik.py`): broker faqat o'z ishlarini ko'radi, ya'ni
+// "boshqa hodim" filtri unga ISHLAMAYDI. Uni ekranda qoldirsak, tanlov
+// natijani o'zgartirmasdi va filtr buzuq bo'lib ko'rinardi.
+describe('Egalik: "o‘z ishlarim" filtri', () => {
+  const TASKS = {
+    broker_id: 5, self_broker_id: 5, days: 7,
+    overdue: [], today: [], later: [], total: 0,
+  }
+
+  it('brokerga hodim tanlovi ko‘rsatilmaydi', async () => {
+    setPerms({ 'hisobot.deadline': 'own' })
+    api.myTasks.mockResolvedValue(TASKS)
+    render(<MyTasksPage brokers={[]} onOpenOpportunity={() => {}} />)
+    await screen.findByText(/kun/i)
+    expect(screen.queryByText(/Barcha mas'ullar/i)).toBeNull()
+  })
+
+  it('menejerga ko‘rsatiladi', async () => {
+    setPerms({ 'hisobot.deadline': 'full' })
+    api.myTasks.mockResolvedValue(TASKS)
+    render(<MyTasksPage brokers={[]} onOpenOpportunity={() => {}} />)
+    expect(await screen.findByText(/Barcha mas'ullar/i)).toBeTruthy()
+  })
+})
+
+// TAHLIL — Tender-AI qaroridagi SNAPSHOT. Ikki qoida ekranda ham
+// amal qilishi kerak, chunki ikkalasi ham YOLG'ON ISHONCHNI to'sadi.
+describe('Tahlil: yolg‘on ishonch to‘siladi', () => {
+  const TAHLIL = (payload: Record<string, unknown>) => ({
+    items: [{
+      id: 1, topshiriq_id: 7, ishonch: 'aktor_elon',
+      captured_at: '2026-09-01T10:00:00+05:00', payload,
+    }],
+  })
+
+  it('yiqilgan bo‘lim YASHIRILMAYDI — sababi ko‘rinadi', async () => {
+    api.tahlil.mockResolvedValue(TAHLIL({
+      ombor: { ok: false, xato: 'DBUnavailable: katalog yo‘q' },
+    }))
+    render(<TahlilPanel oppId={1} />)
+    expect(await screen.findByText(/olinmadi/i)).toBeTruthy()
+    expect(screen.getByText(/katalog yo‘q/i)).toBeTruthy()
+  })
+
+  it('tasdiqlanmagan talab "ko‘rilmagan" deb belgilanadi', async () => {
+    api.tahlil.mockResolvedValue(TAHLIL({
+      talablar: { ok: true, data: { royxat: [
+        { matn: 'Litsenziya talab qilinadi', holat: 'pending_review' },
+      ] } },
+    }))
+    render(<TahlilPanel oppId={1} />)
+    expect(await screen.findByText(/ko'rilmagan/i)).toBeTruthy()
+  })
+
+  it('ishonch darajasi DALILDAN oshmaydi', async () => {
+    api.tahlil.mockResolvedValue(TAHLIL({ ai: { ok: true, data: { qaror: 'go' } } }))
+    render(<TahlilPanel oppId={1} />)
+    expect(await screen.findByText(/e‘lon qilingan/i)).toBeTruthy()
+    expect(screen.queryByText(/tasdiqlangan/i)).toBeNull()
+  })
+
+  it('tahlil yo‘q bo‘lsa blok UMUMAN ko‘rsatilmaydi', async () => {
+    api.tahlil.mockResolvedValue({ items: [] })
+    const { container } = render(<TahlilPanel oppId={1} />)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(container.textContent).toBe('')
   })
 })

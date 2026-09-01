@@ -127,17 +127,20 @@ def _disable(username):
 def test_sof():
     head("1. Sof mantiq")
 
-    eq("rol ierarxiyasi", (A.ROLE_RANK["admin"] > A.ROLE_RANK["manager"]
+    eq("rol ierarxiyasi", (A.ROLE_RANK["admin"] > A.ROLE_RANK["rahbar"]
+                           > A.ROLE_RANK["menejer"]
                            > A.ROLE_RANK["broker"]), True)
 
     user = {"role": "broker", "full_name": "A. Karimov"}
     try:
-        A.require_role(user, "manager")
-        check(False, "broker rahbar huquqini olmasligi kerak")
+        A.require_role(user, "menejer")
+        check(False, "broker menejer huquqini olmasligi kerak")
     except A.AuthError as e:
-        eq("broker -> manager: 403", e.code, 403)
-    A.require_role({"role": "admin"}, "manager")
-    check(True, "admin rahbar huquqini oladi")
+        eq("broker -> menejer: 403", e.code, 403)
+    A.require_role({"role": "admin"}, "menejer")
+    check(True, "admin menejer huquqini oladi")
+    A.require_role({"role": "rahbar"}, "menejer")
+    check(True, "rahbar menejer huquqini oladi")
 
     eq("actor sessiyadan ismni oladi", A.actor(user), "A. Karimov")
     eq("ism bo'lmasa login", A.actor({"username": "karimov"}), "karimov")
@@ -193,6 +196,7 @@ def test_db():
     from api.main import app
 
     uname, aname = PREFIX + "broker", PREFIX + "admin"
+    mname = PREFIX + "menejer"
     made = []
     made_brokers = []
 
@@ -231,12 +235,23 @@ def test_db():
             # Karta ham yaratiladi: "ochiq ishi bor hodimni
             # faolsizlantirib bo'lmaydi" tekshiruvi shunga tayanadi.
             FIX.ensure_opportunity()
-            brk = db.query_one("SELECT id, full_name FROM erp.broker "
-                               "WHERE active ORDER BY id LIMIT 1")
+            # HISOBI YO'Q hodim kerak: bitta hodimga bitta hisob
+            # (`app_user_broker_uq`), shuning uchun band hodimni olsak
+            # sinov o'zining birinchi qadamida yiqilardi — va sabab
+            # "sinov buzuq" emas, "bazada shunday hodim bor" bo'lardi.
+            brk = db.query_one(
+                "SELECT b.id, b.full_name FROM erp.broker b "
+                "WHERE b.active AND NOT EXISTS ("
+                "  SELECT 1 FROM erp.app_user u WHERE u.broker_id = b.id) "
+                "ORDER BY b.id LIMIT 1")
             _seed_user(uname, "ZZTEST Broker", "broker",
                        broker_id=brk["id"] if brk else None)
             _seed_user(aname, "ZZTEST Admin", "admin")
-            made += [uname, aname]
+            # MENEJER: karta va mijoz yaratish — uning ishi (huquqlar
+            # matritsasi). Broker bilan sinaladigan joylar 403 beradi,
+            # shuning uchun "yaratish" oqimlari shu hisob bilan yuriladi.
+            _seed_user(mname, "ZZTEST Menejer", "menejer")
+            made += [uname, aname, mname]
 
             r = c.post("/erp/auth/login",
                        json={"username": uname, "password": "notogri"})
@@ -315,11 +330,11 @@ def test_db():
                                  {"u": new_name})
             r = c.post("/erp/users", headers=AH,
                        json={"username": new_name, "full_name": "ZZTEST Yangi",
-                             "password": PASSWORD, "role": "manager"})
+                             "password": PASSWORD, "role": "menejer"})
             eq("hisob yaratildi -> 201", r.status_code, 201)
             made.append(new_name)
             new_id = r.json()["id"]
-            eq("yangi hisob roli", r.json()["role"], "manager")
+            eq("yangi hisob roli", r.json()["role"], "menejer")
             eq("bir xil login -> 409",
                c.post("/erp/users", headers=AH,
                       json={"username": new_name, "full_name": "X",
@@ -338,7 +353,7 @@ def test_db():
                 # ikki xil javob berardi.
                 eq("band hodimga ikkinchi hisob -> 409",
                    c.put(f"/erp/users/{new_id}", headers=AH,
-                         json={"full_name": "ZZTEST Yangi", "role": "manager",
+                         json={"full_name": "ZZTEST Yangi", "role": "menejer",
                                "broker_id": brk["id"]}).status_code, 409)
 
             eq("hisob yangilandi",
@@ -450,7 +465,11 @@ def test_db():
 
             r = c.get("/erp/auth/roles")
             eq("rollar ro'yxati -> 200", r.status_code, 200)
-            eq("uch rol", len(r.json()["roles"]), 3)
+            # Ro'yxatning O'ZI `_tests/erp11_test.py` da tekshiriladi
+            # (u yerda bazadagi CHECK bilan ham solishtiriladi). Bu
+            # yerda faqat "endpoint kodnikini beradi" degan bog'lanish.
+            eq("rollar soni kodnikiga teng",
+               len(r.json()["roles"]), len(A.ROLES))
             eq("kodlar bazadagi CHECK bilan bir xil",
                sorted(x["code"] for x in r.json()["roles"]),
                sorted(A.ROLE_RANK))
@@ -525,6 +544,8 @@ def test_db():
 
             # --- "MENING ISHLARIM" SESSIYADAN --------------------------------
             head("6c. Mening ishlarim (sessiyadagi hodim)")
+            MH2 = {"Authorization":
+                   f"Bearer {A.login(mname, PASSWORD)['token']}"}
             r = c.get("/erp/my-tasks", headers=H)
             eq("my-tasks -> 200", r.status_code, 200)
             mt = r.json()
@@ -533,12 +554,24 @@ def test_db():
                 # qidirib topish kerak emas.
                 eq("sukut bo'yicha O'ZINIKI", mt["broker_id"], brk["id"])
                 eq("interfeys uchun: kim kirgan", mt["self_broker_id"], brk["id"])
-                eq("everyone=true -> hammaniki",
+                # EGALIK (5.3): brokerga `everyone=true` ham, begona
+                # `broker_id` ham O'ZINIKINI qaytaradi. Avval bu ochiq
+                # edi ("vazifalar baribir hammaga ko'rinadi"), endi
+                # huquqlar matritsasi `hisobot.deadline` ni broker
+                # uchun "o'z" deb belgilaydi.
+                eq("broker: everyone=true ham O'ZINIKI",
                    c.get("/erp/my-tasks?everyone=true", headers=H).json()["broker_id"],
-                   None)
+                   brk["id"])
+                eq("broker: begona hodim so'ralsa ham o'ziniki",
+                   c.get("/erp/my-tasks?broker_id=999999",
+                         headers=H).json()["broker_id"], brk["id"])
                 eq("aniq hodim so'ralsa o'sha",
                    c.get(f"/erp/my-tasks?broker_id={brk['id']}",
                          headers=H).json()["broker_id"], brk["id"])
+                # Menejerda esa cheklov yo'q.
+                eq("menejer: everyone=true -> hammaniki",
+                   c.get("/erp/my-tasks?everyone=true", headers=MH2).json()["broker_id"],
+                   None)
             # Admin hisobi hodimga bog'lanmagan — u holda sukut hammaniki.
             am = c.get("/erp/my-tasks", headers=AH).json()
             eq("hodimsiz hisob -> hammaniki", am["broker_id"], None)
@@ -550,10 +583,24 @@ def test_db():
             if not t:
                 print("  SKIP bazada tender yo'q")
             else:
-                want = brk["full_name"] if brk else "ZZTEST Broker"
+                # KARTA YARATISH — brokerning ishi EMAS (huquqlar
+                # matritsasi, `api/erp/perm.py`): yo'naltirish qarorini
+                # menejer yoki rahbar qabul qiladi. Shuning uchun bu
+                # yerda menejer hisobi bilan kiriladi; brokerga esa
+                # aynan 403 kutiladi.
+                eq("broker karta yaratolmaydi -> 403",
+                   c.post(f"/erp/tenders/{t['id']}/take", headers=H,
+                          json={"priority": "medium"}).status_code, 403)
+                eq("broker mijoz yaratolmaydi -> 403",
+                   c.post("/erp/clients", headers=H,
+                          json={"name": "ZZTEST Mijoz auth"}).status_code, 403)
+
+                MH = {"Authorization": f"Bearer {A.login(mname, PASSWORD)['token']}"}
+
+                want = "ZZTEST Menejer"
                 cl = c.post("/erp/clients", json={"name": "ZZTEST Mijoz auth"},
-                            headers=H).json()
-                r = c.post(f"/erp/tenders/{t['id']}/take", headers=H, json={
+                            headers=MH).json()
+                r = c.post(f"/erp/tenders/{t['id']}/take", headers=MH, json={
                     "client_id": cl["id"], "priority": "medium",
                     # MIJOZ yolg'on ism yuboradi — e'tiborga OLINMASLIGI kerak
                     "created_by": "BOSHQA ODAM"})
@@ -581,8 +628,11 @@ def test_db():
             # yiqilardi. Pul allaqachon ochiq, bizga faqat alohida cookie
             # idishi kerak.
             cc = TestClient(app, base_url="https://testserver")
+            # Menejer hisobi: bu bo'limda MIJOZ YARATILADI va u
+            # brokerning ishi emas (403 bo'lardi va sinov CSRF o'rniga
+            # huquqni tekshirib qo'ygan bo'lardi).
             r = cc.post("/erp/auth/login",
-                        json={"username": uname, "password": PASSWORD})
+                        json={"username": mname, "password": PASSWORD})
             eq("cookie bilan kirish -> 200", r.status_code, 200)
             raw = r.headers.get("set-cookie", "")
             check("erp_session" in raw and "HttpOnly" in raw,

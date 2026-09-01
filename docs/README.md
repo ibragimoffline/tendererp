@@ -18,6 +18,19 @@ kirish: nima qayerda va qaysi savolga javob qayerdan topiladi.
 
 ---
 
+## TASHQI MANBA HUJJATI
+
+`erp_rollar.md` (v2, 2026-09-01) — **bu papkada yo'q**: u loyiha
+egasining hujjati va rollar/huquqlar/yo'naltirish bo'yicha
+TOPSHIRIQ bo'lib keldi. Kod va sinovlardagi `erp_rollar.md §N`
+havolalari o'sha hujjatga tegishli.
+
+Undan kelib chiqqan ishlar shu papkada yozilgan:
+`erp_huquqlar.md` (§2–§3), `erp_integratsiya_6.md` (§7, §9),
+`erp_integratsiya_7.md` (§5–§6), `erp_xabar.md` (§8).
+
+---
+
 ## Hujjatlar
 
 ### Poydevor
@@ -35,6 +48,8 @@ kirish: nima qayerda va qaysi savolga javob qayerdan topiladi.
 | Fayl | Nima haqida |
 |---|---|
 | `erp_integratsiya.md` … `_5.md` | Tender-AI bilan bog'lanishning bosqichma-bosqich tarixi: cheklist, hujjat shabloni, vazifalar, xabar yuborish, kompaniya profili |
+| `erp_integratsiya_6.md` | **Shartnoma-view'lar**: ERP dan Tender-AI ga ochilgan to'rt view, maxfiylik chegarasi, shaklni qulflash |
+| `erp_integratsiya_7.md` | **Yo'naltirish oqimi**: "Olindi" qarori ish kartasiga aylanadi (HTTP'siz, `pg_notify` + view), operator xaritasi, tahlil snapshoti |
 | `../INTEGRATSIYA.md` | Tender-AI tomonida **nima o'zgargani** — o'sha loyihaga o'tkaziladigan ro'yxat |
 
 ### Modullar
@@ -42,6 +57,8 @@ kirish: nima qayerda va qaysi savolga javob qayerdan topiladi.
 | Fayl | Nima haqida |
 |---|---|
 | `erp_auth.md` | Kimlik: kim qayerda (hodim ERP da, kompaniya tender-ai da), rollar, cookie/CSRF, service kaliti, **parol tanlashdan himoya** |
+| `erp_xabar.md` | **Bildirishnoma**: hodimga qaratilgan xabar, `localhost` havola qoidasi, o'ziniki-faqat-o'ziniki |
+| `erp_huquqlar.md` | **Huquqlar matritsasi**: kim nima qila oladi, `perm.py`, darajalar (`full`/`own`/`read`), egalik zanjiri (`egalik.py`), kompaniya sozlamalari (`sozlama.py`) |
 | `erp_ombor.md` | Ombor: harakatlar jurnali, qoldiq, **rezerv**, tender pozitsiyalaridan taklif |
 | `erp_faktura.md` | Hisob-faktura, to'lovlar, **dalolatnoma (akt)**, shartnoma ilovasi, bosma shakl |
 | `erp_foyda.md` | Foyda: daromad (QQS siz), **muzlatilgan tannarx**, to'liq bo'lmagan hisob |

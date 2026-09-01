@@ -30,7 +30,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from api import db  # noqa: E402
+from api import auth, db  # noqa: E402
 
 OK, WARN, ERR = "OK  ", "OGOH", "XATO"
 _counts = {OK: 0, WARN: 0, ERR: 0}
@@ -66,7 +66,19 @@ PATCHES = [
      "kirish urinishlari (parol tanlashdan himoya)"),
     ("schema_patch_erp_16.sql", "erp", "doc_audit",
      "hujjat o'zgarishlari jurnali"),
+    ("schema_patch_erp_18.sql", "erp", "setting",
+     "tizim sozlamalari (huquqning kompaniyaga bog'liq qismi)"),
+    ("schema_patch_erp_19.sql", "erp", "v_tai_actor",
+     "tender-ai uchun shartnoma-view'lar"),
+    ("schema_patch_erp_21.sql", "erp", "opportunity_analysis",
+     "Tender-AI yo'naltirishi (tahlil snapshoti)"),
+    ("schema_patch_erp_22.sql", "erp", "notification",
+     "hodimga bildirishnoma"),
 ]
+
+#: 23-patch JADVAL qo'shmaydi — u HUQUQ beradi, shuning uchun
+#: alohida tekshiriladi (pastda).
+
 
 #: 13- va 14-patch USTUN qo'shadi (jadval emas), shuning uchun alohida.
 PATCH_COLUMNS = [
@@ -143,6 +155,21 @@ def main() -> int:
                 say(ERR, f"{fname} qo'llanmagan — {what} ishlamaydi",
                     f"psql ... -f {fname}")
 
+        # 17-patch na jadval, na ustun qo'shadi — u ROL LUG'ATINI
+        # (CHECK ni) almashtiradi. Shuning uchun tekshiruv CHECK ning
+        # o'zidan: bazadagi ro'yxat kodnikidan (auth.ROLES) kam bo'lsa,
+        # yangi rolli hisob yaratishga urinish 500 beradi.
+        rc = db.scalar("SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                       "WHERE conrelid = 'erp.app_user'::regclass "
+                       "AND conname = 'app_user_role_check'") or ""
+        yoq = [c for c, _ in auth.ROLES if f"'{c}'" not in rc]
+        if not yoq:
+            say(OK, "schema_patch_erp_17.sql — rollar (rahbar/menejer ajratilgan)")
+        else:
+            say(ERR, "schema_patch_erp_17.sql qo'llanmagan — bazada "
+                     f"{', '.join(yoq)} roli yo'q",
+                "psql ... -f schema_patch_erp_17.sql")
+
         # AUTH-4: CSRF ustuni alohida patch (9), jadval o'zgargani uchun
         # yuqoridagi ro'yxatga tushmaydi.
         if db.query_one("SELECT 1 AS x FROM information_schema.columns "
@@ -152,6 +179,90 @@ def main() -> int:
         else:
             say(ERR, "schema_patch_erp_9.sql qo'llanmagan — kirish ishlamaydi",
                 "psql ... -f schema_patch_erp_9.sql")
+
+        # Shartnoma-view'lar TO'RTTA (schema_patch_erp_19.sql) va
+        # ular tender-ai ga ochiladigan YAGONA yuza. Bittasi yetishmasa
+        # ikkinchi tomon jimgina eski ma'lumot ko'rsatib turardi.
+        yoq_view = [v for v in ("v_tai_actor", "v_tender_status", "v_stock",
+                                "v_client_document")
+                    if not table_exists("erp", v)]
+        if yoq_view:
+            say(ERR, "shartnoma-view yetishmayapti: " + ", ".join(yoq_view),
+                "psql ... -f schema_patch_erp_19.sql")
+        elif db.query_one("SELECT 1 AS x FROM pg_roles WHERE rolname = 'tai_app'"):
+            berilgan = {r["table_name"] for r in db.query(
+                "SELECT table_name FROM information_schema.role_table_grants "
+                "WHERE grantee = 'tai_app' AND table_schema = 'erp'")}
+            kam = [v for v in ("v_tai_actor", "v_tender_status", "v_stock",
+                               "v_client_document") if v not in berilgan]
+            if kam:
+                say(WARN, "tai_app ga SELECT berilmagan: " + ", ".join(kam),
+                    "psql ... -f schema_patch_erp_19.sql")
+            else:
+                say(OK, "shartnoma-view'lar va tai_app huquqlari joyida")
+        else:
+            say(OK, "shartnoma-view'lar joyida (tai_app roli yo'q)")
+
+        # Sozlamalar STANDART qiymatda ham ishlaydi, shuning uchun bu
+        # xato emas — lekin "kim nimani o'zgartirgan" ko'rinib tursin.
+        if table_exists("erp", "setting"):
+            from api.erp import sozlama as _soz
+            ozgargan = [x for x in _soz.hammasi() if x["changed"]]
+            if ozgargan:
+                say(OK, "tizim sozlamalari: "
+                        + ", ".join(f"{x['label']} — "
+                                    + ("ha" if x["value"] else "yo'q")
+                                    for x in ozgargan))
+            else:
+                say(OK, "tizim sozlamalari standart qiymatda")
+
+        # YO'NALTIRISH OQIMI: xarita qo'yilmagan bo'lsa topshiriq
+        # KELMAYDI va bu jimgina o'tib ketmasligi kerak — "nega
+        # hech narsa kelmayapti" degan savol shu yerdan javob oladi.
+        if table_exists("erp", "opportunity_analysis"):
+            from api.erp import topshiriq as _top
+            h = _top.holat()
+            if not h.get("ready"):
+                say(WARN, "yo'naltirish oqimi: " + str(h.get("sabab")),
+                    "Tender-AI tomonida schema_patch_topshiriq.sql")
+            elif not h.get("tai_company_id"):
+                say(WARN, "yo'naltirish oqimi sozlanmagan — "
+                          "own_company.tai_company_id qo'yilmagan",
+                    "PUT /erp/topshiriq/xarita yoki docs/erp_integratsiya_7.md")
+            else:
+                say(OK, f"yo'naltirish oqimi: ijarachi {h['tai_company_id']}, "
+                        f"{h.get('kutayotgan', 0)} ta kutmoqda, "
+                        f"{h.get('kartalar', 0)} ta karta")
+
+        # HUQUQ CHEGARASI (23-patch): `erp` roli `public.*` dan
+        # faqat olti obyektni O'QIYDI. Himoya hozir YOQILMAGAN
+        # (ilova `postgres` bilan ulanadi) va bu JIM qolmasligi kerak.
+        if db.query_one("SELECT 1 AS x FROM pg_roles WHERE rolname = 'erp'"):
+            yozish = db.query(
+                "SELECT DISTINCT privilege_type FROM "
+                "information_schema.role_table_grants WHERE grantee = 'erp' "
+                "AND table_schema = 'public' AND privilege_type <> 'SELECT'")
+            oqish = db.scalar(
+                "SELECT count(DISTINCT table_name) FROM "
+                "information_schema.role_table_grants WHERE grantee = 'erp' "
+                "AND table_schema = 'public'") or 0
+            kim = "postgres"
+            for qism in (os.environ.get("XT_DB_DSN", "") or "").split():
+                if qism.startswith("user="):
+                    kim = qism[5:]
+            if yozish:
+                say(ERR, "erp roli public.* ga YOZA oladi",
+                    "psql ... -f schema_patch_erp_23.sql")
+            elif not oqish:
+                say(WARN, "erp roliga huquq berilmagan",
+                    "psql ... -f schema_patch_erp_23.sql")
+            elif kim == "erp":
+                say(OK, f"huquq chegarasi YOQILGAN (public da {oqish} obyekt, "
+                        "faqat o'qish)")
+            else:
+                say(WARN, f"huquq chegarasi tayyor, lekin ishlamayapti "
+                          f"(ilova user={kim} bilan ulanadi)",
+                    "ALTER ROLE erp LOGIN PASSWORD '...' + .env dagi XT_DB_DSN")
 
         # --- 3. Kirish ---
         head("3. Kirish")

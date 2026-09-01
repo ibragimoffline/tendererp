@@ -10,7 +10,7 @@ import {
 import Icon from '../Icon'
 import { cn } from '@/lib/utils'
 import type { StockBalance, StockList, StockProduct } from '@/types'
-import { ErpError } from './erpShared'
+import { ErpError, can } from './erpShared'
 
 // OMBOR (5B-1) — qoldiqning egasi ERP.
 //
@@ -114,10 +114,12 @@ export default function StockPage() {
             Ularni bir marta "boshlang'ich qoldiq" sifatida ko'chirib olish
             kerak. Shundan keyin qoldiqning yagona manbai — shu jurnal.
           </p>
-          <Button size="sm" disabled={busy}
-            onClick={() => run(api.seedOpening, 'Boshlang\'ich qoldiqlar ko\'chirildi')}>
-            Import qoldiqlarini ko'chirish
-          </Button>
+          {can('ombor.harakat') && (
+            <Button size="sm" disabled={busy}
+              onClick={() => run(api.seedOpening, 'Boshlang\'ich qoldiqlar ko\'chirildi')}>
+              Import qoldiqlarini ko'chirish
+            </Button>
+          )}
         </div>
       )}
 
@@ -182,6 +184,15 @@ export default function StockPage() {
                 {openId === r.product_id && (
                   <div className="mb-2 rounded-md border bg-background p-3">
                     {/* --- yangi harakat --- */}
+                    {/* Kirim va chiqim — rahbar-menejer ishi
+                        (`ombor.harakat`). Brokerga qoldiq KO'RINADI:
+                        u tenderga nima yetishini bilishi kerak, lekin
+                        jurnalga yozmaydi. */}
+                    {!can('ombor.harakat') ? (
+                      <div className="text-caption text-muted-foreground">
+                        Ombor harakatini rahbar yoki menejer yozadi.
+                      </div>
+                    ) : (<>
                     <div className="grid gap-2 sm:grid-cols-4">
                       <div>
                         <div className="mb-1 text-caption font-semibold text-muted-foreground">
@@ -230,6 +241,7 @@ export default function StockPage() {
                         </span>
                       )}
                     </div>
+                    </>)}
 
                     {/* --- tarix --- */}
                     <div className="mt-3 border-t pt-2">

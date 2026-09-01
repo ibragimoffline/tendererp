@@ -46,16 +46,32 @@ from typing import Any, Dict, List, Optional
 
 from api import db
 
-# Rollar — bazadagi CHECK bilan BIR XIL ro'yxat (schema_patch_erp_6.sql).
+# Rollar — bazadagi CHECK bilan BIR XIL ro'yxat (schema_patch_erp_17.sql).
+# `_tests/erp11_test.py` ikkalasini solishtiradi: ro'yxatlar ajralib
+# ketsa sinov yiqiladi, ilova esa 500 bermaydi.
+#
+# NEGA TO'RTTA (avval uchta edi): `manager` ikki xil odamni — direktorni
+# va tender bo'limi boshlig'ini — bitta nom ostiga qo'yardi, ya'ni
+# KUNDALIK ishning (taqsimlash, yo'naltirish, muddat kuzatish) egasi
+# yo'q edi. Batafsil sabab: schema_patch_erp_17.sql sarlavhasida.
 ROLES = [
     ("admin",   "Administrator"),
-    ("manager", "Rahbar"),
+    ("rahbar",  "Rahbar"),
+    ("menejer", "Menejer"),
     ("broker",  "Broker"),
 ]
 ROLE_LABEL = dict(ROLES)
 
 #: Ierarxiya: yuqoridagi quyidagining hamma huquqini oladi.
-ROLE_RANK = {"broker": 1, "manager": 2, "admin": 3}
+#
+#: `admin` ENG YUQORIDA — HOZIRCHA. `erp_rollar.md` §3.6 ga ko'ra admin
+#: biznes ma'lumotni ko'rishi kerak, lekin O'ZGARTIRMASLIGI kerak (tizim
+#: sozlovchi va pul hujjatini o'zgartiruvchi bitta odam bo'lmasin). Buni
+#: ierarxiya bilan ifodalab bo'lmaydi — u faqat "kim kimdan yuqori"
+#: deydi, "kim nimaga tegmaydi" demaydi. Shuning uchun cheklov keyingi
+#: bosqichda `api/erp/perm.py` (huquqlar MATRITSASI) bilan keladi va
+#: o'shanda bu ro'yxat faqat "ierarxiya" ma'nosida qoladi.
+ROLE_RANK = {"broker": 1, "menejer": 2, "rahbar": 3, "admin": 4}
 
 ITERATIONS = 240_000
 SESSION_DAYS = int(os.environ.get("AUTH_SESSION_DAYS", "14"))

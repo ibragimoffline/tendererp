@@ -12,7 +12,7 @@ import OpportunityBoard from './OpportunityBoard'
 import OpportunityCard from './OpportunityCard'
 import OpportunityStats from './OpportunityStats'
 import OpportunityTable from './OpportunityTable'
-import { ALL, ErpError, toFilter, toSelect } from './erpShared'
+import { ALL, ErpError, can, toFilter, toSelect } from './erpShared'
 
 // "ISHDAGI TENDERLAR" bo'limi — Kanban / Jadval / Hisobot.
 //
@@ -52,6 +52,11 @@ export default function OpportunitiesPage({ focusId, tenderWeb }: OpportunitiesP
   const [clientId, setClientId] = useState('')
   const [q, setQ] = useState('')
   const [openOnly, setOpenOnly] = useState(true)
+  // TAQSIMLANMAGAN: Tender-AI yo'naltirishi hodimni topa olmasa
+  // karta mas'ulsiz ochiladi (`api/erp/topshiriq.py`). Bunday
+  // karta hech kimning ro'yxatida ko'rinmaydi — menejer uni
+  // aynan shu filtr bilan topadi.
+  const [unassigned, setUnassigned] = useState(false)
 
   useEffect(() => { setOpenId(focusId ?? null) }, [focusId])
 
@@ -70,8 +75,9 @@ export default function OpportunitiesPage({ focusId, tenderWeb }: OpportunitiesP
       client_id: clientId || undefined,
       q: q || undefined,
       open_only: openOnly || undefined,
+      unassigned: unassigned || undefined,
     }).then(setItems).catch((e: Error) => setError(e.message))
-  }, [meta, status, brokerId, clientId, q, openOnly])
+  }, [meta, status, brokerId, clientId, q, openOnly, unassigned])
 
   // Qidiruvda har harfga so'rov yubormaymiz — 300 ms kutamiz.
   useEffect(() => {
@@ -162,6 +168,17 @@ export default function OpportunitiesPage({ focusId, tenderWeb }: OpportunitiesP
                 onChange={(e) => setOpenOnly(e.target.checked)} />
               faqat ochiq
             </label>
+
+            {/* Faqat kartani TAQSIMLAY oladigan odamga: brokerda
+                bu filtr bo'sh ro'yxat berardi (unga baribir faqat
+                o'ziniki ko'rinadi). */}
+            {can('karta.biriktirish') && (
+              <label className="flex cursor-pointer items-center gap-1.5 text-body">
+                <input type="checkbox" checked={unassigned}
+                  onChange={(e) => setUnassigned(e.target.checked)} />
+                taqsimlanmagan
+              </label>
+            )}
           </>
         )}
       </div>

@@ -272,11 +272,22 @@ cd frontend && npm run dev        # http://localhost:5173
 
 ## 9. Xavfsizlik va ma'lumot (hozirgi holatga mos)
 
-- Tizimda auth yo'q (`notify_telegram.md`). ERP bu holatni **o'zgartirmaydi**
-  va **yashirmaydi**: `created_by`/`changed_by` — tanlangan broker nomi,
-  tarixda "kim" degan savolga shartli javob. Login kelganda ustunlar
-  `user_id` ga o'tadi, matn ustunlari saqlanib qoladi.
-- Sir (token/parol) saqlanmaydi — ERP'ga hozircha kerak emas.
+- ~~Tizimda auth yo'q~~ — **ESKIRGAN (2026-09-02)**. Endi ikkala
+  tomonda ham kimlik bor va ular **mustaqil**:
+  * **ERP** — HODIM kiradi (`erp.app_user`, `docs/erp_auth.md`):
+    login/parol, sessiya cookie, CSRF, to'rt rol va huquqlar
+    matritsasi (`docs/erp_huquqlar.md`).
+  * **Tender-AI** — KOMPANIYA kiradi (`company_account`), odam esa
+    "aktor" sifatida e'lon qilinadi. ERP sessiyasi
+    `erp.v_tai_actor` orqali ISBOTLANISHI mumkin — o'shanda ishonch
+    darajasi `erp_sessiya` bo'ladi.
+  * **SSO YO'Q va rejalashtirilmagan**: ikki tizim, ikki auditoriya.
+  `created_by`/`changed_by` endi SESSIYADAN oladi (mijoz yuborgan
+  ism e'tiborga olinmaydi), matn ustunlari esa saqlanib qoldi —
+  tarixdagi eski yozuvlar yo'qolmasin.
+- Sir saqlanadi: parol `pbkdf2_sha256` xeshi, sessiya tokeni esa
+  faqat `sha256` xeshi ko'rinishida (`erp.app_session`). Xom token
+  bazada YO'Q.
 - Opportunity o'chirilmaydi — tarix rahbar uchun ma'lumot; noto'g'ri karta
   `rejected` + izoh.
 - Mijoz ma'lumotlari (2-bosqich: INN, bank rekvizitlari) — baza dumpi

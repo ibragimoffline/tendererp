@@ -122,7 +122,9 @@ DUE_TASKS_SQL = f"""
 SELECT {_TASK_COLS},
        o.title AS opp_title, o.tender_ref, o.deadline_at,
        c.name AS client_name,
-       coalesce(b.full_name, ob.full_name) AS notify_name
+       coalesce(b.full_name, ob.full_name) AS notify_name,
+       -- Xabar KIMGA ketishini aniqlash uchun (`api/erp/xabar.py`).
+       o.broker_id AS opp_broker_id
 {_TASK_FROM}
 JOIN erp.opportunity o ON o.id = t.opportunity_id
 LEFT JOIN erp.client_company c ON c.id = o.client_id
@@ -132,6 +134,8 @@ WHERE NOT t.done
   AND t.due_at IS NOT NULL
   AND t.due_at <= current_date + %(days)s::int
   AND o.status NOT IN ('won','lost','rejected')
+  -- EGALIK (api/erp/egalik.py): brokerga faqat O'Z kartalari.
+  AND (%(owner_broker_id)s::int IS NULL OR o.broker_id = %(owner_broker_id)s)
 ORDER BY t.due_at, t.id
 """
 
@@ -139,7 +143,10 @@ ORDER BY t.due_at, t.id
 # o'tib ketishi vazifa kechikishidan qimmatroq.
 DUE_DEADLINES_SQL = """
 SELECT o.id, o.title, o.tender_ref, o.deadline_at, o.status, o.start_price,
-       o.currency, b.full_name AS broker_name, c.name AS client_name
+       o.currency, b.full_name AS broker_name, c.name AS client_name,
+       -- KIMGA yuborish kerakligi uchun (`api/erp/xabar.py`): ism
+       -- ekranga, id esa manzilga kerak.
+       o.broker_id
 FROM erp.opportunity o
 LEFT JOIN erp.broker b ON b.id = o.broker_id
 LEFT JOIN erp.client_company c ON c.id = o.client_id
@@ -147,6 +154,7 @@ WHERE o.status NOT IN ('won','lost','rejected')
   AND o.deadline_reminded_at IS NULL
   AND o.deadline_at IS NOT NULL
   AND o.deadline_at <= now() + (%(days)s || ' days')::interval
+  AND (%(owner_broker_id)s::int IS NULL OR o.broker_id = %(owner_broker_id)s)
 ORDER BY o.deadline_at
 """
 
@@ -272,7 +280,8 @@ def _today_iso() -> str:
 
 
 # --- eslatma uchun ----------------------------------------------------------
-def due_reminders(days: int = 1, deadline_days: int = 3) -> Dict[str, Any]:
+def due_reminders(days: int = 1, deadline_days: int = 3,
+                  owner_broker_id: Optional[int] = None) -> Dict[str, Any]:
     """Eslatilishi kerak bo'lgan vazifalar va deadline'lar.
 
     HECH NARSA YUBORMAYDI va hech narsani belgilamaydi — shuning uchun uni
@@ -280,12 +289,16 @@ def due_reminders(days: int = 1, deadline_days: int = 3) -> Dict[str, Any]:
     mumkin."""
     _need_schema3()
     tasks = [_shape_task_reminder(r)
-             for r in db.query(DUE_TASKS_SQL, {"days": days})]
+             for r in db.query(DUE_TASKS_SQL, {
+                 "days": days, "owner_broker_id": owner_broker_id})]
     deadlines = [{"id": r["id"], "title": r["title"], "tender_ref": r["tender_ref"],
                   "deadline_at": _iso(r["deadline_at"]), "status": r["status"],
                   "start_price": _num(r["start_price"]), "currency": r["currency"],
-                  "broker_name": r["broker_name"], "client_name": r["client_name"]}
-                 for r in db.query(DUE_DEADLINES_SQL, {"days": str(deadline_days)})]
+                  "broker_name": r["broker_name"], "broker_id": r["broker_id"],
+                  "client_name": r["client_name"]}
+                 for r in db.query(DUE_DEADLINES_SQL, {
+                     "days": str(deadline_days),
+                     "owner_broker_id": owner_broker_id})]
     return {"tasks": tasks, "deadlines": deadlines,
             "days": days, "deadline_days": deadline_days}
 
@@ -295,6 +308,9 @@ def _shape_task_reminder(r: dict) -> dict:
             "due_at": _iso(r["due_at"]), "overdue": _is_past(r["due_at"]),
             "opp_title": r["opp_title"], "tender_ref": r["tender_ref"],
             "client_name": r["client_name"], "assignee": r["notify_name"],
+            # Vazifa bajaruvchisi ko'rsatilmagan bo'lsa — KARTA
+            # mas'uli (`api/erp/xabar.py` shu id ga yuboradi).
+            "broker_id": r["assignee_broker_id"] or r["opp_broker_id"],
             "deadline_at": _iso(r["deadline_at"])}
 
 

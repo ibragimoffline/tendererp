@@ -5,6 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import Icon from '../Icon'
 import { BarRow, Empty, GroupedBars, Legend, Panel, SERIES, Stat } from './charts'
+import { roleAtLeast } from './erpShared'
 import type {
   AuditReport, AuthUser, ErpAnalytics, ErpStats, MyTasks, Opportunity,
   ProfitReport,
@@ -25,7 +26,7 @@ import type {
 // HAR KIM O'ZINIKINI KO'RADI — va bu ikki BOSHQA panel.
 //
 // Kompaniya bo'yicha ko'rsatkich (`/erp/stats`, `/erp/analytics`,
-// `/erp/profit`, `/erp/audit`) `manager` huquqini talab qiladi va
+// `/erp/profit`, `/erp/audit`) `menejer` huquqini talab qiladi va
 // brokerda 403 qaytaradi. Shuning uchun brokerga xato ham, bo'sh quti
 // ham ko'rsatilmaydi: unga O'Z ishlari va O'Z kartalari chiqadi.
 //
@@ -40,7 +41,7 @@ interface Props {
 
 export default function Dashboard({ user, onOpenOpportunity, onGo }: Props) {
   const f = useFormat()
-  const isManager = user.role === 'manager' || user.role === 'admin'
+  const isManager = roleAtLeast(user.role, 'menejer')
 
   const [stats, setStats] = useState<ErpStats | null>(null)
   const [an, setAn] = useState<ErpAnalytics | null>(null)

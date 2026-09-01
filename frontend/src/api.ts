@@ -18,6 +18,7 @@ import type {
   AuditReport, AuditRow,
   LoginAttempt,
   ProfitReport, ProfitRow,
+  Setting, ErpNotification, ErpTahlil, TopshiriqHolat,
 } from './types'
 
 const BASE = import.meta.env.VITE_API_BASE || '/api'
@@ -350,6 +351,50 @@ export const api = {
       'PUT', `/erp/users/${id}/password`,
       { body: { password, current_password: currentPassword } }),
   roles: () => request<{ roles: { code: string; label: string }[] }>('GET', '/erp/auth/roles'),
+
+  /** "Bu ish menga to'g'ri kelmadi" — MENEJERGA so'rov. Broker
+   *  kartani o'zi o'tkaza olmaydi (huquqlar matritsasi), lekin
+   *  so'rovi tarixda qoladi. */
+  requestReassign: (oppId: number, izoh: string) =>
+    request<{ ok: boolean; xabar_ketdi: number }>(
+      'POST', `/erp/opportunities/${oppId}/taqsimlash-sorovi`,
+      { body: { izoh } }),
+
+  /** Tender-AI tahlili — SNAPSHOT (eng yangisi birinchi). ERP uni
+   *  qayta hisoblamaydi: qoidalar Tender-AI da. */
+  tahlil: (oppId: number) =>
+    request<{ items: ErpTahlil[] }>(
+      'GET', `/erp/opportunities/${oppId}/tahlil`),
+
+  // --- bildirishnomalar (o'ziniki) ---
+  // HUQUQ yo'q: har kim faqat o'zinikini ko'radi va `app_user_id`
+  // sessiyadan olinadi (so'rovdan emas).
+  notifications: (onlyUnread = false) =>
+    request<{ ready: boolean; items: ErpNotification[]; unread: number }>(
+      'GET', '/erp/notifications', { params: { only_unread: onlyUnread } }),
+  readNotifications: (ids?: number[]) =>
+    request<{ belgilandi: number; unread: number }>(
+      'POST', '/erp/notifications/read', { body: { ids: ids ?? null } }),
+
+  // --- Tender-AI yo'naltirish oqimi (admin) ---
+  // Xarita OPERATOR qarori: qaysi Tender-AI ijarachisi ekanimiz
+  // taxmin qilinmaydi (`api/erp/topshiriq.py`).
+  topshiriqHolat: () =>
+    request<TopshiriqHolat>('GET', '/erp/topshiriq/holat'),
+  setTaiXarita: (taiCompanyId: number | null) =>
+    request<TopshiriqHolat>('PUT', '/erp/topshiriq/xarita',
+      { body: { tai_company_id: taiCompanyId } }),
+  topshiriqSync: () =>
+    request<{ holat: string; yaratildi?: number; bekor?: number
+              xato?: number }>('POST', '/erp/topshiriq/sync'),
+
+  // --- tizim sozlamalari (admin) ---
+  // Ro'yxat SERVERDAN keladi: kalitlar, standart qiymatlar va izohlar
+  // `api/erp/sozlama.py` da. Ekran ikkinchi nusxa tutmaydi.
+  settings: () => request<{ ready: boolean; settings: Setting[] }>(
+    'GET', '/erp/settings'),
+  setSetting: (key: string, value: boolean) =>
+    request<Setting>('PUT', `/erp/settings/${key}`, { body: { value } }),
 
   // --- mijoz korxonalar ---
   clients: (params?: Params) => request<ClientRow[]>('GET', '/erp/clients', { params }),

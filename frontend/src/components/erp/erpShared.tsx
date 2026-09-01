@@ -9,6 +9,45 @@ import type { Opportunity } from '@/types'
 // ajralib ketadigan manba yaratardi. Yon paneldagi bo'lim nomi esa uchala
 // tilda (`nav.opportunities`) — u umumiy navigatsiya qismi.
 
+/** Rol ierarxiyasi — backenddagi `api/auth.py` ROLE_RANK bilan BIR XIL.
+ *
+ *  NEGA EKRANDA HAM BOR: huquqni SERVER hal qiladi (403), lekin brokerga
+ *  ochilmaydigan bo'limni KO'RSATIB qo'yish ham xato — u bosadi va xato
+ *  oladi. Ya'ni bu ro'yxat huquq emas, KO'RINISH qoidasi.
+ *
+ *  Yagona nusxa shu yerda: `App.tsx` va `Dashboard.tsx` avval rol
+ *  nomlarini o'zlari solishtirardi va yangi rol qo'shilganda ikkalasini
+ *  ham eslab tuzatish kerak edi. */
+export const ROLE_RANK: Record<string, number> = {
+  broker: 1, menejer: 2, rahbar: 3, admin: 4,
+}
+
+/** `role` kamida `need` darajasidami. Noma'lum rol — eng past daraja:
+ *  tanimagan narsaga huquq berilmaydi. */
+export const roleAtLeast = (role: string | undefined, need: string) =>
+  (ROLE_RANK[role || ''] || 0) >= (ROLE_RANK[need] || 99)
+
+// --- HUQUQLAR -------------------------------------------------------------
+// Matritsa SERVERDA (`api/erp/perm.py`) va u `GET /erp/auth/me` javobida
+// keladi. Bu yerda faqat o'qish qulayligi: har komponentga `user` ni
+// uzatib yurish (prop drilling) o'rniga bitta joyda saqlanadi.
+//
+// BU HIMOYA EMAS — himoya serverda, har so'rovda. Bu KO'RINISH qoidasi:
+// bosilganda 403 beradigan tugma ko'rsatilmasin.
+
+let PERMS: Record<string, string | null> = {}
+
+/** Kirgandan keyin (va `me` yangilanganda) chaqiriladi. */
+export function setPerms(p?: Record<string, string | null> | null) {
+  PERMS = p || {}
+}
+
+/** Amalga ruxsat bormi. Noma'lum amal — yo'q (server ham rad etadi). */
+export const can = (action: string) => Boolean(PERMS[action])
+
+/** Daraja: 'full' | 'own' | 'read' | null. */
+export const permLevel = (action: string) => PERMS[action] ?? null
+
 /** Radix Select bo'sh satrni qiymat sifatida qabul qilmaydi (Filters.tsx dagi
  *  bilan bir xil cheklov) — "hammasi" varianti maxsus belgi bilan yuritiladi. */
 export const ALL = '__all__'
