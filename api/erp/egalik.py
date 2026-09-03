@@ -99,6 +99,11 @@ TEGISHLI_SQL: Dict[str, str] = {
                         SELECT 1 FROM erp.opportunity o
                          WHERE o.client_id = a.client_id AND o.broker_id = %(b)s)))
         ) AS ok""",
+    # Sabab hujjati — kartasi orqali (24-patch).
+    "opportunity_file": """
+        SELECT EXISTS (SELECT 1 FROM erp.opportunity_file f
+                         JOIN erp.opportunity o ON o.id = f.opportunity_id
+                        WHERE f.id = %(id)s AND o.broker_id = %(b)s) AS ok""",
     # Mijoz "meniki" — u bilan kartam bo'lsa.
     "client": """
         SELECT EXISTS (SELECT 1 FROM erp.opportunity o
@@ -119,6 +124,7 @@ NOMI = {
     "reserve": "rezerv", "invoice": "faktura", "payment": "to'lov",
     "act": "dalolatnoma", "client": "mijoz",
     "client_contact": "aloqa shaxsi", "client_document": "mijoz hujjati",
+    "opportunity_file": "sabab hujjati",
 }
 
 BOGLANMAGAN = ("Hisobingiz hodimga bog'lanmagan, shuning uchun "

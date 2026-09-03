@@ -576,7 +576,8 @@ def test_db():
                     eq("daromad nol", p0["revenue"], 0.0)
 
                     # Yutildi -> rezerv chiqimga aylanadi, TANNARX muzlaydi.
-                    O.set_status(oid3, "won", MARK, MARK)
+                    for _st in FIX.yol("won"):       # sakrab bo'lmaydi
+                        O.set_status(oid3, _st, MARK, MARK)
                     mv = db.query_one(
                         "SELECT unit_cost FROM erp.stock_move "
                         "WHERE opportunity_id = %(i)s AND kind = 'out' "

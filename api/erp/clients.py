@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from api import db
-from api.erp.opportunity import STATUS_LABEL, ErpError, _need_schema
+from api.erp.opportunity import FINAL, STATUS_LABEL, ErpError, _need_schema
 
 # Passportning tahrirlanadigan maydonlari. Ro'yxat BITTA joyda: INSERT,
 # UPDATE va so'rov modeli ham shundan yuradi.
@@ -76,7 +76,8 @@ SELECT {_CLIENT_COLS},
        count(o.id)                                        AS opp_n,
        count(o.id) FILTER (WHERE o.status = 'won')         AS won_n,
        count(o.id) FILTER (WHERE o.status = 'lost')        AS lost_n,
-       count(o.id) FILTER (WHERE o.status NOT IN ('won','lost','rejected')) AS open_n,
+       -- YAKUNIY ro'yxat KODDAN (`opportunity.FINAL`).
+       count(o.id) FILTER (WHERE o.status <> ALL(%(final)s)) AS open_n,
        (SELECT count(*) FROM erp.client_document d WHERE d.client_id = c.id) AS doc_n
 FROM erp.client_company c
 LEFT JOIN erp.opportunity o ON o.client_id = c.id
@@ -259,6 +260,7 @@ def list_(q: Optional[str] = None, active_only: bool = False,
     _need_schema2()
     out = []
     for r in db.query(CLIENT_LIST_SQL, {"q": q or None, "active_only": active_only,
+                                        "final": sorted(FINAL),
                                         "owner_broker_id": owner_broker_id}):
         item = shape(r)
         item.update({"opp_n": r["opp_n"], "won_n": r["won_n"], "lost_n": r["lost_n"],
@@ -320,7 +322,7 @@ def get(client_id: int) -> dict:
         # lekin ko'rsatilmasa hisob "1 ta karta, yutish 100%" bo'lib
         # chiqadi va son qayerdan kelgani tushunarsiz qoladi.
         "rejected_n": sum(1 for o in opps if o["status"] == "rejected"),
-        "open_n": sum(1 for o in opps if o["status"] not in ("won", "lost", "rejected")),
+        "open_n": sum(1 for o in opps if o["status"] not in FINAL),
         # ARALASH VALYUTA QO'SHILMAYDI. Mijozning kartalari bir nechta
         # valyutada bo'lsa summa berilmaydi: "1200 USD + 15 mln UZS"
         # degan son hech narsani anglatmaydi.

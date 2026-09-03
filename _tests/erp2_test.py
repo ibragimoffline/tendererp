@@ -22,12 +22,14 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # fixture.py
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except (AttributeError, ValueError):            # pragma: no cover
     pass
 
+import fixture as FIX                   # status yo'li (24-patch)
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -336,7 +338,10 @@ def test_db():
                     eq("mavjud bo'lmagan karta -> 404",
                        c.get("/erp/opportunities/999999999/compliance").status_code, 404)
 
-                c.patch(f"/erp/opportunities/{opps[0]}/status", json={"status": "won"})
+                # `won` ga SAKRAB bo'lmaydi (24-patch): yo'l FIX.yol() da.
+                for st in FIX.yol("won"):
+                    c.patch(f"/erp/opportunities/{opps[0]}/status",
+                            json={"status": st})
 
                 page = c.get(f"/erp/clients/{a['id']}").json()
                 eq("mijoz sahifasida 1 karta", page["summary"]["opp_n"], 1)

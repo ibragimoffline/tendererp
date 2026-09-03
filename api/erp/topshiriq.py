@@ -313,8 +313,14 @@ def _karta_bekor(t: Dict[str, Any], opp: Dict[str, Any]) -> Dict[str, Any]:
 
     O'chirish ma'lumot yo'qotish bo'lardi: kartada izoh, vazifa va
     tarix bo'lishi mumkin."""
+    # SABAB 'other': 24-patchdan boshlab yakunlanmagan holatlar sababsiz
+    # yopilmaydi. Ro'yxatdagi yettita koddan hech biri "manba tizimda
+    # yo'naltirish bekor qilindi" ni ANIQ ifodalamaydi, shuning uchun
+    # 'other' + izoh. Yangi kod QO'SHILMADI: `lost_reason` broker
+    # tanlaydigan ro'yxat va unga tizim sababini qo'shish odam ko'radigan
+    # tanlovni chalg'itardi. Izoh esa tarixda to'liq qoladi.
     erp_opp.set_status(opp["id"], "rejected", "Tender-AI",
-                       "Tender-AI'da qaror bekor qilindi", None)
+                       "Tender-AI'da qaror bekor qilindi", "other")
     # Karta ustida ishlayotgan odam buni BILISHI kerak: u tayyorgarlik
     # ko'rayotgan bo'lishi mumkin.
     to_liq = db.query_one("SELECT broker_id, title FROM erp.opportunity "

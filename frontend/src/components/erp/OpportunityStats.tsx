@@ -209,7 +209,12 @@ export default function OpportunityStats({ onOpen }: { onOpen: (id: number) => v
                 <th className="text-right font-medium">O'rtacha</th>
                 <th className="text-right font-medium">Mediana</th>
                 <th className="text-right font-medium">Eng uzun</th>
-                <th className="text-right font-medium">Hozir turibdi</th>
+                {/* "Hozir turibdi" ikkiga bo'linadi: muddati o'tgan karta
+                    ishlanmayapti, u YOPILISHI kerak. Bitta songa yig'ilsa
+                    voronka "9 ta ishlanmoqda" deb yolg'on gapirardi —
+                    haqiqatda 2 tasi ishlanadi, 7 tasi osilib qolgan. */}
+                <th className="text-right font-medium">Faol</th>
+                <th className="text-right font-medium">Muddati o'tgan</th>
               </tr>
             </thead>
             <tbody>
@@ -226,12 +231,16 @@ export default function OpportunityStats({ onOpen }: { onOpen: (id: number) => v
                     {x.max_days == null ? '—' : x.max_days}
                   </td>
                   <td className="tabular py-1 text-right">
-                    {x.ongoing_n || '—'}
-                    {x.oldest_days != null && x.ongoing_n > 0 && (
+                    {x.faol_n || '—'}
+                    {x.oldest_days != null && x.faol_n > 0 && (
                       <span className="ml-1 text-micro text-muted-foreground">
                         ({x.oldest_days} kun)
                       </span>
                     )}
+                  </td>
+                  <td className={cn('tabular py-1 text-right',
+                    x.kechikkan_n > 0 && 'font-semibold text-urgent-strong')}>
+                    {x.kechikkan_n || '—'}
                   </td>
                 </tr>
               ))}

@@ -74,6 +74,8 @@ PATCHES = [
      "Tender-AI yo'naltirishi (tahlil snapshoti)"),
     ("schema_patch_erp_22.sql", "erp", "notification",
      "hodimga bildirishnoma"),
+    ("schema_patch_erp_24.sql", "erp", "opportunity_file",
+     "sabab hujjati va 'ulgurmadik' holati"),
 ]
 
 #: 23-patch JADVAL qo'shmaydi — u HUQUQ beradi, shuning uchun

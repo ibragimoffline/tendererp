@@ -41,6 +41,9 @@ const api = {
   opportunity: vi.fn(), tenderDiff: vi.fn(), tasks: vi.fn(),
   reserves: vi.fn(), invoices: vi.fn(), client: vi.fn(),
   acts: vi.fn(), actFromInvoice: vi.fn(), setActStatus: vi.fn(),
+  // Sabab hujjati (24-patch)
+  oppFiles: vi.fn(), addOppFile: vi.fn(), deleteOppFile: vi.fn(),
+  downloadOppFile: vi.fn(),
 }
 vi.mock('@/api', () => ({ api, ApiError: class extends Error {} }))
 
@@ -56,6 +59,7 @@ const { default: TahlilPanel } = await import('../components/erp/TahlilPanel')
 const { default: OpportunityCard } =
   await import('../components/erp/OpportunityCard')
 const { default: ClientCard } = await import('../components/erp/ClientCard')
+const { default: SababFayl } = await import('../components/erp/SababFayl')
 const { default: ActPanel } = await import('../components/erp/ActPanel')
 const { setPerms } = await import('../components/erp/erpShared')
 
@@ -546,5 +550,151 @@ describe('Ombor: sarlavhadagi son FILTRGA moslashadi', () => {
     expect(await screen.findByText('Qoldiqlar (2)')).toBeTruthy()
     await userEvent.type(screen.getByPlaceholderText(/Mahsulot nomi/i), 'nasos')
     expect(await screen.findByText('Qoldiqlar (1 / 2)')).toBeTruthy()
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+// SABAB HUJJATI (24-patch)
+// ---------------------------------------------------------------------------
+// Funksiya IXTIYORIY, va aynan shuning uchun ekranda tekshiriladi:
+// ixtiyoriy narsa jimgina yo'qolsa hech kim sezmaydi. Uchta qoida
+// serverda emas, FAQAT shu yerda ushlanadi.
+const FAYL_META = {
+  schema_ready: true,
+  statuses: [], priorities: [],
+  fayl_ready: true,
+  fayl_holatlar: ['lost', 'rejected', 'ulgurmadik'],
+  fayl_turlar: ['.pdf', '.docx'],
+  fayl_max_hajm: 10485760,
+}
+
+describe('Sabab hujjati: YO‘QLIGI ham aytiladi', () => {
+  it('fayl bo‘lmasa "yo‘q" deb YOZILADI, bo‘sh joy qoldirilmaydi', async () => {
+    setPerms({ 'karta.fayl': 'full' })
+    api.oppFiles.mockResolvedValue([])
+    render(<SababFayl oppId={1} oppStatus="lost" meta={FAYL_META as never} />)
+    expect(await screen.findByText(/yo‘q — biriktirilmagan|yo'q — biriktirilmagan/))
+      .toBeTruthy()
+  })
+
+  it('fayl bor bo‘lsa nomi va hajmi ko‘rinadi', async () => {
+    setPerms({ 'karta.fayl': 'full' })
+    api.oppFiles.mockResolvedValue([{
+      id: 5, opportunity_id: 1, fayl_nom: 'Sabab.pdf',
+      mime: 'application/pdf', hajm: 2048, sha256: 'x', izoh: null,
+      created_by: 'A. Karimov', created_at: null,
+    }])
+    render(<SababFayl oppId={1} oppStatus="lost" meta={FAYL_META as never} />)
+    expect(await screen.findByRole('button', { name: 'Sabab.pdf' })).toBeTruthy()
+    expect(screen.getByText('2 KB')).toBeTruthy()
+  })
+
+  it('OCHIQ kartada yuklash yo‘q va SABABI yoziladi', async () => {
+    setPerms({ 'karta.fayl': 'full' })
+    api.oppFiles.mockResolvedValue([])
+    render(<SababFayl oppId={1} oppStatus="preparing" meta={FAYL_META as never} />)
+    expect(await screen.findByText(/faqat yakunlanmagan kartaga/i)).toBeTruthy()
+    expect(screen.queryByLabelText(/Sabab hujjatini tanlash/i)).toBeNull()
+  })
+
+  it('yakunlangan kartada yuklash MAYDONI bor', async () => {
+    setPerms({ 'karta.fayl': 'full' })
+    api.oppFiles.mockResolvedValue([])
+    render(<SababFayl oppId={1} oppStatus="ulgurmadik" meta={FAYL_META as never} />)
+    expect(await screen.findByLabelText(/Sabab hujjatini tanlash/i)).toBeTruthy()
+  })
+
+  it('huquq yo‘q — yuklash ham, o‘chirish ham KO‘RSATILMAYDI', async () => {
+    setPerms({ 'karta.korish': 'own' })
+    api.oppFiles.mockResolvedValue([{
+      id: 5, opportunity_id: 1, fayl_nom: 'Sabab.pdf',
+      mime: 'application/pdf', hajm: 2048, sha256: 'x', izoh: null,
+      created_by: null, created_at: null,
+    }])
+    render(<SababFayl oppId={1} oppStatus="lost" meta={FAYL_META as never} />)
+    expect(await screen.findByText(/ruxsatingiz yo‘q|ruxsatingiz yo'q/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /O‘chirish|O'chirish/ })).toBeNull()
+  })
+
+  it('patch qo‘llanmagan bo‘lsa blok UMUMAN ko‘rsatilmaydi', async () => {
+    setPerms({ 'karta.fayl': 'full' })
+    api.oppFiles.mockResolvedValue([])
+    const { container } = render(
+      <SababFayl oppId={1} oppStatus="lost"
+        meta={{ ...FAYL_META, fayl_ready: false } as never} />)
+    expect(container.querySelector('[data-testid="sabab-fayl"]')).toBeNull()
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+// VORONKA: "ishlanmoqda" va "muddati o'tgan" ARALASHMAYDI
+// ---------------------------------------------------------------------------
+// Tizim kartani o'zi yopmaydi (qaror odamniki), shuning uchun muddati
+// o'tgan karta bosqichda turaveradi. Bitta songa yig'ilsa jadval
+// "9 ta ishlanmoqda" deb YOLG'ON gapirardi.
+describe('Tahlil: muddati o‘tgan karta "ishlanmoqda" deb sanalmaydi', () => {
+  const AN = {
+    stages: [{
+      code: 'preparing', label: 'Taklif tayyorlanmoqda', finished_n: 3,
+      avg_days: 2, median_days: 2, max_days: 5,
+      ongoing_n: 9, faol_n: 2, kechikkan_n: 7, oldest_days: 4, final: false,
+    }],
+    funnel: [], stuck: [], lost_reasons: [], by_broker: [],
+    stuck_days: 14, mixed_currency: false, currency: 'UZS',
+  }
+
+  it('faol va muddati o‘tgan AJRATIB ko‘rsatiladi', async () => {
+    setPerms({ 'hisobot.kompaniya': 'full' })
+    api.stats.mockResolvedValue(EMPTY_STATS)
+    api.analytics.mockResolvedValue(AN)
+    const { default: OpportunityStats } =
+      await import('../components/erp/OpportunityStats')
+    render(<OpportunityStats onOpen={() => {}} />)
+    // Ustun sarlavhasi bor — ya'ni raqam ATALGAN, shunchaki son emas.
+    expect(await screen.findByText(/Muddati o.tgan/)).toBeTruthy()
+
+    // QATOR ichida: faol 2, kechikkan 7 — ALOHIDA kataklarda.
+    // Butun ekran bo'ylab qidirilsa "2" bir nechta joyda uchraydi,
+    // shuning uchun aynan shu bosqich qatoriga qaraymiz.
+    const qator = (await screen.findByText('Taklif tayyorlanmoqda'))
+      .closest('tr') as HTMLTableRowElement
+    const katak = [...qator.querySelectorAll('td')].map((td) => td.textContent)
+    expect(katak).toContain('2')
+    expect(katak).toContain('7')
+    // Yig'ma son (9) KO'RSATILMAYDI — u aynan chalg'ituvchi raqam edi.
+    expect(katak).not.toContain('9')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// SABAB: yakunlanmagan uchta holatda MAJBURIY
+// ---------------------------------------------------------------------------
+describe('Status dialogi: sabab MAJBURIY', () => {
+  const TO = (code: string, label: string) => ({ code, label, final: true })
+  const REASONS = [{ code: 'price', label: 'Narx yuqori' }]
+  const OPP_MIN = { id: 1, title: 'ZZ', status: 'preparing', is_final: false }
+
+  async function ochish(code: string, label: string) {
+    const { default: Dlg } = await import('../components/erp/StatusChangeDialog')
+    render(<Dlg o={OPP_MIN as never} to={TO(code, label)}
+      lostReasons={REASONS} onCancel={() => {}} onConfirm={() => {}} />)
+  }
+
+  for (const [code, label] of [['lost', 'Yutqazildi'],
+                               ['rejected', 'Rad etildi'],
+                               ['ulgurmadik', 'Ulgurmadik']]) {
+    it(`'${code}': sabab tanlanmaguncha tasdiq tugmasi O'CHIQ`, async () => {
+      await ochish(code, label)
+      const tugma = await screen.findByRole('button', { name: /Tasdiqlash/i })
+      expect((tugma as HTMLButtonElement).disabled).toBe(true)
+    })
+  }
+
+  it("'won': sabab so‘ralmaydi, tugma OCHIQ", async () => {
+    await ochish('won', 'Yutildi')
+    const tugma = await screen.findByRole('button', { name: /Tasdiqlash/i })
+    expect((tugma as HTMLButtonElement).disabled).toBe(false)
   })
 })

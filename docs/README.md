@@ -65,6 +65,7 @@ Undan kelib chiqqan ishlar shu papkada yozilgan:
 | `erp_audit.md` | O'zgarishlar jurnali: **trigger** yozadi, "chiqarilgandan keyin tegilganmi" |
 | `eksport_savollari.md` | Faktura eksporti uchun buxgalterga **yuboriladigan savollar** (tayyor matn) |
 | `erp_ishga_tushirish.md` | Bo'sh bazadan real ishgacha: patchlar, hisoblar, tayyorlik tekshiruvi, demo tozalash, **zaxira** |
+| `erp_sabab_fayl.md` | **Sabab hujjati** (kartaga fayl) va `ulgurmadik` holati; o'tish sharti va nega to'liq matritsa emasligi |
 | `../DESIGN.md` | **Interfeys shartnomasi**: rang, tipografika, shakl, chuqurlik, tegish nishoni. Manbasi — `awesome-design-md` dagi Linear fayli; undan nima olingani va nima OLINMAGANI yozilgan |
 
 ---

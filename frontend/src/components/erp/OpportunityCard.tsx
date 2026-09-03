@@ -14,12 +14,14 @@ import {
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 import type {
-  ComplianceResult, ErpBroker, ErpClient, ErpStatus, Opportunity, OpportunityInput,
+  ComplianceResult, ErpBroker, ErpClient, ErpMeta, ErpStatus, Opportunity,
+  OpportunityInput,
   TenderDiff,
 } from '@/types'
 import StatusChangeDialog from './StatusChangeDialog'
 import ContractList from './ContractList'
 import SubmissionPanel from './SubmissionPanel'
+import SababFayl from './SababFayl'
 import TaskList from './TaskList'
 import ReservePanel from './ReservePanel'
 import InvoiceLinks from './InvoiceLinks'
@@ -58,11 +60,15 @@ interface OpportunityCardProps {
   /** Tender-AI interfeysining manzili (`/erp/meta` -> tender_web).
    *  Kartadagi "Tender-AI panelida ochish" havolasi shundan quriladi. */
   tenderWeb?: string
+  /** To'liq `/erp/meta` — sabab hujjati bloki undan chegaralarni oladi
+   *  (ruxsat etilgan turlar, hajm, qaysi holatlarda biriktiriladi).
+   *  Ekran o'z lug'atini tutmaydi: ikki ro'yxat ajralib ketardi. */
+  meta?: ErpMeta | null
 }
 
 export default function OpportunityCard(props: OpportunityCardProps) {
   const { id, statuses, brokers, clients, priorities, lostReasons,
-          contractStatuses, onClose, onChanged, tenderWeb } = props
+          contractStatuses, onClose, onChanged, tenderWeb, meta } = props
   const f = useFormat()
   const [o, setO] = useState<Opportunity | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -489,6 +495,12 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                   </div>
                 )}
               </section>
+
+              {/* --- SABAB HUJJATI (24-patch) ---
+                  Yopiq kartada YO'QLIGI ham yoziladi: jimgina bo'sh joy
+                  "biriktirilmagan" degani ham, "bunday narsa yo'q"
+                  degani ham bo'lib ko'rinardi. */}
+              <SababFayl oppId={o.id} oppStatus={o.status} meta={meta} />
 
               {/* --- CHEKLIST: mijoz hujjatlariga qarab --- */}
               <section className="mt-5">

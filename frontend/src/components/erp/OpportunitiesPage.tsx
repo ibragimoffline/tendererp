@@ -214,6 +214,7 @@ export default function OpportunitiesPage({ focusId, tenderWeb }: OpportunitiesP
           onClose={() => setOpenId(null)}
           onChanged={replace}
           tenderWeb={tenderWeb}
+          meta={meta}
         />
       )}
     </div>

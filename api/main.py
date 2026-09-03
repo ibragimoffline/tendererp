@@ -28,12 +28,14 @@ from pydantic import BaseModel
 
 load_dotenv()  # .env ni import paytida yuklaymiz (pool DSN'ni ko'rishi uchun)
 
+from urllib.parse import quote  # noqa: E402
+
 from api import auth, db, tenderai  # noqa: E402
 from api.erp import (act as erp_act, analytics as erp_analytics,  # noqa: E402
                      egalik,
                      clients as erp_clients, contracts as erp_contracts,
                      invoice as erp_invoice, invoice_export as erp_export,
-                     audit as erp_audit,
+                     audit as erp_audit, fayl as erp_fayl,
                      opportunity as erp_opp, perm, profit as erp_profit,
                      sozlama as erp_sozlama,
                      topshiriq as erp_topshiriq, xabar as erp_xabar,
@@ -856,6 +858,13 @@ def erp_meta():
         "stock_ready": erp_stock_mod.schema_ready(),
         "invoice_ready": erp_invoice.schema_ready(),
         "act_ready": erp_act.schema_ready(),
+        # Sabab hujjati (24-patch). Interfeys bloki shu bayroqqa qaraydi:
+        # patch qo'llanmagan bazada blok UMUMAN ko'rsatilmaydi, "yuklash
+        # ishlamadi" degan jim xato o'rniga.
+        "fayl_ready": erp_fayl.schema_ready(),
+        "fayl_holatlar": sorted(erp_fayl.YOPIQ_HOLATLAR),
+        "fayl_turlar": sorted(erp_fayl.TURLAR),
+        "fayl_max_hajm": erp_fayl.MAX_HAJM,
         "act_statuses": [{"code": c, "label": l}
                          for c, l in erp_act.STATUSES],
         "invoice_statuses": [{"code": c, "label": l}
@@ -1085,6 +1094,70 @@ def erp_tender_diff(opp_id: int, user: Dict[str, Any] = Depends(me)):
     Qaysi qiymat to'g'ri ekanini odam hal qiladi."""
     _can_obj(user, "karta.korish", "opportunity", opp_id)
     return _erp(erp_opp.diff_with_tender, opp_id)
+
+
+# --- sabab hujjati (24-patch) -----------------------------------------------
+# "Nega yutqazdik / to'xtatdik / ulgurmadik" tafsiloti. `lost_reason`
+# kodining O'RNINI BOSMAYDI — u tasniflash uchun, bu tafsilot uchun.
+@app.get("/erp/opportunities/{opp_id}/files")
+def erp_files_list(opp_id: int, user: Dict[str, Any] = Depends(me)):
+    """Kartaning fayllari — metadata, baytlarsiz."""
+    _can_obj(user, "karta.korish", "opportunity", opp_id)
+    return _erp(erp_fayl.royxat, opp_id)
+
+
+@app.post("/erp/opportunities/{opp_id}/files", status_code=201)
+def erp_file_add(
+    opp_id: int,
+    file: UploadFile = File(..., description="Sabab hujjati (pdf/docx/xlsx/jpg/png)."),
+    izoh: Optional[str] = Query(None, description="Bir qatorlik izoh."),
+    user: Dict[str, Any] = Depends(me),
+):
+    """Fayl biriktiradi. IXTIYORIY — kartani yopish uchun shart emas.
+
+    Hajm ikki joyda tekshiriladi: bu yerda (o'qishdan oldin `413`) va
+    modulda (bazadagi CHECK bilan bir xil chegara). Ikkinchisi ilova
+    chetlab o'tilsa ham ishlaydi."""
+    _can_obj(user, "karta.fayl", "opportunity", opp_id)
+    data = file.file.read()
+    if len(data) > erp_fayl.MAX_HAJM:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Fayl {erp_fayl.MAX_HAJM // 1048576} MB dan katta.")
+    return _erp(erp_fayl.qosh, opp_id, file.filename or "", data, izoh,
+                auth.actor(user))
+
+
+# TARTIB MUHIM: `qamrov` `{file_id}` dan OLDIN turishi shart. FastAPI
+# marshrutlarni E'LON TARTIBIDA solishtiradi — teskarisi bo'lsa "qamrov"
+# satri `int` ga aylantirilmay `422` berardi va sabab ko'rinmasdi.
+@app.get("/erp/files/qamrov")
+def erp_files_qamrov(user: Dict[str, Any] = Depends(me)):
+    """"Yopilgan N kartadan M tasida sabab hujjati bor" — funksiya
+    ishlatilyaptimi degan savolga RAQAM bilan javob."""
+    _can(user, "hisobot.kompaniya")
+    return _erp(erp_fayl.qamrov)
+
+
+@app.get("/erp/files/{file_id}")
+def erp_file_download(file_id: int, user: Dict[str, Any] = Depends(me)):
+    """Faylni yuklab olish."""
+    _can_obj(user, "karta.korish", "opportunity_file", file_id)
+    f = _erp(erp_fayl.baytlar_olish, file_id)
+    # `filename*=UTF-8''...` — nomda kirill yoki o'zbekcha belgi bo'lsa
+    # brauzer uni to'g'ri o'qisin. Oddiy `filename=` ASCII bilan cheklangan.
+    nom = quote(f["fayl_nom"])
+    return Response(content=f["baytlar"], media_type=f["mime"],
+                    headers={"Content-Disposition":
+                             f"attachment; filename*=UTF-8''{nom}"})
+
+
+@app.delete("/erp/files/{file_id}")
+def erp_file_delete(file_id: int, user: Dict[str, Any] = Depends(me)):
+    """O'chiradi. IZ QOLADI: `erp.doc_audit` ga kim/qachon/qaysi fayl
+    yoziladi va u jurnal o'zgartirilmaydi."""
+    _can_obj(user, "karta.fayl", "opportunity_file", file_id)
+    return _erp(erp_fayl.ochir, file_id, auth.actor(user))
 
 
 @app.get("/erp/tenders/{tender_id}/opportunities")

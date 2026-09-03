@@ -165,6 +165,11 @@ def test_db():
                        json={"status": "preparing"}).status_code, 200)
 
             S.saqla("broker_can_close", True, actor="ZZTEST Sinov")
+            # `won` ga `submitted` orqali (24-patch). `submitted` — yakuniy
+            # EMAS, ya'ni u `karta.status` huquqi bilan o'tadi va sozlama
+            # sinovining ma'nosi buzilmaydi: qulf `won` da tekshiriladi.
+            c.patch(f"/erp/opportunities/{d['opp']}/status",
+                    json={"status": "submitted"})
             eq("broker: yoqilgach yakunlaydi",
                c.patch(f"/erp/opportunities/{d['opp']}/status",
                        json={"status": "won"}).status_code, 200)

@@ -109,7 +109,14 @@ AMALLAR: Dict[str, Any] = {
         "admin": None, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": OZ}),
     # Yakuniy status — alohida amal: brokerga ruxsat berish/bermaslik
     # sozlama bo'ladi (`broker_can_close`, hozir "ha").
-    "karta.yopish": ("Kartani yakunlash (yutildi / yutqazildi / rad)", {
+    "karta.yopish": ("Kartani yakunlash (yutildi / yutqazildi / rad / "
+                     "ulgurmadik)", {
+        "admin": None, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": OZ}),
+    # Sabab hujjati (24-patch). Daraja `karta.yopish` bilan bir xil: kim
+    # kartani yopa oladi, o'sha "nega yopdim" hujjatini ham biriktiradi
+    # va xato yuklaganini o'chiradi. O'chirish izi `doc_audit` da qoladi,
+    # shuning uchun alohida, torroq amal qilishning ma'nosi yo'q.
+    "karta.fayl": ("Kartaga sabab hujjatini biriktirish / o'chirish", {
         "admin": None, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": OZ}),
     "karta.qaytarish": ("Yakuniy statusdan qaytarish", {
         "admin": None, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": None}),

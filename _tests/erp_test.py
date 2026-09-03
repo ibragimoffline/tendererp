@@ -83,9 +83,12 @@ def head(t):
 def test_sof():
     head("1. Sof mantiq (bazasiz)")
 
-    eq("9 ta status", len(O.STATUSES), 9)
+    eq("10 ta status", len(O.STATUSES), 10)
     eq("3 ta ustuvorlik", len(O.PRIORITIES), 3)
-    eq("yakuniylar", O.FINAL, {"won", "lost", "rejected"})
+    # 24-patch: `ulgurmadik` YAKUNIY. Bu shunchaki ro'yxat emas —
+    # `stock.on_status_change` `to_status in FINAL` ga qaraydi, ya'ni
+    # bu qatordagi xato ombor rezervini JIMGINA osilib qoldirardi.
+    eq("yakuniylar", O.FINAL, {"won", "lost", "rejected", "ulgurmadik"})
     check(all(c in O.STATUS_LABEL for c in O.FINAL),
           "yakuniy statuslar umumiy ro'yxatda ham bor")
     check(len(O.STATUS_LABEL) == len(O.STATUSES), "status kodlari takrorlanmaydi")
@@ -180,8 +183,8 @@ def test_db():
               "schema_patch_erp_1.sql bazaga qo'llanmagan")
         if not m["schema_ready"]:
             return
-        eq("meta: 9 status", len(m["statuses"]), 9)
-        eq("meta: 3 yakuniy", sum(1 for s in m["statuses"] if s["final"]), 3)
+        eq("meta: 10 status", len(m["statuses"]), 10)
+        eq("meta: 4 yakuniy", sum(1 for s in m["statuses"] if s["final"]), 4)
         eq("meta: 3 ustuvorlik", len(m["priorities"]), 3)
 
         # Kod va bazadagi CHECK bir xil ro'yxatmi — ikki manba ajralib
@@ -326,12 +329,20 @@ def test_db():
 
             # --- status quvuri ----------------------------------------------
             oid = opp["id"]
-            for st in ("reviewing", "submitted", "won"):
+            # 24-patch: `submitted` va `won` ga SAKRAB bo'lmaydi.
+            # `preparing` -> `submitted` -> `won` — yagona yo'l.
+            r = c.patch(f"/erp/opportunities/{oid}/status",
+                        json={"status": "submitted", "changed_by": PREFIX + "Broker"})
+            eq("new'dan to'g'ridan-to'g'ri submitted -> 409", r.status_code, 409)
+            check("Taklif tayyorlanmoqda" in str(r.json()["detail"]),
+                  "409 SABABNI aytadi: qaysi holatdan o'tish mumkin")
+
+            for st in ("reviewing", "preparing", "submitted", "won"):
                 r = c.patch(f"/erp/opportunities/{oid}/status",
                             json={"status": st, "changed_by": PREFIX + "Broker"})
                 eq(f"status -> {st}", (r.status_code, r.json()["status"]), (200, st))
             cur = r.json()
-            eq("tarixda 4 yozuv (new + 3 o'tish)", len(cur["history"]), 4)
+            eq("tarixda 5 yozuv (new + 4 o'tish)", len(cur["history"]), 5)
             check(cur["closed_at"] is not None, "yakuniy status closed_at ni qo'ydi")
             eq("is_final", cur["is_final"], True)
 
@@ -426,7 +437,12 @@ def test_db():
                   "status filtri")
             check(oid in ids(q=(before_put["tender"]["title"] or "")[:8]), "qidiruv (q)")
             check(oid in ids(open_only=True), "open_only ochiq kartani ko'rsatadi")
-            c.patch(f"/erp/opportunities/{oid}/status", json={"status": "lost"})
+            # 24-patch: yakunlanmagan uchta holatda SABAB majburiy.
+            eq("sababsiz yutqazish -> 400",
+               c.patch(f"/erp/opportunities/{oid}/status",
+                       json={"status": "lost"}).status_code, 400)
+            c.patch(f"/erp/opportunities/{oid}/status",
+                    json={"status": "lost", "lost_reason": "price"})
             check(oid not in ids(open_only=True), "open_only yopilgan kartani yashiradi")
 
             # --- tender paneli uchun ro'yxat -------------------------------------
@@ -435,7 +451,7 @@ def test_db():
 
             # --- rahbar hisoboti --------------------------------------------------
             st = c.get("/erp/stats", params={"days": 7}).json()
-            eq("stats: by_status 9 qator", len(st["by_status"]), 9)
+            eq("stats: by_status 10 qator", len(st["by_status"]), 10)
             eq("stats: upcoming_days", st["upcoming_days"], 7)
             check(st["total"] >= 2, "stats: jami kartalar sanaldi", str(st["total"]))
             n_lost = sum(s["n"] for s in st["by_status"] if s["code"] == "lost")

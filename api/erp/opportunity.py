@@ -27,10 +27,47 @@ STATUSES = [
     ("won",            "Yutildi"),
     ("lost",           "Yutqazildi"),
     ("rejected",       "Rad etildi"),
+    # 24-patch. `rejected` dan FARQI ma'noda: rad etish — BIZNING qaror,
+    # ulgurmaslik — natija. Ilgari bunday karta `preparing` da abadiy
+    # qolardi va `analytics.py` uni "hozir ishlanmoqda" deb sanardi.
+    ("ulgurmadik",     "Ulgurmadik (muddat o'tdi)"),
 ]
 STATUS_LABEL = dict(STATUSES)
-FINAL = {"won", "lost", "rejected"}
+# `ulgurmadik` YAKUNIY: bu kartada boshqa ish qilinmaydi. Bundan
+# `stock.on_status_change` avtomatik foyda ko'radi — u `to_status in FINAL`
+# ga qaraydi, ya'ni tender o'tib ketganda rezerv BO'SHAYDI va tovar boshqa
+# kartaga band qilinadi. `stock.py` ga bir qator ham qo'shilmadi.
+FINAL = {"won", "lost", "rejected", "ulgurmadik"}
+# YAKUNLANMAGAN uchtalik: sabab kodi va sabab hujjati AYNAN shularga
+# tegishli. `won` da "nega yutqazdik" degan savol yo'q. Ro'yxat shu
+# yerda — `api/erp/fayl.py` uni IMPORT qiladi, o'zida takrorlamaydi.
+SABAB_HOLATLARI = FINAL - {"won"}
 PRIORITIES = {"low": "Past", "medium": "O'rta", "high": "Yuqori"}
+
+# TIZIM STATUS QO'YMAYDI. Ro'yxat ataylab BO'SH va shu holda qoladi:
+# `muddati_otdi` ni avtomatik qo'yish taklif qilingan edi va RAD ETILDI —
+# tizim kartani odam o'rniga yopsa, "qarorni inson qabul qiladi" degan
+# 1-patchdagi tamoyil buzilardi. Muddati o'tgan ochiq kartani `remind.py`
+# eslatadi; yopishni odam hal qiladi.
+TIZIM_QOYADI: set = set()
+
+# --- O'TISH SHARTLARI -------------------------------------------------------
+# To'liq matritsa ATAYLAB emas. Sabab: `sent_to_client` va `confirmed`
+# mijozli kartalarga tegishli va mijozsiz kartada o'tkazib yuboriladi —
+# qattiq matritsa ularni majburiy qilib qo'yardi.
+#
+# Faqat IKKI kirish qulflanadi va ikkalasining ham narxi bor:
+#   `submitted` — "ariza berildi". Unga sakrash tayyorgarlik bosqichini
+#                 tarixdan o'chiradi, ya'ni `analytics.py` dagi bosqich
+#                 vaqti yolg'on bo'lardi.
+#   `won`       — `stock.on_status_change` bu yerda rezervni SARFLAYDI.
+#                 `new` dan to'g'ridan-to'g'ri `won` ga sakralsa, rezerv
+#                 qilinmagan tovar sarflangan bo'lib chiqadi va ombor
+#                 qoldig'i JIMGINA buziladi. Aynan shu sababli qulf.
+KIRISH_SHARTI = {
+    "submitted": {"preparing"},
+    "won":       {"submitted"},
+}
 
 # Yutqazish sabablari — bazadagi CHECK bilan BIR XIL ro'yxat
 # (schema_patch_erp_3.sql). Statusga tegishli bo'lgani uchun shu modulda:
@@ -162,7 +199,9 @@ WHERE (%(status)s::text IS NULL OR o.status = %(status)s)
   AND (%(q)s::text IS NULL OR o.title ILIKE '%%' || %(q)s || '%%'
                            OR o.customer_name ILIKE '%%' || %(q)s || '%%'
                            OR o.tender_ref ILIKE '%%' || %(q)s || '%%')
-  AND (%(open_only)s::bool IS NOT TRUE OR o.status NOT IN ('won','lost','rejected'))
+  -- YAKUNIY ro'yxat KODDAN (`FINAL`): qo'lda yozilgan nusxa
+  -- `ulgurmadik` ni JIMGINA "ochiq" deb sanardi.
+  AND (%(open_only)s::bool IS NOT TRUE OR o.status <> ALL(%(final)s))
 ORDER BY o.deadline_at NULLS LAST, o.id
 """
 OPP_GET_SQL = f"SELECT {_OPP_COLS} {_OPP_FROM} WHERE o.id = %(id)s"
@@ -204,10 +243,16 @@ RETURNING id
 OPP_STATUS_SQL = """
 UPDATE erp.opportunity SET
     status=%(status)s, status_changed_at=now(), updated_at=now(),
-    closed_at = CASE WHEN %(status)s IN ('won','lost','rejected') THEN now() ELSE NULL END,
-    -- Sabab faqat 'lost' ga tegishli: boshqa statusga o'tilganda tozalanadi,
-    -- aks holda qayta ochilgan kartada eski sabab qolib ketardi.
-    lost_reason = CASE WHEN %(status)s = 'lost' THEN %(lost_reason)s ELSE NULL END
+    -- Ro'yxat KODDAN keladi (`FINAL`), bu yerda TAKRORLANMAYDI. Ilgari
+    -- shu qatorda ('won','lost','rejected') yozilgan edi va `ulgurmadik`
+    -- qo'shilganda u JIMGINA tashqarida qoldi: karta yakuniy bo'lardi,
+    -- `closed_at` esa NULL — ya'ni "qachon yopildi" degan savol javobsiz.
+    closed_at = CASE WHEN %(status)s = ANY(%(final)s) THEN now() ELSE NULL END,
+    -- Sabab yakunlanMAGAN uchta holatga tegishli (`SABAB_HOLATLARI`):
+    -- boshqa statusga o'tilganda tozalanadi, aks holda qayta ochilgan
+    -- kartada eski sabab qolib ketardi.
+    lost_reason = CASE WHEN %(status)s = ANY(%(sabab)s)
+                       THEN %(lost_reason)s ELSE NULL END
 WHERE id = %(id)s
 RETURNING id, status
 """
@@ -415,7 +460,7 @@ def list_(status=None, broker_id=None, client_id=None, q=None,
     _need_schema()
     rows = db.query(OPP_LIST_SQL, {"status": status, "broker_id": broker_id,
                                    "client_id": client_id, "q": q or None,
-                                   "open_only": open_only,
+                                   "open_only": open_only, "final": sorted(FINAL),
                                    "unassigned": bool(unassigned)})
     return [shape(r) for r in rows]
 
@@ -570,15 +615,40 @@ def set_status(opp_id: int, status: str, changed_by: Optional[str],
         # Status o'zgarmagan, lekin SABAB o'zgargan bo'lishi mumkin (yopilgan
         # kartada sababni to'g'rilash). Uni yozamiz, tarixga esa yozmaymiz:
         # bosqich o'tishi bo'lmadi.
-        if status == "lost" and lost_reason != cur.get("lost_reason"):
+        # Ilgari faqat `lost` da ishlardi; `rejected` va `ulgurmadik` da
+        # sabab kiritilsa JIMGINA tashlab yuborilardi.
+        if status in FINAL and lost_reason != cur.get("lost_reason"):
             db.execute_returning(OPP_REASON_SQL,
                                  {"id": opp_id, "lost_reason": lost_reason})
         return get(opp_id)
+    # O'TISH SHARTI (yuqoridagi KIRISH_SHARTI ga qarang). Jimgina `200`
+    # emas, `409` va SABAB bilan: interfeys kartochkani qaytaradi va
+    # nega qaytganini yozadi.
+    ruxsat = KIRISH_SHARTI.get(status)
+    if ruxsat is not None and cur["status"] not in ruxsat:
+        kutilgan = ", ".join(sorted(STATUS_LABEL[s] for s in ruxsat))
+        raise ErpError(
+            f"'{STATUS_LABEL[status]}' holatiga faqat '{kutilgan}' dan "
+            f"o'tish mumkin (hozir: '{STATUS_LABEL[cur['status']]}').", 409)
+    # SABAB MAJBURIY — yakunlanMAGAN uchta holat uchun.
+    #
+    # Ilgari faqat `lost` da (u ham FAQAT EKRANDA) so'ralardi. Natijada
+    # "to'xtatildi, nega — noma'lum" degan ko'r nuqta qolardi va
+    # `analytics.py` dagi sabab kesimi yarim bo'sh bo'lardi. Tekshiruv
+    # SERVERDA: ekrandagi shart interfeysni chetlab o'tsa ishlamaydi,
+    # va aynan shu ma'lumot ustidan hisobot quriladi.
+    #
+    # `won` bundan tashqarida: "nega yutqazdik" degan savol u yerda yo'q.
+    if status in SABAB_HOLATLARI and not lost_reason:
+        raise ErpError(
+            f"'{STATUS_LABEL[status]}' holatiga o'tish uchun SABAB "
+            "ko'rsatilishi shart — u keyingi tahlilning yagona manbai.")
     # Yakuniydan qaytish — faqat izoh bilan: "nega qayta ochildi" tarixda qolsin.
     if cur["status"] in FINAL and status not in FINAL and not (note or "").strip():
         raise ErpError("Yakuniy statusdan qaytarish uchun izoh majburiy.")
-    db.execute_returning(OPP_STATUS_SQL, {"id": opp_id, "status": status,
-                                          "lost_reason": lost_reason})
+    db.execute_returning(OPP_STATUS_SQL, {
+        "id": opp_id, "status": status, "lost_reason": lost_reason,
+        "final": sorted(FINAL), "sabab": sorted(SABAB_HOLATLARI)})
     db.execute_returning(HISTORY_INSERT_SQL, {
         "opportunity_id": opp_id, "from_status": cur["status"], "to_status": status,
         "changed_by": changed_by, "note": note})

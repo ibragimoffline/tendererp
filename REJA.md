@@ -595,6 +595,60 @@ qaytaryapti. Kod muammosi emas.
 
 ---
 
+## 6-ish — SABAB HUJJATI va "ULGURMADIK" holati  ✅ BAJARILDI
+
+Grill sessiyasi (2026-09-04) natijasi. To'liq qaror ro'yxati:
+`docs/erp_sabab_fayl.md`.
+
+- [x] **6.1. `schema_patch_erp_24.sql`** — `ulgurmadik` statusi (CHECK,
+      `v_tender_status` CASE), `erp.opportunity_file` (`bytea`, 10 MB
+      chegara bazada, `UNIQUE (opportunity_id, sha256)`), mavjud
+      `doc_audit` triggeriga oltinchi tarmoq (baytlar jurnalga
+      TUSHMAYDI: `to_jsonb(...) - 'baytlar'`).
+- [x] **6.2. O'tish sharti** — `KIRISH_SHARTI`: `submitted` faqat
+      `preparing` dan, `won` faqat `submitted` dan; ruxsatsiz o'tish
+      `409` + sabab. To'liq matritsa ATAYLAB emas (mijozsiz kartada
+      `sent_to_client`/`confirmed` o'tkazib yuboriladi).
+- [x] **6.3. Yakuniy statuslar ro'yxati BITTA joyda** — `closed_at`
+      SQL ida `('won','lost','rejected')` qo'lda yozilgan edi (uchinchi
+      nusxa) va `ulgurmadik` undan tashqarida qolardi: karta yakuniy,
+      `closed_at` NULL. Endi `FINAL` parametr sifatida uzatiladi;
+      `SABAB_HOLATLARI = FINAL - {won}` ni `fayl.py` import qiladi.
+- [x] **6.4. Yetim taklif tuzatildi** — `submission.create()` avval
+      taklifni yozib keyin `set_status` chaqirardi; 409 taklif
+      yozilgandan KEYIN chiqib, u yetim qolardi (taklif muzlatilgan,
+      o'chirilmaydi). Tekshiruv yozishdan oldinga ko'chirildi.
+- [x] **6.5. `api/erp/fayl.py` + 4 endpoint** — ro'yxat (baytlarsiz),
+      biriktirish, yuklab olish, o'chirish, `qamrov()`. Fayl
+      IXTIYORIY; `karta.fayl` amali `perm.py` da; egalik
+      `opportunity_file` orqali.
+- [x] **6.6. `SababFayl.tsx`** — yo'qligi OCHIQ yoziladi, ochiq
+      kartada sabab ko'rsatiladi, patch yo'q bo'lsa blok umuman
+      chiqmaydi. Turlar/hajm/holatlar SERVERDAN (`/erp/meta`).
+- [x] **6.7. Sinov** — `_tests/erp19_test.py` (61 tekshiruv) va ekran
+      sinovida 6 ta yangi qoida. `fixture.yol()` — status yo'li bitta
+      joyda. Jami: **1 186 backend + 35 ekran**.
+
+- [x] **6.8. Eskalatsiya** — `remind.py` kunlik eslatmasida "MUDDATI
+      O'TGAN, YOPILMAGAN" bo'limi; bildirishnoma karta boshiga emas,
+      BITTA yig'ma (ro'yxat har kuni qaytadi — har kartaga xabar
+      yuborilsa quti to'lardi). Birinchi yurishda 7 ta karta topildi.
+- [x] **6.9. Voronka ajratildi** — `ongoing_n` = `faol_n` +
+      `kechikkan_n`; jadvalda ikki ustun. "9 ta ishlanmoqda" degan
+      raqam aslida 2 ta ekan.
+- [x] **6.10. Sabab majburiy** — `lost`/`rejected`/`ulgurmadik` da,
+      SERVERDA (`set_status`) va ekranda. `topshiriq.py` dagi
+      avtomatik `rejected` `other` sababi bilan yopiladi.
+- [x] **6.11. Ro'yxatning 11 ta takror nusxasi olib tashlandi** —
+      `('won','lost','rejected')` kodda sakkiz faylda qo'lda yozilgan
+      edi va `ulgurmadik` ni JIMGINA "ochiq" deb sanardi (ochiq
+      kartalar soni, summa, eslatma, voronka, mijoz sahifasi). Endi
+      hammasi `FINAL` dan parametr sifatida keladi.
+
+Jami: **1 214 backend + 40 ekran** tekshiruvi.
+
+---
+
 ## Ish tartibi (tavsiya)
 
 **Rejalashtirilgan hamma ish bajarildi.** Qolgani — tashqi javob

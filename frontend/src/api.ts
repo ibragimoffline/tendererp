@@ -16,6 +16,7 @@ import type {
   StockReserve, StockReserveInput, Invoice, InvoiceInput, InvoiceLineInput,
   PaymentInput, ReserveSuggestions, Act, ActInput, ContractSpecification,
   AuditReport, AuditRow,
+  OpportunityFile, FaylQamrov,
   LoginAttempt,
   ProfitReport, ProfitRow,
   Setting, ErpNotification, ErpTahlil, TopshiriqHolat,
@@ -462,6 +463,57 @@ export const api = {
     }
     return data as ImportResult
   },
+
+  // --- sabab hujjati (24-patch) ---
+  // "Nega yutqazdik / to'xtatdik / ulgurmadik" tafsiloti. Ro'yxat FAQAT
+  // metadata qaytaradi — fayl baytlari alohida so'rov bilan olinadi,
+  // aks holda har ochilishda 10 MB tortilardi.
+  oppFiles: (oppId: number) =>
+    request<OpportunityFile[]>('GET', `/erp/opportunities/${oppId}/files`),
+
+  /** Fayl biriktirish. `importClientDocuments` bilan bir xil sabab:
+   *  `FormData` da `Content-Type` ni BRAUZER qo'yadi (boundary bilan). */
+  addOppFile: async (oppId: number, file: File, izoh?: string) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const qs = izoh ? `?izoh=${encodeURIComponent(izoh)}` : ''
+    const url = new URL(`${BASE}/erp/opportunities/${oppId}/files${qs}`,
+                        window.location.origin)
+    const csrf = readCsrf()
+    const res = await fetch(url, {
+      method: 'POST', body: fd, credentials: 'include',
+      headers: csrf ? { 'X-CSRF-Token': csrf } : undefined,
+    })
+    const text = await res.text()
+    const data = text ? JSON.parse(text) : null
+    if (!res.ok) {
+      throw new ApiError(`${res.status}: ${errMatn(data?.detail) || res.statusText}`,
+        res.status, data?.detail)
+    }
+    return data as OpportunityFile
+  },
+
+  /** Yuklab olish — `<a href>` ISHLAMAYDI (endpoint himoyalangan,
+   *  cookie kerak), shuning uchun blob orqali. */
+  downloadOppFile: async (fileId: number, nom: string) => {
+    const url = new URL(`${BASE}/erp/files/${fileId}`, window.location.origin)
+    const res = await fetch(url, { credentials: 'include' })
+    if (!res.ok) throw new ApiError(`${res.status}: fayl olinmadi`, res.status, null)
+    const blob = await res.blob()
+    const href = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = href
+    a.download = nom
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(href)
+  },
+
+  deleteOppFile: (fileId: number) =>
+    request<{ ochirildi: boolean }>('DELETE', `/erp/files/${fileId}`),
+
+  faylQamrov: () => request<FaylQamrov>('GET', '/erp/files/qamrov'),
 
   // --- tender-ai bilan integratsiya (server orqali) ---
   documentTypes: () => request<DocumentType[]>('GET', '/erp/document-types'),

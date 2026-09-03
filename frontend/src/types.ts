@@ -45,6 +45,15 @@ export interface ErpMeta {
   payment_methods?: { code: string; label: string }[]
   /** BO'SH = eksport formati sozlanmagan; interfeys tugmani ko'rsatmaydi */
   invoice_export_formats?: { code: string; label: string }[]
+  /** false = schema_patch_erp_24.sql qo'llanmagan (sabab hujjati yo'q) */
+  fayl_ready?: boolean
+  /** Fayl BIRIKTIRILADIGAN holatlar — SERVERDAN. Ekran o'z ro'yxatini
+   *  tutmaydi: ikki ro'yxat vaqt o'tib ajralib ketardi. */
+  fayl_holatlar?: string[]
+  /** Ruxsat etilgan kengaytmalar (`.pdf`, `.docx`...) — `<input accept>` */
+  fayl_turlar?: string[]
+  /** Bir fayl uchun chegara, baytda */
+  fayl_max_hajm?: number
   auth_ready?: boolean
   /** tender-ai interfeysining manzili — kartadagi havola uchun */
   tender_web?: string
@@ -737,8 +746,14 @@ export interface StageTime {
   avg_days: Nullable<number>
   median_days: Nullable<number>
   max_days: Nullable<number>
-  /** hozir shu bosqichda turgan ochiq kartalar */
+  /** hozir shu bosqichda turgan ochiq kartalar (= faol_n + kechikkan_n) */
   ongoing_n: number
+  /** shulardan HAQIQATAN ishlanayotgani: muddati hali o'tmagan */
+  faol_n: number
+  /** muddati O'TGAN, lekin yopilmagan — ular "ishlanmoqda" EMAS.
+   *  Tizim kartani o'zi yopmaydi (qaror odamniki), shuning uchun ular
+   *  yopilmaguncha shu yerda turadi va ko'rsatkichni shishiradi. */
+  kechikkan_n: number
   oldest_days: Nullable<number>
   final: boolean
 }
@@ -1354,4 +1369,29 @@ export interface LoginResult {
   expires_at: string
   csrf: string
   user: AuthUser
+}
+
+/** Kartaga biriktirilgan SABAB HUJJATI (24-patch).
+ *
+ *  Baytlar bu yerda YO'Q va bo'lmaydi ham: ro'yxat faqat metadata
+ *  qaytaradi, fayl alohida so'rov bilan yuklab olinadi. */
+export interface OpportunityFile {
+  id: number
+  opportunity_id: number
+  fayl_nom: string
+  mime: string
+  hajm: number
+  sha256: string
+  izoh: string | null
+  created_by: string | null
+  created_at: string | null
+}
+
+/** "Yopilgan N kartadan M tasida sabab hujjati bor". */
+export interface FaylQamrov {
+  yopiq_n: number
+  fayli_bor_n: number
+  /** null = minimal namuna yig'ilmagan (10 dan kam) — foiz BERILMAYDI */
+  foiz: number | null
+  min_namuna: number
 }
