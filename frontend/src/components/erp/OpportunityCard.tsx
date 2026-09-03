@@ -22,6 +22,7 @@ import StatusChangeDialog from './StatusChangeDialog'
 import ContractList from './ContractList'
 import SubmissionPanel from './SubmissionPanel'
 import SababFayl from './SababFayl'
+import Muloqot from './Muloqot'
 import TaskList from './TaskList'
 import ReservePanel from './ReservePanel'
 import InvoiceLinks from './InvoiceLinks'
@@ -74,6 +75,10 @@ export default function OpportunityCard(props: OpportunityCardProps) {
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<OpportunityInput | null>(null)
   const [saving, setSaving] = useState(false)
+  // Muloqot ATAYLAB yopiq turadi: u so'rov (polling) yuritadi va har
+  // karta ochilganda avtomatik boshlansa, bir nechta ochiq oyna
+  // serverga bejiz so'rov yog'dirardi.
+  const [chatOpen, setChatOpen] = useState(false)
   // "Qayta taqsimlashni so'rash" — brokerda kartani o'tkazish
   // huquqi yo'q, lekin so'rovi IZ QOLDIRISHI kerak.
   const [sorov, setSorov] = useState<string | null>(null)
@@ -495,6 +500,26 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                   </div>
                 )}
               </section>
+
+              {/* --- MULOQOT (25-patch) ---
+                  Karta oynasida chat RO'YXATI ko'rsatilmaydi: bu yerda
+                  boshqa kartaning chatiga o'tish chalg'itardi. */}
+              {meta?.chat_ready !== false && (
+                <section className="mt-5">
+                  <button type="button"
+                    onClick={() => setChatOpen((v) => !v)}
+                    className={cn('rounded-md px-3 py-1.5 text-body transition-colors',
+                      chatOpen ? 'bg-secondary font-semibold text-primary'
+                        : 'hover:bg-accent')}>
+                    Muloqot
+                  </button>
+                  {chatOpen && (
+                    <div className="mt-2">
+                      <Muloqot oppId={o.id} compact />
+                    </div>
+                  )}
+                </section>
+              )}
 
               {/* --- SABAB HUJJATI (24-patch) ---
                   Yopiq kartada YO'QLIGI ham yoziladi: jimgina bo'sh joy

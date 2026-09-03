@@ -649,6 +649,42 @@ Jami: **1 214 backend + 40 ekran** tekshiruvi.
 
 ---
 
+## 7-ish — ICHKI CHAT (hodimlar muloqoti)  ✅ BAJARILDI
+
+Talab: `erp_chat.md` (loyiha egasi). Qurilish hisoboti va chetga
+chiqishlar: `docs/erp_chat_qurilish.md`.
+
+- [x] **7.1. `schema_patch_erp_25.sql`** — `erp.chat` (ikki tur:
+      `umumiy` va `opportunity`), `chat_member` (yumshoq chiqarish),
+      `chat_message` (yumshoq o'chirish), `chat_message_history`
+      (faqat qo'shiladi, `chat_history_guard` triggeri), `chat_read`.
+      MAVJUD 21 karta uchun chat ko'chirildi, yopilgan 12 tasi darhol
+      arxiv. Idempotent.
+- [x] **7.2. `api/erp/chat.py`** — ko'rish/yozish huquqi, lenta
+      (sahifalash `after_id`), tahrir, yumshoq o'chirish, a'zolar,
+      o'qilganlik, tizim xabarlari, `@ism` eslatish.
+- [x] **7.3. Huquqlar** — `perm.py` ga 7 ta amal. Admin yozishmada
+      QATNASHMAYDI (matritsada `None`), lekin `chat.tarix` ni ko'radi.
+      Yozish uchun a'zolik SHART — rahbar uchun ham.
+- [x] **7.4. 11 ta endpoint** — `/erp/chats/*` va
+      `/erp/opportunities/{id}/chat`.
+- [x] **7.5. Karta bilan bog'lanish** — `take()` chat ochadi;
+      `set_status` lentaga tizim xabari yozadi va yakuniy holatda
+      ARXIV qiladi; mas'ul almashsa yangisi chatga qo'shiladi;
+      Tender-AI bekor qilsa lentada yoziladi.
+- [x] **7.6. `Muloqot.tsx`** — chat ro'yxati + lenta; yon panelda
+      "Muloqot" bo'limi va karta oynasida tab. So'rov (polling) 5 s;
+      WebSocket ataylab yo'q.
+- [x] **7.7. Sinov** — `_tests/erp_chat_test.py` (73 tekshiruv) va
+      ekranda 5 ta yangi qoida. Jami: **1 287 backend + 47 ekran**.
+
+**Qilinmadi (ochiq):** `pg_notify('erp_chat', ...)` — talabda
+"allaqachon yozilsin" deyilgan, WebSocket qo'shilganda kerak bo'ladi;
+`@ism` tanlash ro'yxati (server tomoni tayyor); chat ichida qidiruv
+maydoni (server tomoni `?q=` tayyor).
+
+---
+
 ## Ish tartibi (tavsiya)
 
 **Rejalashtirilgan hamma ish bajarildi.** Qolgani — tashqi javob

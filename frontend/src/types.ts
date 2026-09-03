@@ -54,6 +54,10 @@ export interface ErpMeta {
   fayl_turlar?: string[]
   /** Bir fayl uchun chegara, baytda */
   fayl_max_hajm?: number
+  /** false = schema_patch_erp_25.sql qo'llanmagan (muloqot yo'q) */
+  chat_ready?: boolean
+  /** bir xabarning eng katta uzunligi (belgi) */
+  chat_max_matn?: number
   auth_ready?: boolean
   /** tender-ai interfeysining manzili — kartadagi havola uchun */
   tender_web?: string
@@ -1394,4 +1398,84 @@ export interface FaylQamrov {
   /** null = minimal namuna yig'ilmagan (10 dan kam) — foiz BERILMAYDI */
   foiz: number | null
   min_namuna: number
+}
+
+/** Chat — `umumiy` (butun kompaniya) yoki `opportunity` (bitta karta).
+ *
+ *  BU TENDER-AI DAGI AI CHATI EMAS: bu odam bilan odam yozishmasi. */
+export interface ErpChat {
+  id: number
+  turi: 'umumiy' | 'opportunity'
+  opportunity_id: Nullable<number>
+  title: Nullable<string>
+  /** karta yakunlangan -> faqat o'qish */
+  arxiv: boolean
+  oqilmagan: number
+  oxirgi_at: Nullable<string>
+  /** `umumiy` da har doim true (a'zolik virtual) */
+  azoman: boolean
+}
+
+export interface ErpChatMessage {
+  id: number
+  chat_id: number
+  author_id: Nullable<number>
+  author_name: string
+  /** true = tizim xabari (status o'zgardi, hodim qo'shildi...) */
+  tizim: boolean
+  /** o'chirilganda `null` — matn oddiy foydalanuvchiga BERILMAYDI */
+  text: Nullable<string>
+  ochirilgan: boolean
+  ochirdi: Nullable<string>
+  ochirish_izohi: Nullable<string>
+  reply_to_id: Nullable<number>
+  reply?: {
+    id: number
+    author_name: string
+    text: Nullable<string>
+    ochirilgan: boolean
+  }
+  created_at: Nullable<string>
+  edited_at: Nullable<string>
+  tahrirlangan: boolean
+}
+
+export interface ErpChatLenta {
+  chat: {
+    id: number
+    turi: string
+    opportunity_id: Nullable<number>
+    title: Nullable<string>
+    arxiv: boolean
+    azoman: boolean
+  }
+  messages: ErpChatMessage[]
+  /** true = yana sahifa bor (`after_id` bilan so'raladi) */
+  yana: boolean
+}
+
+export interface ErpChatMember {
+  app_user_id: number
+  full_name: string
+  username: string
+  role: string
+  active: boolean
+  added_at: Nullable<string>
+  added_by_name: Nullable<string>
+}
+
+export interface ErpChatMembers {
+  chat_id: number
+  turi: string
+  /** true = a'zolik VIRTUAL (`umumiy`): qo'shish/chiqarish yo'q */
+  virtual: boolean
+  members: ErpChatMember[]
+}
+
+export interface ErpChatHistory {
+  id: number
+  amal: 'tahrir' | 'ochirish'
+  old_text: string
+  by_name: Nullable<string>
+  at: Nullable<string>
 }

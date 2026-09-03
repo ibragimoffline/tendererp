@@ -17,6 +17,7 @@ import type {
   PaymentInput, ReserveSuggestions, Act, ActInput, ContractSpecification,
   AuditReport, AuditRow,
   OpportunityFile, FaylQamrov,
+  ErpChat, ErpChatLenta, ErpChatMembers, ErpChatHistory,
   LoginAttempt,
   ProfitReport, ProfitRow,
   Setting, ErpNotification, ErpTahlil, TopshiriqHolat,
@@ -514,6 +515,39 @@ export const api = {
     request<{ ochirildi: boolean }>('DELETE', `/erp/files/${fileId}`),
 
   faylQamrov: () => request<FaylQamrov>('GET', '/erp/files/qamrov'),
+
+  // --- ichki chat (25-patch) ---
+  // YANGILANISH SO'ROV BILAN: `after_id` berilganda javob odatda bo'sh
+  // va arzon. WebSocket ataylab yo'q (`docs/erp_chat.md` §5).
+  chats: () => request<ErpChat[]>('GET', '/erp/chats'),
+  chatMessages: (chatId: number, params?: Params) =>
+    request<ErpChatLenta>('GET', `/erp/chats/${chatId}/messages`, { params }),
+  chatSend: (chatId: number, body: { text: string; reply_to_id?: number | null;
+                                     mentions?: number[] }) =>
+    request<{ id: number }>('POST', `/erp/chats/${chatId}/messages`, { body }),
+  chatEdit: (chatId: number, mid: number, text: string) =>
+    request<{ id: number }>('PUT', `/erp/chats/${chatId}/messages/${mid}`,
+                            { body: { text } }),
+  chatDelete: (chatId: number, mid: number, note?: string) =>
+    request<{ id: number }>('DELETE', `/erp/chats/${chatId}/messages/${mid}`,
+                            { body: note ? { note } : {} }),
+  chatHistory: (chatId: number, mid: number) =>
+    request<ErpChatHistory[]>(
+      'GET', `/erp/chats/${chatId}/messages/${mid}/history`),
+  chatMembers: (chatId: number) =>
+    request<ErpChatMembers>('GET', `/erp/chats/${chatId}/members`),
+  /** `appUserId` berilmasa — O'ZINI qo'shadi (server sessiyadan oladi).
+   *  Mijoz o'z hisob id sini bilishi shart emas. */
+  chatMemberAdd: (chatId: number, appUserId?: number) =>
+    request<ErpChatMembers>('POST', `/erp/chats/${chatId}/members`,
+                            { body: { app_user_id: appUserId ?? null } }),
+  chatMemberRemove: (chatId: number, uid: number) =>
+    request<ErpChatMembers>('DELETE', `/erp/chats/${chatId}/members/${uid}`),
+  chatRead: (chatId: number, lastReadId?: number) =>
+    request<{ last_read_id: number }>('PUT', `/erp/chats/${chatId}/read`,
+                                      { body: { last_read_id: lastReadId } }),
+  oppChat: (oppId: number) =>
+    request<{ chat_id: number }>('GET', `/erp/opportunities/${oppId}/chat`),
 
   // --- tender-ai bilan integratsiya (server orqali) ---
   documentTypes: () => request<DocumentType[]>('GET', '/erp/document-types'),

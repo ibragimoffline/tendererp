@@ -51,6 +51,13 @@ TURLAR = {
     "bekor":          "Tender-AI'da qaror bekor qilindi",
     "otkazildi":      "Karta sizga o'tkazildi",
     "muddat":         "Muddat yaqinlashdi",
+    # Chat (25-patch). HAR XABARGA bildirishnoma YO'Q — o'qilmaganlar
+    # hisoblagichi yetadi, aks holda kun bo'yi shovqin bo'lardi.
+    # Faqat uchta hodisa: sizni qo'shishdi, sizni eslatishdi,
+    # xabaringiz moderatsiyada o'chirildi.
+    "chat_qoshildi":  "Chatga qo'shildingiz",
+    "chat_mention":   "Chatda sizni eslatishdi",
+    "chat_ochirildi": "Xabaringiz o'chirildi",
 }
 
 #: Mahalliy deb hisoblanadigan xostlar (havola yozilmaydi).

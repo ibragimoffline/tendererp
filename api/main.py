@@ -36,6 +36,7 @@ from api.erp import (act as erp_act, analytics as erp_analytics,  # noqa: E402
                      clients as erp_clients, contracts as erp_contracts,
                      invoice as erp_invoice, invoice_export as erp_export,
                      audit as erp_audit, fayl as erp_fayl,
+                     chat as erp_chat,
                      opportunity as erp_opp, perm, profit as erp_profit,
                      sozlama as erp_sozlama,
                      topshiriq as erp_topshiriq, xabar as erp_xabar,
@@ -214,6 +215,37 @@ class SubmissionIn(BaseModel):
     confirmed_note: Optional[str] = None
     note: Optional[str] = None
     submitted_by: Optional[str] = None
+
+
+class ChatMessageIn(BaseModel):
+    """Chatga xabar. `mentions` — a'zolar ro'yxatidan TANLANGAN hisoblar.
+
+    Matndan `@ism` ni QIDIRIB topmaymiz: bir xil ismli ikki hodim
+    bo'lsa xabar noto'g'ri odamga ketardi, umuman topilmasa esa jim
+    qolardi. Interfeys kimni eslatganini ANIQ aytadi."""
+    text: str
+    reply_to_id: Optional[int] = None
+    mentions: Optional[List[int]] = None
+
+
+class ChatDeleteIn(BaseModel):
+    """Boshqaning xabarini o'chirishda `note` MAJBURIY (modulda
+    tekshiriladi) — u muallifga bildirishnoma bo'lib boradi."""
+    note: Optional[str] = None
+
+
+class ChatMemberIn(BaseModel):
+    """`app_user_id` berilmasa — CHAQIRUVCHINING O'ZI qo'shiladi.
+
+    Bu eng ko'p uchraydigan holat: rahbar chatni a'zosiz o'qiydi va
+    yozish uchun o'zini qo'shadi. Mijoz o'z id sini bilishi shart
+    emas — u sessiyada allaqachon bor."""
+    app_user_id: Optional[int] = None
+
+
+class ChatReadIn(BaseModel):
+    """Berilmasa — chatning oxirgi xabarigacha o'qilgan deb belgilanadi."""
+    last_read_id: Optional[int] = None
 
 
 class TaskIn(BaseModel):
@@ -865,6 +897,11 @@ def erp_meta():
         "fayl_holatlar": sorted(erp_fayl.YOPIQ_HOLATLAR),
         "fayl_turlar": sorted(erp_fayl.TURLAR),
         "fayl_max_hajm": erp_fayl.MAX_HAJM,
+        # Ichki chat (25-patch). Patch qo'llanmagan bazada interfeys
+        # "Muloqot" bo'limini UMUMAN ko'rsatmaydi — bo'sh ekran va
+        # "yuklanmadi" degan jim xato o'rniga.
+        "chat_ready": erp_chat.schema_ready(),
+        "chat_max_matn": erp_chat.MAX_MATN,
         "act_statuses": [{"code": c, "label": l}
                          for c, l in erp_act.STATUSES],
         "invoice_statuses": [{"code": c, "label": l}
@@ -1160,6 +1197,136 @@ def erp_file_delete(file_id: int, user: Dict[str, Any] = Depends(me)):
     return _erp(erp_fayl.ochir, file_id, auth.actor(user))
 
 
+# ---------------------------------------------------------------------------
+# ICHKI CHAT (25-patch) — `docs/erp_chat.md`
+# ---------------------------------------------------------------------------
+# BU TENDER-AI DAGI AI CHATI EMAS: bu odam bilan odam yozishmasi.
+#
+# IKKI TEKSHIRUV har endpointda va ular BOSHQA savolga javob beradi:
+#   `_can(user, "chat.*")`    — bu ROLDA umuman shunday amal bormi;
+#   `erp_chat.*_talab(...)`   — shu CHATga bu odamning aloqasi bormi.
+# Ikkinchisi modulda, chunki u a'zolikka bog'liq va SQL talab qiladi.
+
+
+def _chat_hammasi(user: Dict[str, Any]) -> bool:
+    """Rahbar/menejer barcha karta chatlarini KO'RADI (yozish emas).
+
+    `_can` emas, `perm.can`: huquq yo'qligi bu yerda XATO emas —
+    broker uchun oddiy holat, u faqat o'z chatlarini ko'radi."""
+    return perm.can(user, "chat.hammasi") is not None
+
+
+@app.get("/erp/chats")
+def erp_chats(user: Dict[str, Any] = Depends(me)):
+    """Mening chatlarim + o'qilmagan soni. `umumiy` har doim birinchi."""
+    _can(user, "chat.korish")
+    return _erp(erp_chat.chatlarim, auth.user_id(user), _chat_hammasi(user))
+
+
+@app.get("/erp/chats/{chat_id}/messages")
+def erp_chat_messages(chat_id: int, after_id: Optional[int] = None,
+                      limit: int = Query(erp_chat.LIMIT_DEFAULT),
+                      q: Optional[str] = None,
+                      user: Dict[str, Any] = Depends(me)):
+    """Lenta. Sahifalash `after_id` bo'yicha; `q` — chat ichida qidiruv.
+
+    YANGILANISH — SO'ROV (polling) bilan, 5 soniyada: `after_id` bilan
+    so'ralganda javob odatda bo'sh va arzon. WebSocket ataylab yo'q
+    (`docs/erp_chat.md` §5): 5-15 hodimlik kompaniyada 5 s kechikish
+    muammo emas, WebSocket esa joylashtirishga alohida talab qo'yadi."""
+    _can(user, "chat.korish")
+    return _erp(erp_chat.lenta, chat_id, auth.user_id(user),
+                _chat_hammasi(user), after_id, limit, q,
+                perm.can(user, "chat.tarix") is not None)
+
+
+@app.post("/erp/chats/{chat_id}/messages", status_code=201)
+def erp_chat_send(chat_id: int, body: ChatMessageIn,
+                  user: Dict[str, Any] = Depends(me)):
+    _can(user, "chat.yozish")
+    uid = auth.user_id(user)
+    msg = _erp(erp_chat.yoz, chat_id, uid, body.text, body.reply_to_id)
+    # ESLATISH — xabar yozilgandan KEYIN: bildirishnoma yiqilsa ham
+    # xabarning o'zi yo'qolmasin (`xabar.yoz()` ning o'zi ham
+    # chaqiruvchini yiqitmaydi).
+    if body.mentions:
+        _erp(erp_chat.eslat, chat_id, uid, msg["id"], body.mentions)
+    return msg
+
+
+@app.put("/erp/chats/{chat_id}/messages/{mid}")
+def erp_chat_edit(chat_id: int, mid: int, body: ChatMessageIn,
+                  user: Dict[str, Any] = Depends(me)):
+    """FAQAT o'z xabari. Eski matn tarixga yoziladi."""
+    _can(user, "chat.yozish")
+    return _erp(erp_chat.tahrir, mid, auth.user_id(user), body.text)
+
+
+@app.delete("/erp/chats/{chat_id}/messages/{mid}")
+def erp_chat_delete(chat_id: int, mid: int,
+                    body: Optional[ChatDeleteIn] = None,
+                    user: Dict[str, Any] = Depends(me)):
+    """Yumshoq o'chirish. Boshqaning xabari — `chat.moderatsiya` va
+    izoh MAJBURIY (u muallifga bildirishnoma bo'lib boradi)."""
+    _can(user, "chat.yozish")
+    return _erp(erp_chat.ochir, mid, auth.user_id(user),
+                perm.can(user, "chat.moderatsiya") is not None,
+                (body.note if body else None))
+
+
+@app.get("/erp/chats/{chat_id}/messages/{mid}/history")
+def erp_chat_history(chat_id: int, mid: int,
+                     user: Dict[str, Any] = Depends(me)):
+    """Tahrir va o'chirish tarixi — rahbar va admin uchun.
+
+    ADMIN uchun YAGONA chat endpointi: u yozishmada qatnashmaydi,
+    lekin NAZORAT jurnalini ko'radi (`docs/erp_chat.md` §2)."""
+    _can(user, "chat.tarix")
+    return _erp(erp_chat.tarix, mid)
+
+
+@app.get("/erp/chats/{chat_id}/members")
+def erp_chat_members(chat_id: int, user: Dict[str, Any] = Depends(me)):
+    _can(user, "chat.korish")
+    return _erp(erp_chat.azolar, chat_id, auth.user_id(user),
+                _chat_hammasi(user))
+
+
+@app.post("/erp/chats/{chat_id}/members", status_code=201)
+def erp_chat_member_add(chat_id: int, body: ChatMemberIn,
+                        user: Dict[str, Any] = Depends(me)):
+    """Qo'shish. Broker buni FAQAT o'z kartasining chatida qiladi —
+    egalik `opportunity` orqali tekshiriladi."""
+    _can(user, "chat.azo_qosh")
+    _erp(erp_chat.egalik_talab, chat_id, user, "chat.azo_qosh")
+    return _erp(erp_chat.azo_qosh, chat_id, auth.user_id(user),
+                body.app_user_id or auth.user_id(user))
+
+
+@app.delete("/erp/chats/{chat_id}/members/{uid}")
+def erp_chat_member_remove(chat_id: int, uid: int,
+                           user: Dict[str, Any] = Depends(me)):
+    """Chiqarish. Kartaning MAS'ULINI chiqarib bo'lmaydi (modulda)."""
+    _can(user, "chat.azo_chiqar")
+    return _erp(erp_chat.azo_chiqar, chat_id, auth.user_id(user), uid)
+
+
+@app.put("/erp/chats/{chat_id}/read")
+def erp_chat_read(chat_id: int, body: Optional[ChatReadIn] = None,
+                  user: Dict[str, Any] = Depends(me)):
+    _can(user, "chat.korish")
+    return _erp(erp_chat.oqildi, chat_id, auth.user_id(user),
+                body.last_read_id if body else None)
+
+
+@app.get("/erp/opportunities/{opp_id}/chat")
+def erp_opportunity_chat(opp_id: int, user: Dict[str, Any] = Depends(me)):
+    """Karta chatiga o'tish. Chat yo'q bo'lsa (patchdan oldin ochilgan
+    karta) SHU YERDA ochiladi — kartani chatsiz qoldirmaymiz."""
+    _can_obj(user, "karta.korish", "opportunity", opp_id)
+    return _erp(erp_chat.karta_chati_id, opp_id, auth.user_id(user))
+
+
 @app.get("/erp/tenders/{tender_id}/opportunities")
 def tender_opportunities(tender_id: int, user: Dict[str, Any] = Depends(me)):
     """Shu tender ishga olinganmi va qaysi mijozlar uchun.
@@ -1176,8 +1343,11 @@ def tender_opportunities(tender_id: int, user: Dict[str, Any] = Depends(me)):
 def tender_take(tender_id: int, body: OpportunityIn, user: Dict[str, Any] = Depends(me)):
     """"ISHGA OLISH" — tender ro'yxatdan ichki ish kartasiga aylanadi."""
     _can(user, "karta.yaratish")
+    # `created_by` — ISM (yozuvlarda ko'rinadi), `created_by_user_id` —
+    # HISOB id si (chat a'zoligi hisobga bog'lanadi, ismga emas).
     return _erp(erp_opp.take, tender_id,
-                {**body.model_dump(), "created_by": auth.actor(user)})
+                {**body.model_dump(), "created_by": auth.actor(user),
+                 "created_by_user_id": auth.user_id(user)})
 
 
 @app.get("/erp/brokers")

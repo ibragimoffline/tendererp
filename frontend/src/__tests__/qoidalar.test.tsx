@@ -22,6 +22,14 @@ import type { AuthUser } from '@/types'
 // jsdom da `ResizeObserver` yo'q, Radix Slider esa uni talab qiladi
 // (karta oynasidagi "yutish ehtimoli"). Stub bo'lmasa sinov komponentni
 // emas, brauzer API'sining yo'qligini tekshirgan bo'lardi.
+// jsdom da `scrollIntoView` yo'q. Muloqot lentasi yangi xabar
+// kelganda pastga suriladi — usiz sinov komponentni emas, brauzer
+// API'sining yo'qligini tekshirgan bo'lardi (ResizeObserver bilan
+// bir xil sabab).
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = function scrollIntoView() {}
+}
+
 if (!('ResizeObserver' in globalThis)) {
   ;(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver =
     class {
@@ -44,6 +52,11 @@ const api = {
   // Sabab hujjati (24-patch)
   oppFiles: vi.fn(), addOppFile: vi.fn(), deleteOppFile: vi.fn(),
   downloadOppFile: vi.fn(),
+  // Muloqot (25-patch)
+  chats: vi.fn(), chatMessages: vi.fn(), chatSend: vi.fn(),
+  chatEdit: vi.fn(), chatDelete: vi.fn(), chatMembers: vi.fn(),
+  chatMemberAdd: vi.fn(), chatMemberRemove: vi.fn(),
+  chatRead: vi.fn(), oppChat: vi.fn(),
 }
 vi.mock('@/api', () => ({ api, ApiError: class extends Error {} }))
 
@@ -60,6 +73,7 @@ const { default: OpportunityCard } =
   await import('../components/erp/OpportunityCard')
 const { default: ClientCard } = await import('../components/erp/ClientCard')
 const { default: SababFayl } = await import('../components/erp/SababFayl')
+const { default: Muloqot } = await import('../components/erp/Muloqot')
 const { default: ActPanel } = await import('../components/erp/ActPanel')
 const { setPerms } = await import('../components/erp/erpShared')
 
@@ -696,5 +710,101 @@ describe('Status dialogi: sabab MAJBURIY', () => {
     await ochish('won', 'Yutildi')
     const tugma = await screen.findByRole('button', { name: /Tasdiqlash/i })
     expect((tugma as HTMLButtonElement).disabled).toBe(false)
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+// MULOQOT (25-patch)
+// ---------------------------------------------------------------------------
+// Uchta qoida faqat EKRANDA ushlanadi. Ular server javobida bor, lekin
+// bir noto'g'ri `&&` va ular jimgina yo'qoladi — chatda esa yo'qolgan
+// narsa "hech qachon bo'lmagan" bo'lib ko'rinadi.
+const MSG = (p: Record<string, unknown> = {}) => ({
+  id: 1, chat_id: 7, author_id: 2, author_name: 'B. To‘xtayev',
+  tizim: false, text: 'Salom', ochirilgan: false, ochirdi: null,
+  ochirish_izohi: null, reply_to_id: null, created_at: null,
+  edited_at: null, tahrirlangan: false, ...p,
+})
+
+const LENTA = (chat: Record<string, unknown>, messages: unknown[]) => ({
+  chat: {
+    id: 7, turi: 'opportunity', opportunity_id: 3, title: 'ZZ tender',
+    arxiv: false, azoman: true, ...chat,
+  },
+  messages, yana: false,
+})
+
+function muloqot(lenta: unknown, members: unknown = { chat_id: 7, turi: 'opportunity', virtual: false, members: [] }) {
+  api.oppChat.mockResolvedValue({ chat_id: 7 })
+  api.chatMessages.mockResolvedValue(lenta)
+  api.chatMembers.mockResolvedValue(members)
+  api.chatRead.mockResolvedValue({ last_read_id: 1 })
+  return render(<Muloqot oppId={3} compact />)
+}
+
+describe('Muloqot: o‘chirilgan xabar YO‘QOLMAYDI', () => {
+  it('"Xabar o‘chirildi" va KIM o‘chirgani yoziladi', async () => {
+    setPerms({ 'chat.korish': 'full', 'chat.yozish': 'full' })
+    muloqot(LENTA({}, [MSG({
+      ochirilgan: true, text: null, ochirdi: 'A. Karimov',
+      ochirish_izohi: 'ish bilan bog‘liq emas',
+    })]))
+    expect(await screen.findByText(/Xabar o.chirildi/)).toBeTruthy()
+    expect(screen.getByText(/A\. Karimov/)).toBeTruthy()
+    // Sabab ham ko'rinadi — "nega yo'qoldi" savoli qolmasin.
+    expect(screen.getByText(/ish bilan bog/)).toBeTruthy()
+  })
+
+  it('o‘chirilgan xabarga JAVOB ham ko‘rinadi', async () => {
+    setPerms({ 'chat.korish': 'full', 'chat.yozish': 'full' })
+    muloqot(LENTA({}, [MSG({
+      id: 2, text: 'javobim', reply_to_id: 1,
+      reply: { id: 1, author_name: 'X', text: null, ochirilgan: true },
+    })]))
+    expect(await screen.findByText(/o.chirilgan xabar/)).toBeTruthy()
+    expect(screen.getByText('javobim')).toBeTruthy()
+  })
+})
+
+describe('Muloqot: yozish TAQIQLANSA sababi aytiladi', () => {
+  it('arxiv chatda yozish maydoni YO‘Q va sababi yoziladi', async () => {
+    setPerms({ 'chat.korish': 'full', 'chat.yozish': 'full' })
+    muloqot(LENTA({ arxiv: true }, [MSG()]))
+    expect(await screen.findByText(/Chat arxivlangan/)).toBeTruthy()
+    expect(screen.queryByLabelText(/Xabar matni/)).toBeNull()
+  })
+
+  it('a‘zo bo‘lmasa — "avval qo‘shiling" deb aytiladi', async () => {
+    setPerms({ 'chat.korish': 'full', 'chat.yozish': 'full' })
+    muloqot(LENTA({ azoman: false }, [MSG()]))
+    expect(await screen.findByText(/avval chatga qo.shiling/)).toBeTruthy()
+    expect(screen.queryByLabelText(/Xabar matni/)).toBeNull()
+  })
+
+  it('huquq yo‘q — maydon ham, sabab ham', async () => {
+    setPerms({ 'chat.korish': 'own' })
+    muloqot(LENTA({}, [MSG()]))
+    expect(await screen.findByText(/ruxsatingiz yo/)).toBeTruthy()
+    expect(screen.queryByLabelText(/Xabar matni/)).toBeNull()
+  })
+
+  it('hammasi joyida — maydon BOR', async () => {
+    setPerms({ 'chat.korish': 'full', 'chat.yozish': 'full' })
+    muloqot(LENTA({}, [MSG()]))
+    expect(await screen.findByLabelText(/Xabar matni/)).toBeTruthy()
+  })
+})
+
+describe('Muloqot: tizim xabari MULOQOT emas', () => {
+  it('tizim xabarida javob/tahrir/o‘chirish tugmalari YO‘Q', async () => {
+    setPerms({ 'chat.korish': 'full', 'chat.yozish': 'full' })
+    muloqot(LENTA({}, [MSG({
+      author_id: null, author_name: 'Tizim', tizim: true,
+      text: 'Holat: Yangi -> Yutqazildi',
+    })]))
+    expect(await screen.findByText(/Holat: Yangi/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Javob/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Tahrir/ })).toBeNull()
   })
 })

@@ -529,6 +529,15 @@ def require_role(user: Dict[str, Any], role: str) -> None:
                         f"({ROLE_LABEL.get(role, role)} kerak).", 403)
 
 
+def user_id(user: Dict[str, Any]) -> int:
+    """Sessiyadagi HISOB id si (`erp.app_user.id`).
+
+    `actor()` ISMNI beradi (yozuvlarda ko'rinishi uchun), bu esa
+    IDENTIFIKATORNI: chat a'zoligi, o'qilganlik va bildirishnoma
+    hisobga bog'lanadi, ismga emas (ism takrorlanishi mumkin)."""
+    return int(user["id"])
+
+
 def actor(user: Dict[str, Any]) -> str:
     """Yozuvlarda saqlanadigan ism (`created_by` / `changed_by`).
 

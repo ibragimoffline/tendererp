@@ -76,6 +76,8 @@ PATCHES = [
      "hodimga bildirishnoma"),
     ("schema_patch_erp_24.sql", "erp", "opportunity_file",
      "sabab hujjati va 'ulgurmadik' holati"),
+    ("schema_patch_erp_25.sql", "erp", "chat_message",
+     "ichki chat (hodimlar muloqoti)"),
 ]
 
 #: 23-patch JADVAL qo'shmaydi — u HUQUQ beradi, shuning uchun

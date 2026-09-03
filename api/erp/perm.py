@@ -125,6 +125,33 @@ AMALLAR: Dict[str, Any] = {
     "karta.foyda": ("Bitta kartaning foydasi", {
         "admin": KOR, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": OZ}),
 
+    # --- ichki chat (`docs/erp_chat.md` §2) -----------------------------
+    #
+    # ADMIN HAMMA YERDA `None`: u yozishmada QATNASHMAYDI — "biznes
+    # ma'lumotga ko'r" qoidasi. Yagona istisno `chat.tarix`: moderatsiya
+    # va o'chirish jurnalini ko'radi (u nazorat, muloqot emas).
+    #
+    # `chat.korish` broker uchun `OZ`: u faqat A'ZO bo'lgan chatini
+    # ko'radi. Rahbar/menejer esa `chat.hammasi` orqali barchasini
+    # ko'radi — lekin YOZISH uchun baribir a'zolik shart
+    # (`chat.yozish_talab`), ya'ni "jimgina kuzatib turib yozish" yo'q.
+    "chat.korish": ("Muloqotni ko'rish", {
+        "admin": None, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": OZ}),
+    "chat.hammasi": ("Barcha karta chatlarini ko'rish", {
+        "admin": None, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": None}),
+    "chat.yozish": ("Chatga yozish", {
+        "admin": None, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": OZ}),
+    # Broker o'z kartasiga hamkasb qo'sha oladi (maslahat so'rash),
+    # chiqarish esa BOSHLIQDA qoladi — nizoli amal.
+    "chat.azo_qosh": ("Chatga hodim qo'shish", {
+        "admin": None, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": OZ}),
+    "chat.azo_chiqar": ("Chatdan hodim chiqarish", {
+        "admin": None, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": None}),
+    "chat.moderatsiya": ("Boshqaning xabarini o'chirish", {
+        "admin": None, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": None}),
+    "chat.tarix": ("Xabar tahriri tarixini ko'rish", {
+        "admin": KOR, "rahbar": TOLIQ, "menejer": None, "broker": None}),
+
     # --- mijoz korxonalar (§3.2) ---------------------------------------
     "mijoz.korish": ("Mijoz passportini ko'rish", {
         "admin": KOR, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": OZ}),

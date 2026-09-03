@@ -3,6 +3,7 @@ import { api, getToken, setUnauthorizedHandler } from '@/api'
 import Icon from './components/Icon'
 import Dashboard from './components/erp/Dashboard'
 import OpportunitiesPage from './components/erp/OpportunitiesPage'
+import Muloqot from './components/erp/Muloqot'
 import ClientsPage from './components/erp/ClientsPage'
 import MyTasksPage from './components/erp/MyTasksPage'
 import OwnCompanyPage from './components/erp/OwnCompanyPage'
@@ -33,7 +34,7 @@ import type { AuthUser, ErpBroker, ErpHealth } from '@/types'
 // yetarli (tender-ai dagi bilan bir xil qaror).
 
 type View = 'dashboard' | 'opportunities' | 'mytasks' | 'clients' | 'company'
-  | 'stock' | 'invoices' | 'staff'
+  | 'stock' | 'invoices' | 'staff' | 'muloqot'
 
 // MENYU GURUHLARGA BO'LINGAN. Yetti bandli tekis ro'yxatda ko'z har
 // safar boshidan qidiradi; uch guruhda esa "pul bilan ishlayapman"
@@ -62,6 +63,11 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
         hint: 'Kartalar, bosqichlar va tahlil' },
       { key: 'clients', icon: 'user', label: 'Mijoz korxonalar',
         hint: 'Passport, rekvizitlar, hujjatlar' },
+      // MULOQOT — hodim bilan hodim. Tender-AI dagi "AI chat" EMAS;
+      // nom ham ataylab boshqa, aks holda ikkala ilovada ikkita
+      // "Chat" bo'lib qaysi biri nima ekani tushunarsiz bo'lardi.
+      { key: 'muloqot', icon: 'bell', label: 'Muloqot',
+        hint: "Umumiy chat va karta bo'yicha yozishmalar" },
     ],
   },
   {
@@ -406,6 +412,7 @@ export default function App() {
           {view === 'company' && (
             <OwnCompanyPage onOpenOpportunity={openOpportunity} />
           )}
+          {view === 'muloqot' && <Muloqot />}
           {view === 'stock' && <StockPage />}
           {view === 'invoices' && <InvoicePage />}
           {view === 'staff' && can('tizim.hodim') && <StaffPage />}

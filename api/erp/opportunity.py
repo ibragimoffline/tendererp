@@ -511,7 +511,25 @@ def take(tender_id: int, data: dict) -> dict:
         "opportunity_id": row["id"], "from_status": None, "to_status": "new",
         "changed_by": data.get("created_by"), "note": "Ishga olindi"})
     _birinchi_vazifa(row["id"], data)
+    _chat_och(row["id"], data)
     return get(row["id"])
+
+
+def _chat_och(opp_id: int, data: dict) -> None:
+    """Karta ochilganda MULOQOT ham ochiladi (`docs/erp_chat.md` §4).
+
+    A'zolar: kartaning mas'uli va kartani ochgan odam. Mas'ul yo'q
+    bo'lsa ("Taqsimlanmagan") — faqat ochgan odam; hodim tayinlanganda
+    `update()` uni qo'shadi.
+
+    Import SHU YERDA: `chat` moduli `opportunity` dan `FINAL` va
+    `ErpError` ni oladi, ya'ni modul darajasida qilinsa aylanma
+    bog'lanish bo'lardi (`stock` va `tasks` bilan bir xil naqsh)."""
+    from api.erp import chat as _chat
+    _chat.karta_chati_yarat(
+        opp_id, data.get("title"), data.get("broker_id"),
+        data.get("created_by_user_id"),
+        birinchi_xabar="Karta ishga olindi — muloqot shu yerda.")
 
 
 def _birinchi_vazifa(opp_id: int, data: dict) -> None:
@@ -564,7 +582,35 @@ def update(opp_id: int, data: dict) -> dict:
         _xabar.brokerga(yangi, "otkazildi",
                         f"Karta sizga o'tkazildi: "
                         f"{oldingi.get('title') or f'#{opp_id}'}.", opp_id)
+        # YANGI MAS'UL CHATGA QO'SHILADI. Aks holda unga karta
+        # berilardi-yu, u haqidagi butun yozishma ko'rinmasdi — eng
+        # kerakli paytda, ishni qabul qilib olayotganda.
+        _chat_masul_almashdi(opp_id, oldingi.get("broker_id"), yangi)
     return get(opp_id)
+
+
+def _chat_masul_almashdi(opp_id: int, eski_broker: Optional[int],
+                         yangi_broker: int) -> None:
+    """Mas'ul o'zgardi: yangisi chatga qo'shiladi, lentaga tizim xabari.
+
+    ESKISI CHIQARILMAYDI: u karta ustida ishlagan va uning konteksti
+    kerak bo'lishi mumkin. Chiqarish — alohida, ONGLI amal
+    (`chat.azo_chiqar`), avtomatik emas."""
+    from api.erp import chat as _chat
+    chat_id = _chat.karta_chati(opp_id)
+    if not chat_id:
+        return
+    nom = db.query_one("SELECT full_name FROM erp.broker WHERE id = %(b)s",
+                       {"b": yangi_broker}) or {}
+    _chat.tizim_xabari(
+        chat_id, f"Karta mas'uli o'zgardi: {nom.get('full_name') or 'hodim'}.")
+    u = db.query_one("SELECT id FROM erp.app_user WHERE broker_id = %(b)s "
+                     "AND active ORDER BY id LIMIT 1", {"b": yangi_broker})
+    if u:
+        try:
+            _chat.azo_qosh(chat_id, u["id"], u["id"])
+        except ErpError:
+            pass                        # allaqachon a'zo — normal holat
 
 
 def taqsimlash_sorovi(opp_id: int, izoh: Optional[str],
@@ -658,6 +704,22 @@ def set_status(opp_id: int, status: str, changed_by: Optional[str],
     # Import SHU YERDA — modul darajasida qilinsa ikki modul bir-birini
     # aylanma import qilardi (`stock` allaqachon `opportunity` dan
     # `ErpError` va `FINAL` ni oladi).
+    # MULOQOT — status o'zgarishi lentada ham ko'rinadi. Bu
+    # `opportunity_history` bilan ATAYLAB takrorlanadi (§6): tarix —
+    # rasmiy jurnal, chat — muloqot oqimi; suhbatni o'qiyotgan odam
+    # "shu payt nima bo'lgan" ni bir joyda ko'rishi kerak.
+    from api.erp import chat as _chat
+    _chat_id = _chat.karta_chati(opp_id)
+    if _chat_id:
+        _izoh = f" — {note.strip()}" if (note or "").strip() else ""
+        _chat.tizim_xabari(
+            _chat_id,
+            f"Holat: {STATUS_LABEL.get(cur['status'], cur['status'])} -> "
+            f"{STATUS_LABEL[status]} ({changed_by or 'tizim'}){_izoh}")
+    # Yakuniy holat -> chat ARXIV (faqat o'qish); qaytarilsa ochiladi.
+    if (status in FINAL) != (cur["status"] in FINAL):
+        _chat.karta_arxiv(opp_id, status in FINAL)
+
     from api.erp import stock as _stock
     stock_result = _stock.on_status_change(opp_id, cur["status"], status,
                                            changed_by)

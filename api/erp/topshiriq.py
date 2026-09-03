@@ -321,6 +321,12 @@ def _karta_bekor(t: Dict[str, Any], opp: Dict[str, Any]) -> Dict[str, Any]:
     # tanlovni chalg'itardi. Izoh esa tarixda to'liq qoladi.
     erp_opp.set_status(opp["id"], "rejected", "Tender-AI",
                        "Tender-AI'da qaror bekor qilindi", "other")
+    # MULOQOTGA ham yoziladi: karta ustida ishlayotgan odam lentani
+    # o'qib "nega to'xtadi" degan savolga javob topsin. `set_status`
+    # o'zi status o'tishini yozadi, bu esa MANBANI aytadi.
+    from api.erp import chat as _chat
+    _chat.tizim_xabari(_chat.karta_chati(opp["id"]),
+                       "Tender-AI da yo'naltirish BEKOR qilindi.")
     # Karta ustida ishlayotgan odam buni BILISHI kerak: u tayyorgarlik
     # ko'rayotgan bo'lishi mumkin.
     to_liq = db.query_one("SELECT broker_id, title FROM erp.opportunity "
