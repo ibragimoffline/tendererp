@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from api import db
-from api.erp.opportunity import ErpError, _need_schema
+from api.erp.opportunity import STATUS_LABEL, ErpError, _need_schema
 
 # Passportning tahrirlanadigan maydonlari. Ro'yxat BITTA joyda: INSERT,
 # UPDATE va so'rov modeli ham shundan yuradi.
@@ -304,6 +304,9 @@ def get(client_id: int) -> dict:
     out["opportunities"] = [
         {"id": o["id"], "title": o["title"], "tender_id": o["tender_id"],
          "tender_ref": o["tender_ref"], "status": o["status"],
+         # Yorliq SERVERDAN: ekranda `submitted` emas, "Topshirildi"
+         # ko'rinishi kerak va ro'yxat frontendда takrorlanmasin.
+         "status_label": STATUS_LABEL.get(o["status"], o["status"]),
          "start_price": _num(o["start_price"]), "currency": o["currency"],
          "deadline_at": _iso(o["deadline_at"]), "closed_at": _iso(o["closed_at"]),
          "broker_name": o["broker_name"]}
@@ -312,6 +315,11 @@ def get(client_id: int) -> dict:
     lost = sum(1 for o in opps if o["status"] == "lost")
     out["summary"] = {
         "opp_n": len(opps), "won_n": won, "lost_n": lost,
+        # RAD ETILGANLAR alohida sanaladi va EKRANDA ko'rsatiladi.
+        # Ular `win_rate` maxrajiga kirmaydi (biz qatnashmadik — yutqazmadik),
+        # lekin ko'rsatilmasa hisob "1 ta karta, yutish 100%" bo'lib
+        # chiqadi va son qayerdan kelgani tushunarsiz qoladi.
+        "rejected_n": sum(1 for o in opps if o["status"] == "rejected"),
         "open_n": sum(1 for o in opps if o["status"] not in ("won", "lost", "rejected")),
         # ARALASH VALYUTA QO'SHILMAYDI. Mijozning kartalari bir nechta
         # valyutada bo'lsa summa berilmaydi: "1200 USD + 15 mln UZS"

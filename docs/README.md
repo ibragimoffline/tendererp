@@ -65,6 +65,7 @@ Undan kelib chiqqan ishlar shu papkada yozilgan:
 | `erp_audit.md` | O'zgarishlar jurnali: **trigger** yozadi, "chiqarilgandan keyin tegilganmi" |
 | `eksport_savollari.md` | Faktura eksporti uchun buxgalterga **yuboriladigan savollar** (tayyor matn) |
 | `erp_ishga_tushirish.md` | Bo'sh bazadan real ishgacha: patchlar, hisoblar, tayyorlik tekshiruvi, demo tozalash, **zaxira** |
+| `../DESIGN.md` | **Interfeys shartnomasi**: rang, tipografika, shakl, chuqurlik, tegish nishoni. Manbasi — `awesome-design-md` dagi Linear fayli; undan nima olingani va nima OLINMAGANI yozilgan |
 
 ---
 
@@ -149,6 +150,18 @@ Eng ko'p beriladigan savollar va javob qayerda yozilgani.
 | Foydani kim ko'radi? | Umumiy hisobotni rahbar; o'z kartasinikini har kim | `erp_foyda.md` 7 |
 | Turli valyutadagi summalar qo'shiladimi? | **Yo'q** — har valyuta alohida qator, umumiy yig'indi yo'q | `erp_foyda.md` 9 |
 | Nega kurs bo'yicha konvertatsiya yo'q? | "Qaysi kungi kurs?" degan savolga javob yo'q — hisobot har kuni o'zgarardi | `erp_foyda.md` 9.2 |
+
+### Interfeys
+
+| Savol | Javob | Qayerda |
+|---|---|---|
+| Dizayn qoidalari qayerda yozilgan? | `DESIGN.md` — ranglar `index.css` da, ULARNI QANDAY ISHLATISH shu yerda | `../DESIGN.md` |
+| Nega Linear namuna qilib olindi? | `awesome-design-md` ro'yxatidagi yagona **zich ish quroli**; qolganlari marketing sahifalari | `../DESIGN.md` "Bu fayl nima" |
+| Linear ranglari ko'chirildimi? | **Yo'q.** Uning fayli marketing saytini yozadi (faqat qorong'i, lavanda aksent). Loyiha palitrasi OKLCH da o'lchangan va yorug' mavzu teng huquqli | `../DESIGN.md` "OLINMADI" |
+| Nega uchta holat rangi (ok/soon/urgent)? | Linear bitta semantik rang bilan kifoyalanadi, ERP da esa muddat holati SHART | `../DESIGN.md` "OLINMADI" |
+| Tugma nega 34px, 44px emas? | Sichqon uchun 34px real; **barmoq** uchun `max-sm` da 40px, maydon 44px | `../DESIGN.md` "Tegish va fokus" |
+| Radius nega o'zgardi? | Tugma 6px va karta 8px orasidagi 2px farq ko'rinmasdi — shakl iyerarxiyani ko'rsatmasdi | `index.css` "RADIUS POG'ONASI" |
+| Ichki panel nega quyuqroq? | Yorug' mavzuda oq kartadan yuqoriga qadam yo'q — shuning uchun ichki blok ikkala mavzuda ham CHO'KADI | `../DESIGN.md` "Sirt pog'onasi" |
 
 ---
 

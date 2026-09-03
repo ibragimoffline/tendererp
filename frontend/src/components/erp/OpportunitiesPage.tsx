@@ -24,10 +24,14 @@ import { ALL, ErpError, can, toFilter, toSelect } from './erpShared'
 
 type View = 'board' | 'table' | 'stats'
 
-const VIEWS: { key: View; label: string }[] = [
+// HISOBOT — KOMPANIYA ko'rsatkichi (voronka, hodimlar kesimi), ya'ni
+// `hisobot.kompaniya` huquqini talab qiladi va brokerda 403 qaytaradi.
+// Ilgari tab hammaga ko'rinardi: broker uni ochardi va bo'sh ekranda
+// xato ko'rardi. Ishlamaydigan tugma — yolg'on va'da (`erpShared.can`).
+const VIEWS: { key: View; label: string; amal?: string }[] = [
   { key: 'board', label: 'Kanban' },
   { key: 'table', label: 'Jadval' },
-  { key: 'stats', label: 'Hisobot' },
+  { key: 'stats', label: 'Hisobot', amal: 'hisobot.kompaniya' },
 ]
 
 interface OpportunitiesPageProps {
@@ -111,7 +115,7 @@ export default function OpportunitiesPage({ focusId, tenderWeb }: OpportunitiesP
       {/* --- Ko'rinish almashtirgichi va filtrlar --- */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex gap-1">
-          {VIEWS.map((v) => (
+          {VIEWS.filter((v) => !v.amal || can(v.amal)).map((v) => (
             <Button key={v.key} size="sm"
               variant={view === v.key ? 'default' : 'outline'}
               onClick={() => setView(v.key)}>

@@ -19,12 +19,28 @@ import type { AuthUser } from '@/types'
 // chiqmaydi — u faqat "shu ma'lumot kelganda ekranda nima yozilishi
 // kerak" degan savolga javob beradi.
 
+// jsdom da `ResizeObserver` yo'q, Radix Slider esa uni talab qiladi
+// (karta oynasidagi "yutish ehtimoli"). Stub bo'lmasa sinov komponentni
+// emas, brauzer API'sining yo'qligini tekshirgan bo'lardi.
+if (!('ResizeObserver' in globalThis)) {
+  ;(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver =
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+}
+
 const api = {
   stats: vi.fn(), analytics: vi.fn(), myTasks: vi.fn(), invoiceStats: vi.fn(),
   profit: vi.fn(), audit: vi.fn(), opportunities: vi.fn(),
   cardProfit: vi.fn(), setUserPassword: vi.fn(), loginAttempts: vi.fn(),
   stock: vi.fn(), stockProduct: vi.fn(), seedOpening: vi.fn(),
   tahlil: vi.fn(),
+  // Karta va mijoz oynalari (ular ichidagi bloklar ham chaqiradi).
+  opportunity: vi.fn(), tenderDiff: vi.fn(), tasks: vi.fn(),
+  reserves: vi.fn(), invoices: vi.fn(), client: vi.fn(),
+  acts: vi.fn(), actFromInvoice: vi.fn(), setActStatus: vi.fn(),
 }
 vi.mock('@/api', () => ({ api, ApiError: class extends Error {} }))
 
@@ -37,6 +53,10 @@ const { default: MyPasswordPanel } =
 const { default: StockPage } = await import('../components/erp/StockPage')
 const { default: MyTasksPage } = await import('../components/erp/MyTasksPage')
 const { default: TahlilPanel } = await import('../components/erp/TahlilPanel')
+const { default: OpportunityCard } =
+  await import('../components/erp/OpportunityCard')
+const { default: ClientCard } = await import('../components/erp/ClientCard')
+const { default: ActPanel } = await import('../components/erp/ActPanel')
 const { setPerms } = await import('../components/erp/erpShared')
 
 const MANAGER: AuthUser = {
@@ -370,5 +390,161 @@ describe('Tahlil: yolg‘on ishonch to‘siladi', () => {
     const { container } = render(<TahlilPanel oppId={1} />)
     await new Promise((r) => setTimeout(r, 0))
     expect(container.textContent).toBe('')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// QO'LDA SINOVDA TOPILGAN KAMCHILIKLAR.
+//
+// Uchtasi ham bir ildizdan: EKRAN huquqni yoki hujjatning holatini
+// hisobga olmasdi. Natijada odam formani to'ldirib bo'lgach saqlay
+// olmasdi, tugmani bosib 403 olardi yoki yopilgan kartani jimgina
+// o'zgartirib yuborardi.
+// ---------------------------------------------------------------------------
+const OPP = (patch: Record<string, unknown> = {}) => ({
+  id: 1,
+  tender_id: 7,
+  tender: {
+    source_platform: 'xt-xarid', tender_ref: '7', customer_name: 'AGROBANK',
+    title: 'Server', start_price: 100, currency: 'UZS',
+    deadline_at: null, region_name: null, source_url: null,
+  },
+  broker: null, client: null, priority: 'medium', priority_label: "O'rta",
+  win_probability: null, note: null, next_task: null, next_task_at: null,
+  status: 'new', status_label: 'Yangi', is_final: false,
+  status_changed_at: null, closed_at: null, lost_reason: null,
+  created_by: null, created_at: null, updated_at: null, history: [],
+  ...patch,
+})
+
+const CARD_PROPS = {
+  id: 1,
+  statuses: [
+    { code: 'new', label: 'Yangi', final: false },
+    { code: 'won', label: 'Yutildi', final: true },
+  ],
+  brokers: [],
+  clients: [],
+  priorities: [{ code: 'medium', label: "O'rta" }],
+  onClose: () => {},
+  onChanged: () => {},
+}
+
+describe('Yopilgan karta TAHRIRLANMAYDI', () => {
+  beforeEach(() => {
+    api.tenderDiff.mockResolvedValue({
+      opportunity_id: 1, tender_id: 7, exists: true, changed: [],
+    })
+  })
+
+  it('yakuniy statusda "Saqlash" yo‘q va sababi yoziladi', async () => {
+    setPerms({ 'karta.korish': 'full', 'karta.tahrirlash': 'full' })
+    api.opportunity.mockResolvedValue(
+      OPP({ status: 'won', status_label: 'Yutildi', is_final: true }))
+    render(<OpportunityCard {...CARD_PROPS} />)
+    expect(await screen.findByText(/Karta yakunlangan/i)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Saqlash/i })).toBeNull()
+  })
+
+  it('ochiq kartada "Saqlash" bor', async () => {
+    setPerms({ 'karta.korish': 'full', 'karta.tahrirlash': 'full' })
+    api.opportunity.mockResolvedValue(OPP())
+    render(<OpportunityCard {...CARD_PROPS} />)
+    expect(await screen.findByRole('button', { name: /Saqlash/i })).toBeTruthy()
+  })
+
+  it('tahrirlash huquqi yo‘q bo‘lsa sabab AYTILADI', async () => {
+    setPerms({ 'karta.korish': 'own' })
+    api.opportunity.mockResolvedValue(OPP())
+    render(<OpportunityCard {...CARD_PROPS} />)
+    expect(await screen.findByText(/rahbar yoki menejer huquqi/i)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Saqlash/i })).toBeNull()
+  })
+})
+
+// Passport: "to'ldirdim, saqlay olmadim" — eng qimmat kamchilik, chunki
+// kiritilgan ma'lumot butunlay yo'qoladi.
+describe('Mijoz passporti: yozib bo‘lmasa OLDINDAN aytiladi', () => {
+  const CLIENT = {
+    id: 3, name: 'ZZ MCHJ', inn: null, oked: null, legal_form: null,
+    tax_mode: null, address_legal: null, address_actual: null,
+    bank_name: null, bank_mfo: null, bank_account: null,
+    director_name: null, phone: null, email: null, note: null,
+    active: true, vat_payer: null, vat_rate: null,
+    created_at: null, updated_at: null, missing: [],
+    contacts: [], documents: [], opportunities: [],
+    summary: {
+      opp_n: 0, won_n: 0, lost_n: 0, rejected_n: 0, open_n: 0,
+      won_total: null, currency: null, mixed_currency: false, win_rate: null,
+    },
+  }
+
+  it('huquq yo‘q — sabab ko‘rinadi, Saqlash yo‘q', async () => {
+    setPerms({ 'mijoz.korish': 'own' })
+    api.client.mockResolvedValue(CLIENT)
+    render(<ClientCard id={3} onClose={() => {}} onSaved={() => {}} />)
+    expect(await screen.findByText(/rahbar yoki menejer huquqi/i)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^Saqlash$/i })).toBeNull()
+  })
+
+  it('huquq bor — Saqlash tugmasi turadi', async () => {
+    setPerms({ 'mijoz.korish': 'full', 'mijoz.tahrirlash': 'full' })
+    api.client.mockResolvedValue(CLIENT)
+    render(<ClientCard id={3} onClose={() => {}} onSaved={() => {}} />)
+    expect(await screen.findByRole('button', { name: /^Saqlash$/i })).toBeTruthy()
+  })
+})
+
+// Dalolatnoma: bosilib 403 beradigan tugmadan ko'ra ko'rsatilmagani
+// yaxshi — fakturada allaqachon shunday, akt orqada qolgan edi.
+describe('Dalolatnoma: ruxsatsiz tugma KO‘RSATILMAYDI', () => {
+  const INV = {
+    id: 9, status: 'issued', status_label: 'Chiqarildi', currency: 'UZS',
+  } as never
+  const ACT = {
+    id: 4, status: 'draft', status_label: 'Qoralama', number: 'A-1',
+    act_date: '2026-09-01', signed_at: null, currency: 'UZS',
+    totals: { net: 0, vat: 0, total: 100, words: '' },
+  }
+
+  it('brokerda "Chiqarish" ham, "Dalolatnoma chiqarish" ham yo‘q', async () => {
+    setPerms({ 'hujjat.korish': 'own' })
+    api.acts.mockResolvedValue([ACT])
+    render(<ActPanel inv={INV} />)
+    await screen.findByText(/faktura bilan juft/i)
+    expect(screen.queryByRole('button', { name: /^Chiqarish$/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Dalolatnoma chiqarish/i }))
+      .toBeNull()
+  })
+
+  it('menejerda ikkalasi ham bor', async () => {
+    setPerms({
+      'hujjat.korish': 'full', 'hujjat.qoralama': 'full',
+      'hujjat.chiqarish': 'full', 'hujjat.bekor': 'full',
+    })
+    api.acts.mockResolvedValue([ACT])
+    render(<ActPanel inv={INV} />)
+    expect(await screen.findByRole('button', { name: /^Chiqarish$/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Dalolatnoma chiqarish/i }))
+      .toBeTruthy()
+  })
+})
+
+// Qidiruv yoqilganda sarlavhadagi son ro'yxat bilan mos kelishi kerak:
+// "Qoldiqlar (1800)" deb turgan sarlavha 3 ta qator ustida yolg'on gapiradi.
+describe('Ombor: sarlavhadagi son FILTRGA moslashadi', () => {
+  it('qidiruvda "topilgan / jami" ko‘rinadi', async () => {
+    setPerms({ 'ombor.korish': 'full' })
+    api.stock.mockResolvedValue({
+      ...STOCK,
+      items: [
+        { ...STOCK.items[0], product_id: 1, product_name: 'Nasos' },
+        { ...STOCK.items[0], product_id: 2, product_name: 'Server' },
+      ],
+    })
+    render(<StockPage />)
+    expect(await screen.findByText('Qoldiqlar (2)')).toBeTruthy()
+    await userEvent.type(screen.getByPlaceholderText(/Mahsulot nomi/i), 'nasos')
+    expect(await screen.findByText('Qoldiqlar (1 / 2)')).toBeTruthy()
   })
 })

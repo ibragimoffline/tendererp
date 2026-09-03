@@ -57,7 +57,7 @@ export default function StatusChangeDialog(
               <div className="mb-1 text-caption font-semibold text-muted-foreground">
                 Yutqazish sababi
               </div>
-              <Select value={reason ?? undefined} onValueChange={setReason}>
+              <Select value={reason ?? ''} onValueChange={setReason}>
                 <SelectTrigger className="h-9 w-full bg-card text-body">
                   <SelectValue placeholder="Tanlang" />
                 </SelectTrigger>
@@ -79,7 +79,7 @@ export default function StatusChangeDialog(
           />
 
           <div className="mt-4 flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={onCancel}>Bekor qilish</Button>
+            <Button variant="outline" size="sm" onClick={onCancel}>Bekor</Button>
             <Button size="sm" disabled={!canSave}
               onClick={() => onConfirm(note.trim() || null, reason)}>
               Tasdiqlash

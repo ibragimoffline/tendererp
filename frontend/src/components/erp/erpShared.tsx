@@ -104,8 +104,8 @@ export function ErpError({ msg }: { msg: string }) {
 export function SchemaMissing({ patch = 'schema_patch_erp_1.sql' }: { patch?: string }) {
   return (
     <div className="rounded-lg border border-soon/40 bg-soon-soft px-4 py-3 text-body text-soon-strong">
-      ERP jadvallari bazada yo'q. Operator <code>{patch}</code> ni qo'llashi
-      kerak: <code>psql "dbname=xtxarid user=postgres host=localhost" -f {patch}</code>
+      Ma'lumotlar bazasi tayyor emas. Administrator <code>{patch}</code> ni
+      qo'llashi kerak.
     </div>
   )
 }

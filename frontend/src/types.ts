@@ -287,6 +287,9 @@ export interface ClientOpportunity {
   tender_id: number
   tender_ref: Nullable<string>
   status: string
+  /** Odam o'qiydigan nomi — SERVERDAN (`api/erp/opportunity.py`).
+   *  Frontendда ikkinchi ro'yxat saqlanmaydi. */
+  status_label: string
   start_price: Nullable<number>
   currency: Nullable<string>
   deadline_at: Nullable<string>
@@ -303,6 +306,10 @@ export interface ClientFull extends ClientPassport {
     opp_n: number
     won_n: number
     lost_n: number
+    /** Rad etilganlar. `win_rate` MAXRAJIGA kirmaydi (biz qatnashmadik —
+     *  yutqazmadik), lekin ekranda ko'rsatiladi: aks holda "1 ta karta,
+     *  yutish 100%" degan qator qayerdan kelgani tushunarsiz qoladi. */
+    rejected_n: number
     open_n: number
     /** Aralash valyutada `null` — summalar qo'shilmaydi */
     won_total: Nullable<number>

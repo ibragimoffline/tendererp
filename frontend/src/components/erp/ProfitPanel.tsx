@@ -74,16 +74,15 @@ export default function ProfitPanel({ onOpen }: { onOpen: (id: number) => void }
         </div>
         {d.mixed_currency && (
           <p className="mt-1 text-micro text-muted-foreground">
-            Valyutalar aralash — umumiy yig'indi berilmaydi. Kurs bo'yicha
-            qo'shish qaysi kungi kurs ekaniga bog'liq bo'lardi.
+            Valyutalar aralash — umumiy yig'indi berilmaydi.
           </p>
         )}
       </div>
 
       {!d.complete && (
         <p className="mb-2 text-micro text-soon-strong">
-          Hisob to'liq emas: {d.unknown_cost_moves} ta chiqimning tannarxi
-          noma'lum. Ular tannarxga qo'shilmadi — haqiqiy foyda bundan kam.
+          Hisob to'liq emas: {d.unknown_cost_moves} ta chiqimda tannarx
+          yo'q — haqiqiy foyda bundan kam.
         </p>
       )}
 

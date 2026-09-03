@@ -289,6 +289,25 @@ def test_db():
                 eq("havola bazadagi bilan AYNAN bir xil",
                    snap["source_url"], bazada["ommaviy_url"])
 
+            # --- "KEYINGI VAZIFA" HAQIQIY VAZIFAGA AYLANADI -----------------
+            # Ilgari u faqat `erp.opportunity.next_task` ustuniga
+            # yozilardi va HECH QAYERDA ko'rinmasdi: vazifalar ro'yxati,
+            # "mening ishlarim" va eslatma skripti — hammasi
+            # `erp.opportunity_task` dan o'qiydi. Ya'ni odam muddat
+            # yozardi va u jimgina yo'qolardi.
+            rt = c.get(f"/erp/opportunities/{opp['id']}/tasks")
+            if rt.status_code == 200:
+                nomlar = [t["title"] for t in rt.json()]
+                check("KP yuborish" in nomlar,
+                      "ishga olishdagi 'keyingi vazifa' VAZIFAGA aylandi",
+                      str(nomlar))
+                v = next((t for t in rt.json() if t["title"] == "KP yuborish"), {})
+                eq("vazifa muddati ko'chdi", v.get("due_at"), "2026-09-01")
+                eq("vazifa mas'uli — kartaning brokeri",
+                   (v.get("assignee") or {}).get("id"), broker["id"])
+            else:
+                print("  SKIP vazifalar sxemasi yo'q — ko'chirish tekshirilmadi")
+
             # --- takror va 404/400 ------------------------------------------
             r = c.post(f"/erp/tenders/{tid}/take", json=body)
             eq("o'sha tender + o'sha mijoz -> 409", r.status_code, 409)

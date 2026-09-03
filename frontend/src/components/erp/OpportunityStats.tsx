@@ -83,8 +83,7 @@ export default function OpportunityStats({ onOpen }: { onOpen: (id: number) => v
       {d.mixed_currency && (
         <p className="text-caption text-muted-foreground">
           Kartalar {d.currencies.join(', ')} valyutalarida — pul
-          yig'indilari ko'rsatilmaydi. Kurs bo'yicha qo'shish qaysi kungi
-          kurs ekaniga bog'liq bo'lardi; sanoq esa to'g'ri qoladi.
+          yig'indilari ko'rsatilmaydi, sanoq esa to'g'ri qoladi.
         </p>
       )}
 
@@ -201,8 +200,7 @@ export default function OpportunityStats({ onOpen }: { onOpen: (id: number) => v
             Bosqichda o'tgan vaqt
           </h3>
           <p className="mb-3 text-micro text-muted-foreground">
-            O'rtacha faqat TUGAGAN turishlardan hisoblanadi; hozir shu
-            bosqichda turganlar alohida ustunda — ularning vaqti hali tugamagan.
+            O'rtacha — faqat tugagan turishlar bo'yicha.
           </p>
           <table className="w-full text-body">
             <thead>
@@ -249,8 +247,8 @@ export default function OpportunityStats({ onOpen }: { onOpen: (id: number) => v
             Voronka
           </h3>
           <p className="mb-3 text-micro text-muted-foreground">
-            "Necha karta shu bosqichga yetib borgan" — hozirgi holati emas,
-            TARIXI. Foiz ishga olinganlardan hisoblanadi.
+            Necha karta shu bosqichga yetib borgan (hozirgi holati emas). Foiz —
+            ishga olinganlardan.
           </p>
           <div className="space-y-1.5">
             {an.funnel.filter((x) => x.reached > 0).map((x) => (
@@ -319,8 +317,7 @@ export default function OpportunityStats({ onOpen }: { onOpen: (id: number) => v
               Ishga olishdan topshirishgacha
             </h3>
             <p className="mb-3 text-micro text-muted-foreground">
-              Bu brokerni emas, JARAYONni o'lchaydi: qayerda sekinlashuv borligini
-              ko'rsatadi.
+              Jarayonni o'lchaydi: qayerda sekinlashuv borligini ko'rsatadi.
             </p>
             <table className="w-full text-body">
               <thead>

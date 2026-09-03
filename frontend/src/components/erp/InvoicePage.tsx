@@ -63,7 +63,7 @@ export default function InvoicePage() {
   const [newNumber, setNewNumber] = useState('')
 
   // Yangi qator
-  const [line, setLine] = useState({ name: '', qty: '', price: '', vat: '' })
+  const [line, setLine] = useState({ name: '', unit: '', qty: '', price: '', vat: '' })
   // Yangi to'lov
   const [pay, setPay] = useState({ amount: '', paid_at: '', method: 'bank' })
 
@@ -116,8 +116,8 @@ export default function InvoicePage() {
       <section className="rounded-lg border bg-card p-4">
         <h2 className="mb-1 text-body font-semibold">Yangi hisob-faktura</h2>
         <p className="mb-3 text-caption text-muted-foreground">
-          Ikkala tomonning rekvizitlari SHU PAYTDA ko'chiriladi va keyin
-          o'zgarmaydi. QQS stavkasi mijoz passportidan olinadi.
+          Rekvizitlar hozir nusxalanadi va keyin o'zgarmaydi. QQS stavkasi
+          mijoz passportidan.
         </p>
         <div className="flex flex-wrap items-end gap-2">
           <div className="min-w-56">
@@ -243,8 +243,8 @@ function InvoiceDetail({ inv, busy, methods, line, setLine, pay, setPay, run,
   inv: Invoice
   busy: boolean
   methods: { code: string; label: string }[]
-  line: { name: string; qty: string; price: string; vat: string }
-  setLine: (v: { name: string; qty: string; price: string; vat: string }) => void
+  line: { name: string; unit: string; qty: string; price: string; vat: string }
+  setLine: (v: { name: string; unit: string; qty: string; price: string; vat: string }) => void
   pay: { amount: string; paid_at: string; method: string }
   setPay: (v: { amount: string; paid_at: string; method: string }) => void
   run: (fn: () => Promise<unknown>, ok: string) => void
@@ -301,8 +301,12 @@ function InvoiceDetail({ inv, busy, methods, line, setLine, pay, setPay, run,
               <td className="tabular py-1 text-right">{ln.vat_rate}</td>
               <td className="tabular py-1 text-right">{f.money(ln.total, inv.currency)}</td>
               <td className="py-1 text-right">
+                {/* NOMIDA QATOR NOMI BOR: bir jadvalda o'nlab bir xil
+                    "o'chirish" tugmasi turadi va ekran o'quvchisi
+                    ularning QAYSI BIRI ekanini boshqa yerdan bilmaydi. */}
                 {inv.editable && (
                   <Button size="sm" variant="ghost" disabled={busy}
+                    aria-label={`Qatorni o'chirish: ${ln.name}`}
                     onClick={() => run(() => api.deleteInvoiceLine(inv.id, ln.id), '')}>
                     <Icon name="close" size={12} />
                   </Button>
@@ -345,6 +349,12 @@ function InvoiceDetail({ inv, busy, methods, line, setLine, pay, setPay, run,
             onChange={(e) => setLine({ ...line, name: e.target.value })} />
           <Input className="max-w-24" placeholder="Miqdor" inputMode="decimal"
             value={line.qty} onChange={(e) => setLine({ ...line, qty: e.target.value })} />
+          {/* O'LCHOV BIRLIGI. Kartadan chiqarilgan fakturada u
+              rezervdan keladi va jadvalda ko'rinadi ("5 dona"), qo'lda
+              qo'shilgan qatorda esa maydon yo'q edi — bir xil jadvalda
+              "5 dona" va yalang'och "2" yonma-yon turardi. */}
+          <Input className="max-w-24" placeholder="Birlik" value={line.unit}
+            onChange={(e) => setLine({ ...line, unit: e.target.value })} />
           <Input className="max-w-32" placeholder="Narx" inputMode="decimal"
             value={line.price} onChange={(e) => setLine({ ...line, price: e.target.value })} />
           <Input className="max-w-24" placeholder="QQS %" inputMode="decimal"
@@ -354,9 +364,10 @@ function InvoiceDetail({ inv, busy, methods, line, setLine, pay, setPay, run,
               await api.addInvoiceLine(inv.id, {
                 name: line.name.trim(), qty: Number(line.qty),
                 price: Number(line.price),
+                unit: line.unit.trim() || null,
                 vat_rate: line.vat === '' ? null : Number(line.vat),
               })
-              setLine({ name: '', qty: '', price: '', vat: '' })
+              setLine({ name: '', unit: '', qty: '', price: '', vat: '' })
             }, '')}>
             <Icon name="plus" size={13} /> Qator
           </Button>
@@ -399,6 +410,7 @@ function InvoiceDetail({ inv, busy, methods, line, setLine, pay, setPay, run,
                   </span>
                   {can('hujjat.tolov') && (
                     <Button size="sm" variant="ghost" disabled={busy}
+                      aria-label={`To'lovni o'chirish: ${f.money(p.amount, inv.currency)}`}
                       onClick={() => run(() => api.deletePayment(p.id), '')}>
                       <Icon name="close" size={12} />
                     </Button>

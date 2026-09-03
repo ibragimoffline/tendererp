@@ -81,9 +81,8 @@ export default function ContractPrint({ contractId, onClose }: {
           {spec.lines.length === 0 ? (
             // BO'SH ro'yxatni yashirmaymiz: "ma'lumot yo'q" ham javob.
             <p className="my-8 text-center text-caption">
-              Ro'yxat bo'sh: shu shartnoma bo'yicha na faktura, na ombordan
-              ajratilgan tovar topildi. Pozitsiyalarni kiritgach ilovani
-              qayta chiqaring.
+              Pozitsiya topilmadi. Faktura yoki ajratilgan tovar kiriting va
+              ilovani qayta chiqaring.
             </p>
           ) : (
             <>

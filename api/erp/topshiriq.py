@@ -259,7 +259,12 @@ def _yangi_karta(t: Dict[str, Any], broker_id: Optional[int],
         "client_id": None,
         "priority": t.get("ustuvorlik") or "medium",
         "note": t.get("izoh"),
-        "next_task": "Tender-AI bergan muddat" if t.get("muddat") else None,
+        # Muddat berilgan bo'lsa u HAQIQIY vazifaga aylanadi
+        # (`opportunity._birinchi_vazifa`) — ya'ni vazifalar ro'yxatida,
+        # "mening ishlarim" da va eslatmada ko'rinadi. Shu sababli
+        # sarlavha ham odam o'qiydigan bo'lishi kerak.
+        "next_task": ("Tender-AI bergan muddatga tayyorgarlik"
+                      if t.get("muddat") else None),
         "next_task_at": t.get("muddat"),
         "created_by": kim,
     })

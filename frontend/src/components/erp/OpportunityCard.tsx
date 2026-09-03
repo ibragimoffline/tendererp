@@ -133,6 +133,18 @@ export default function OpportunityCard(props: OpportunityCardProps) {
   const set = (patch: Partial<OpportunityInput>) =>
     setForm((x) => (x ? { ...x, ...patch } : x))
 
+  // TAHRIRLASH IKKI SHARTGA BOG'LIQ va ikkalasi ham EKRANDA ko'rinadi.
+  //
+  //  1. HUQUQ — brokerda `karta.tahrirlash` faqat o'z kartasiga
+  //     (server ham shuni tekshiradi; bu yerda faqat ko'rinish).
+  //  2. YAKUNLANGAN KARTA — "Yutildi / Yutqazildi / Rad etildi" dan
+  //     keyin maydonlar qotadi. Ilgari yopilgan kartani ham to'liq
+  //     tahrirlash mumkin edi: yutilgan tenderning summasi yoki mijozi
+  //     jimgina o'zgarib ketardi va buni hech narsa qayd qilmasdi.
+  //     Tuzatish yo'li yopilmagan — avval statusni qaytarish kerak, u
+  //     esa IZOH so'raydi va tarixda qoladi.
+  const editable = !!o && !o.is_final && can('karta.tahrirlash')
+
   return (
     <Sheet open onOpenChange={(x) => { if (!x) onClose() }}>
       <SheetContent side="right" closeLabel="Yopish"
@@ -197,7 +209,7 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                     <div className="mb-2 rounded-md border border-soon/40 bg-soon-soft px-2.5 py-1.5 text-caption text-soon-strong">
                       Tender manbada yopilgan
                       {diff.source?.status_name ? ` (${diff.source.status_name})` : ''} —
-                      kartani yakunlash kerakmi? Natijani o'zingiz belgilaysiz.
+                      kartani yakunlash kerakmi?
                     </div>
                   )}
                   {diff && diff.exists && diff.changed.length > 0 && (
@@ -307,7 +319,7 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                                 } catch (e) {
                                   setSorovNatija((e as Error).message)
                                 }
-                              }}>Yuborish</Button>
+                              }}>So'rash</Button>
                             <Button size="sm" variant="outline"
                               onClick={() => setSorov(null)}>Bekor</Button>
                           </div>
@@ -324,7 +336,8 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                   <div className="flex gap-2">
                     <div className="flex-1">
                       <Label>Mas'ul</Label>
-                      <Select value={form.broker_id ? String(form.broker_id) : undefined}
+                      <Select value={form.broker_id ? String(form.broker_id) : ''}
+                        disabled={!editable}
                         onValueChange={(v) => set({ broker_id: Number(v) })}>
                         <SelectTrigger className="h-9 w-full bg-card text-body">
                           <SelectValue placeholder="—" />
@@ -338,7 +351,8 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                     </div>
                     <div className="flex-1">
                       <Label>Mijoz</Label>
-                      <Select value={form.client_id ? String(form.client_id) : undefined}
+                      <Select value={form.client_id ? String(form.client_id) : ''}
+                        disabled={!editable}
                         onValueChange={(v) => set({ client_id: Number(v) })}>
                         <SelectTrigger className="h-9 w-full bg-card text-body">
                           <SelectValue placeholder="—" />
@@ -356,11 +370,13 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                     <Label>Ustuvorlik</Label>
                     <div className="flex gap-1.5">
                       {priorities.map((p) => (
-                        <button key={p.code} type="button" onClick={() => set({ priority: p.code })}
+                        <button key={p.code} type="button" disabled={!editable}
+                          onClick={() => set({ priority: p.code })}
                           className={cn('rounded-md border px-3 py-1.5 text-body transition-colors',
+                            'disabled:cursor-not-allowed disabled:opacity-60',
                             form.priority === p.code
                               ? 'border-primary bg-secondary font-semibold text-primary'
-                              : 'hover:bg-accent')}>
+                              : 'enabled:hover:bg-accent')}>
                           {p.label}
                         </button>
                       ))}
@@ -371,6 +387,7 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                     <Label>Yutish ehtimoli (xodim bahosi)</Label>
                     <div className="flex items-center gap-3">
                       <Slider className="flex-1" min={0} max={100} step={5}
+                        disabled={!editable}
                         value={[form.win_probability ?? 0]}
                         onValueChange={([v]) => set({ win_probability: v })} />
                       <span className="tabular w-12 text-right text-body">
@@ -382,27 +399,32 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                   <div>
                     <Label>Izoh</Label>
                     <textarea
-                      className="min-h-16 w-full rounded-md border bg-card px-3 py-2 text-body outline-none focus-visible:border-primary"
+                      disabled={!editable}
+                      className="min-h-16 w-full rounded-md border bg-card px-3 py-2 text-body outline-none focus-visible:border-primary disabled:cursor-not-allowed disabled:opacity-70"
                       value={form.note ?? ''}
                       onChange={(e) => set({ note: e.target.value || null })} />
                   </div>
 
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <Label>Keyingi vazifa</Label>
-                      <Input value={form.next_task ?? ''}
-                        onChange={(e) => set({ next_task: e.target.value || null })} />
-                    </div>
-                    <div>
-                      <Label>Muddati</Label>
-                      <Input type="date" value={form.next_task_at ?? ''}
-                        onChange={(e) => set({ next_task_at: e.target.value || null })} />
-                    </div>
-                  </div>
+                  {/* "Keyingi vazifa" maydoni OLIB TASHLANDI: u
+                      `erp.opportunity` ustuniga yozilardi va hech
+                      qayerda ko'rinmasdi — vazifalar ro'yxati ham,
+                      "mening ishlarim" ham, eslatma ham
+                      `erp.opportunity_task` dan o'qiydi. Endi ish
+                      pastdagi "Vazifalar" ro'yxatiga yoziladi. */}
 
-                  <Button size="sm" disabled={saving} onClick={save}>
-                    {saving ? 'Saqlanmoqda…' : 'Saqlash'}
-                  </Button>
+                  {editable ? (
+                    <Button size="sm" disabled={saving} onClick={save}>
+                      {saving ? 'Saqlanmoqda…' : 'Saqlash'}
+                    </Button>
+                  ) : (
+                    <p className="text-caption text-muted-foreground">
+                      {o.is_final
+                        ? 'Karta yakunlangan — maydonlar tahrirlanmaydi. '
+                          + 'Tuzatish kerak bo\'lsa avval statusni ochiq '
+                          + 'holatga qaytaring (izoh so\'raladi va tarixda qoladi).'
+                        : 'Kartani tahrirlash — rahbar yoki menejer huquqi.'}
+                    </p>
+                  )}
                 </section>
               </div>
 

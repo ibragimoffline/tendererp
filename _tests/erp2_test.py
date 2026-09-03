@@ -344,6 +344,28 @@ def test_db():
                 eq("kartalar tarixi ko'rinadi", len(page["opportunities"]), 1)
                 eq("kartada mas'ul ko'rsatilgan",
                    page["opportunities"][0]["broker_name"], PREFIX + "Broker")
+                # STATUS YORLIG'I SERVERDAN: ekranda `won` emas,
+                # "Yutildi" ko'rinishi kerak va ro'yxat frontendда
+                # takrorlanmasligi kerak.
+                eq("kartada status yorlig'i o'zbekcha",
+                   page["opportunities"][0]["status_label"], "Yutildi")
+                # RAD ETILGANLAR alohida sanaladi: ular `win_rate`
+                # maxrajiga kirmaydi (qatnashmadik — yutqazmadik), lekin
+                # ko'rsatilmasa "1 ta karta, yutish 100%" degan qator
+                # qayerdan kelgani tushunarsiz qolardi.
+                check("rejected_n" in page["summary"],
+                      "yig'mada rad etilganlar soni bor",
+                      str(page["summary"]))
+                eq("rad etilgan yo'q", page["summary"]["rejected_n"], 0)
+                if len(opps) > 1:
+                    c.patch(f"/erp/opportunities/{opps[1]}/status",
+                            json={"status": "rejected"})
+                    p2 = c.get(f"/erp/clients/{a['id']}").json()
+                    eq("rad etilgan sanaldi", p2["summary"]["rejected_n"],
+                       sum(1 for o in p2["opportunities"]
+                           if o["status"] == "rejected"))
+                    eq("rad etilgan YUTISH FOIZIGA ta'sir qilmadi",
+                       p2["summary"]["win_rate"], 100)
 
                 st = c.get("/erp/stats").json()
                 row = next(x for x in st["by_client"] if x["id"] == a["id"])

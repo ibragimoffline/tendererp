@@ -99,7 +99,15 @@ function initials(name: string): string {
 
 /** MAVZU ALMASHTIRGICH — uchta holat, ikkita emas.
  *  "Tizim" alohida qiymat: kompyuter kechqurun qorong'iga o'tsa, ERP
- *  ham o'tishi kerak (`theme.ts`). */
+ *  ham o'tishi kerak (`theme.ts`).
+ *
+ *  TEGISH NISHONI: tugmalar avval 22px balandlikda edi — tavsiya etilgan
+ *  eng kichik nishon 24px dan ham past, sensorli ekranda esa uchtasi
+ *  yonma-yon turgani uchun barmoq deyarli har safar qo'shnisini bosardi.
+ *  Endi 28px, sensorli ekranda 44px (`DESIGN.md` -> "Tegish va fokus").
+ *
+ *  NOMI ham bor: `Icon` `aria-hidden`, ya'ni `aria-label` siz bu
+ *  tugmaning ekran o'quvchisi uchun nomi UMUMAN yo'q edi. */
 function ThemeSwitch({ theme, onChange }: {
   theme: Theme
   onChange: (t: Theme) => void
@@ -114,8 +122,8 @@ function ThemeSwitch({ theme, onChange }: {
       className="mx-2.5 my-1.5 flex gap-0.5 rounded-md bg-muted p-0.5">
       {opts.map((o) => (
         <button key={o.key} type="button" onClick={() => onChange(o.key)}
-          title={o.label} aria-pressed={theme === o.key}
-          className={cn('flex flex-1 items-center justify-center rounded-[5px] py-1 transition-colors',
+          title={o.label} aria-label={o.label} aria-pressed={theme === o.key}
+          className={cn('flex h-7 max-sm:h-11 flex-1 items-center justify-center rounded-sm transition-colors',
             theme === o.key
               ? 'bg-card text-foreground shadow-sm'
               : 'text-muted-foreground hover:text-foreground')}>
@@ -333,11 +341,17 @@ export default function App() {
 
           {/* Mobil ekranda yon panel yo'q — bo'lim almashtirgich shu yerda.
               Gorizontal siljish: bandlar siqilib o'qilmas bo'lib
-              qolgandan ko'ra surilgani afzal. */}
+              qolgandan ko'ra surilgani afzal.
+
+              Bu tasma FAQAT sensorli ekranda ko'rinadi (`md:hidden`),
+              ya'ni uni har doim barmoq bosadi. Avvalgi 26px balandlik
+              barmoq uchun juda kichik edi — 44px ga o'stirildi
+              (`DESIGN.md` -> "Tegish va fokus"). */}
           <div className="-mx-4 mt-3 flex gap-1 overflow-x-auto px-4 pb-1 md:hidden">
             {nav.map((n) => (
-              <button key={n.key} onClick={() => setView(n.key)}
-                className={cn('shrink-0 rounded-md px-2.5 py-1 text-caption transition-colors',
+              <button key={n.key} type="button" onClick={() => setView(n.key)}
+                aria-current={view === n.key ? 'page' : undefined}
+                className={cn('flex min-h-11 shrink-0 items-center rounded-md px-3 text-caption transition-colors',
                   view === n.key
                     ? 'bg-secondary font-semibold text-primary'
                     : 'text-muted-foreground hover:bg-accent')}>
@@ -356,9 +370,7 @@ export default function App() {
         {permLevel('karta.korish') === 'own' && !user.broker_id && (
           <div className="mb-3 rounded-lg border border-soon/40 bg-soon-soft px-3 py-2.5 text-body text-soon-strong">
             <span className="font-semibold">Hisobingiz hodimga bog'lanmagan.</span>{' '}
-            Shuning uchun kartalar, mijozlar va hujjatlar ro'yxati bo'sh.
-            Administrator "Hodimlar" ekranida hisobingizni hodim yozuviga
-            bog'lashi kerak.
+            Ro'yxatlar bo'sh bo'lib ko'rinadi. Administratorga murojaat qiling.
           </div>
         )}
 
@@ -408,7 +420,7 @@ export default function App() {
           olardi. Buning o'rniga nima qilish kerakligi aytiladi. */}
       {takeOpen && takeTender !== null && !can('karta.yaratish') && (
         <div className="fixed inset-x-0 bottom-4 mx-auto w-fit rounded-lg border bg-card px-4 py-3 text-body shadow">
-          Tenderni ishga olishni rahbar yoki menejer bajaradi.
+          Tenderni ishga olish — rahbar yoki menejer huquqi.
           <button type="button" className="ml-3 text-caption underline"
             onClick={() => setTakeOpen(false)}>yopish</button>
         </div>

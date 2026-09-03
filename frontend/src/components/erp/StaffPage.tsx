@@ -131,8 +131,8 @@ export default function StaffPage() {
           Hodimlar {rows ? `(${rows.length})` : ''}
         </h2>
         <p className="mb-3 text-caption text-muted-foreground">
-          Hodim — kartaga mas'ul va tarixdagi ism. Hisob — tizimga kirish.
-          Hodim hisobsiz ham bo'lishi mumkin (masalan omborchi).
+          Hodim — kartaga mas'ul. Hisob — tizimga kirish. Hodim hisobsiz ham
+          bo'ladi.
         </p>
 
         {rows && rows.length === 0 && (
@@ -281,8 +281,7 @@ export default function StaffPage() {
                     </div>
                   </div>
                   <p className="mt-2 text-micro text-muted-foreground">
-                    Parol shu yerda BIR MARTA ko'rsatiladi — uni hodimga
-                    o'zingiz yetkazasiz. Bazada faqat xeshi saqlanadi.
+                    Parol bir marta ko'rsatiladi — hodimga o'zingiz yetkazasiz.
                   </p>
                   <div className="mt-2 flex gap-2">
                     <Button size="sm"
@@ -320,9 +319,8 @@ export default function StaffPage() {
                     {s.user.username} uchun yangi parol
                   </div>
                   <p className="mb-2 text-micro text-muted-foreground">
-                    Joriy parol so'ralmaydi, lekin bu hisobning
-                    <b> hamma sessiyasi yopiladi</b> — u qaytadan kirishi
-                    kerak bo'ladi.
+                    Joriy parol so'ralmaydi. Hisobning
+                    <b> hamma sessiyasi yopiladi</b>.
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
                     <Input type="password" autoComplete="new-password"
@@ -379,9 +377,7 @@ export default function StaffPage() {
             Hodimga bog'lanmagan hisoblar ({unlinked.length})
           </h2>
           <p className="mb-3 text-caption text-muted-foreground">
-            Odatda bu tizim administratori — u tenderlar bilan ishlamaydi.
-            Bunday hisob kartaga mas'ul bo'lolmaydi va "mening ishlarim"
-            filtriga tushmaydi.
+            Bunday hisob kartaga mas'ul bo'lolmaydi.
           </p>
           <ul className="divide-y">
             {unlinked.map((u) => (
@@ -453,9 +449,8 @@ function TaiUlanish() {
     <section className="rounded-lg border bg-card p-4">
       <h2 className="mb-1 text-body font-semibold">Tender-AI ulanishi</h2>
       <p className="mb-3 text-caption text-muted-foreground">
-        Tender-AI da "Olindi" deyilgan tender shu yerda ish kartasiga
-        aylanadi. Buning uchun qaysi ijarachi ekanimiz ko'rsatilishi
-        kerak — bu taxmin qilinmaydi.
+        Tender-AI da "Olindi" deyilgan tender shu yerda kartaga aylanadi.
+        Ijarachi ko'rsatilmasa oqim ishlamaydi.
       </p>
       {error && <ErpError msg={error} />}
       {xabar && (
@@ -546,14 +541,13 @@ function SettingsPanel() {
     <section className="rounded-lg border bg-card p-4">
       <h2 className="mb-1 text-body font-semibold">Tizim sozlamalari</h2>
       <p className="mb-3 text-caption text-muted-foreground">
-        Bular HUQUQNI o'zgartiradi va darhol kuchga kiradi. Kim
-        o'zgartirgani yozib boriladi.
+        Huquqni o'zgartiradi, darhol kuchga kiradi. Kim o'zgartirgani
+        yoziladi.
       </p>
       {error && <ErpError msg={error} />}
       {!ready && (
         <div className="text-body text-muted-foreground">
-          schema_patch_erp_18.sql qo'llanmagan — sozlamalar standart
-          qiymatda ishlayapti.
+          Sozlamalar standart qiymatda (schema_patch_erp_18.sql qo'llanmagan).
         </div>
       )}
       <ul className="divide-y">
@@ -614,8 +608,8 @@ function LoginAttempts() {
         Muvaffaqiyatsiz kirish urinishlari ({rows.length})
       </h2>
       <p className="mb-3 text-caption text-muted-foreground">
-        Oxirgi 3 kun. Bitta login va manzil uchun ketma-ket bir necha xatodan
-        keyin kirish vaqtincha to'xtatiladi — hisobning o'zi bloklanmaydi.
+        Oxirgi 3 kun. Ketma-ket xatolardan keyin kirish vaqtincha
+        to'xtatiladi — hisob bloklanmaydi.
         {unknown > 0 && (
           <>
             {' '}

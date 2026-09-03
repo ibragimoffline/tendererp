@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import Icon from '../Icon'
 import { cn } from '@/lib/utils'
 import type { Act, Invoice } from '@/types'
-import { ErpError } from './erpShared'
+import { ErpError, can } from './erpShared'
 import ActPrint from './ActPrint'
 
 // DALOLATNOMA — faktura ichida.
@@ -31,6 +31,18 @@ function nextStatuses(cur: string): string[] {
   if (cur === 'cancelled' || cur === 'signed') return []
   if (cur === 'draft') return ['issued', 'cancelled']
   return ['signed', 'cancelled']
+}
+
+/** Shu holatga o'tkazish uchun kerak bo'lgan AMAL (`api/erp/perm.py`).
+ *
+ *  Ilgari tugmalar huquqqa qaramay ko'rinardi va broker "Chiqarish" ni
+ *  bosib 403 olardi — fakturada esa o'sha tugma umuman ko'rsatilmasdi.
+ *  Ikki ekranda ikki xil xatti-harakat: bu yerda faktura qoidasiga
+ *  keltiriladi — ruxsat berilmagan tugma CHIQARIB TASHLANADI. */
+const AMAL: Record<string, string> = {
+  issued: 'hujjat.chiqarish',
+  signed: 'hujjat.chiqarish',
+  cancelled: 'hujjat.bekor',
 }
 
 export default function ActPanel({ inv }: { inv: Invoice }) {
@@ -109,7 +121,7 @@ export default function ActPanel({ inv }: { inv: Invoice }) {
                   onClick={() => setPrintId(a.id)}>
                   Bosma shakl
                 </Button>
-                {nextStatuses(a.status).map((st) => (
+                {nextStatuses(a.status).filter((st) => can(AMAL[st])).map((st) => (
                   <Button key={st} size="sm"
                     variant={st === 'cancelled' ? 'ghost' : 'outline'}
                     disabled={busy}
@@ -137,6 +149,10 @@ export default function ActPanel({ inv }: { inv: Invoice }) {
         <p className="text-caption text-muted-foreground">
           Faktura bekor qilingan — yangi dalolatnoma chiqarilmaydi.
           Mavjudlari o'z holicha qoladi.
+        </p>
+      ) : !can('hujjat.qoralama') ? (
+        <p className="text-caption text-muted-foreground">
+          Dalolatnoma chiqarish — rahbar yoki menejer huquqi.
         </p>
       ) : (
         <div className="flex flex-wrap items-center gap-2">

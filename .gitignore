@@ -13,3 +13,8 @@ logs/
 
 # TypeScript build keshi - qurilish natijasi, kod emas
 *.tsbuildinfo
+
+# Agent vositalarining sozlamalari - kod emas, mashinaga xos
+.claude/
+.agents/
+skills-lock.json

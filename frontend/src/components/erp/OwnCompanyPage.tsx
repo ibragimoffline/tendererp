@@ -24,7 +24,7 @@ const FIELDS: { key: keyof OwnCompanyInput; label: string; wide?: boolean }[] = 
   { key: 'name', label: 'Kompaniya nomi', wide: true },
   { key: 'inn', label: 'INN (9 raqam)' },
   { key: 'oked', label: 'OKED' },
-  { key: 'legal_form', label: 'Tashkiliy shakl (MCHJ / AJ / YaTT)' },
+  { key: 'legal_form', label: 'Tashkiliy shakl (MCHJ, AJ…)' },
   { key: 'tax_mode', label: 'Soliq rejimi' },
   { key: 'address_legal', label: 'Yuridik manzil', wide: true },
   { key: 'address_actual', label: 'Faktik manzil', wide: true },
@@ -82,8 +82,8 @@ export default function OwnCompanyPage({ onOpenOpportunity }: {
       <section className="rounded-lg border bg-card p-4">
         <h2 className="mb-1 text-body font-semibold">Bizning rekvizitlar</h2>
         <p className="mb-3 text-caption text-muted-foreground">
-          Shartnoma va hisob-fakturada ishlatiladi. Tender-AI dagi kompaniya
-          profili (qidiruv sozlamalari) bundan alohida — u o'z joyida qoladi.
+          Shartnoma va hisob-fakturada ishlatiladi. Tender-AI dagi qidiruv
+          profili bundan alohida.
         </p>
 
         {own && own.missing.length > 0 && (

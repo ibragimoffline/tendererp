@@ -185,11 +185,18 @@ RETURNING id
 
 # Faqat XODIM maydonlari. Snapshot va status bu yerdan O'ZGARMAYDI: snapshot
 # ataylab muzlatilgan, status esa o'z endpointi orqali (tarix yozilishi uchun).
+#
+# `next_task` / `next_task_at` bu yerda YO'Q va bu ataylab. Ular
+# 1-bosqichdagi bitta "keyingi vazifa" maydoni edi; 3-bosqichda o'rniga
+# VAZIFALAR RO'YXATI keldi (`erp.opportunity_task`) va ekranlar, eslatma
+# skripti, "mening ishlarim" — hammasi o'sha ro'yxatdan o'qiydi. Ustunga
+# yozishda davom etish "saqlandi, lekin hech qayerda ko'rinmaydi" degan
+# o'lik maydon yaratardi. Ishga olishda kiritilgani esa HAQIQIY vazifaga
+# aylantiriladi (`take()` ga qarang).
 OPP_UPDATE_SQL = """
 UPDATE erp.opportunity SET
     broker_id=%(broker_id)s, client_id=%(client_id)s, priority=%(priority)s,
-    win_probability=%(win_probability)s, note=%(note)s,
-    next_task=%(next_task)s, next_task_at=%(next_task_at)s, updated_at=now()
+    win_probability=%(win_probability)s, note=%(note)s, updated_at=now()
 WHERE id = %(id)s
 RETURNING id
 """
@@ -458,7 +465,36 @@ def take(tender_id: int, data: dict) -> dict:
     db.execute_returning(HISTORY_INSERT_SQL, {
         "opportunity_id": row["id"], "from_status": None, "to_status": "new",
         "changed_by": data.get("created_by"), "note": "Ishga olindi"})
+    _birinchi_vazifa(row["id"], data)
     return get(row["id"])
+
+
+def _birinchi_vazifa(opp_id: int, data: dict) -> None:
+    """Formadagi "Keyingi vazifa" — HAQIQIY vazifa qatoriga aylanadi.
+
+    Ilgari u faqat `erp.opportunity.next_task` ustuniga yozilardi va
+    hech qayerda ko'rinmasdi: vazifalar ro'yxati ham, "mening
+    ishlarim" ham, eslatma skripti ham `erp.opportunity_task` dan
+    o'qiydi. Ya'ni odam muddat yozardi va u jimgina yo'qolardi.
+
+    Vazifalar sxemasi qo'llanmagan bo'lsa JIM o'tamiz: karta ochilishi
+    vazifadan muhimroq va 3-bosqich patchi ixtiyoriy bo'lib qolgan."""
+    nom = (data.get("next_task") or "").strip()
+    if not nom:
+        return
+    # Import shu yerda: `tasks` moduli `opportunity` dan o'qiydi, ya'ni
+    # modul darajasida qilinsa aylanma bog'lanish bo'lardi (`stock` va
+    # `xabar` bilan bir xil naqsh).
+    from api.erp import tasks as _tasks
+    try:
+        _tasks.add(opp_id, {
+            "title": nom,
+            "assignee_broker_id": data.get("broker_id"),
+            "due_at": data.get("next_task_at"),
+            "note": None,
+            "created_by": data.get("created_by")})
+    except ErpError:
+        pass
 
 
 def update(opp_id: int, data: dict) -> dict:
@@ -470,8 +506,7 @@ def update(opp_id: int, data: dict) -> dict:
                            "WHERE id = %(id)s", {"id": opp_id})
     row = db.execute_returning(OPP_UPDATE_SQL, {
         **{k: data.get(k) for k in ("broker_id", "client_id", "priority",
-                                    "win_probability", "note", "next_task",
-                                    "next_task_at")},
+                                    "win_probability", "note")},
         "id": opp_id})
     if not row:
         raise ErpError("Karta topilmadi.", 404)

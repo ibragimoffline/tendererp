@@ -168,8 +168,7 @@ export default function Dashboard({ user, onOpenOpportunity, onGo }: Props) {
       {stats.mixed_currency && (
         <p className="text-caption text-muted-foreground">
           Kartalar {stats.currencies.join(', ')} valyutalarida — pul
-          yig'indilari ko'rsatilmaydi. Kurs bo'yicha qo'shish qaysi kungi
-          kurs ekaniga bog'liq bo'lardi; sanoq esa to'g'ri qoladi.
+          yig'indilari ko'rsatilmaydi, sanoq esa to'g'ri qoladi.
         </p>
       )}
 
@@ -346,9 +345,8 @@ export default function Dashboard({ user, onOpenOpportunity, onGo }: Props) {
           </div>
           {!profit.complete && (
             <p className="mt-2 text-caption text-soon-strong">
-              Hisob to'liq emas: {profit.unknown_cost_moves} ta chiqimning
-              tannarxi noma'lum. Ular tannarxga qo'shilmadi — haqiqiy foyda
-              bundan kam.
+              Hisob to'liq emas: {profit.unknown_cost_moves} ta chiqimda
+              tannarx yo'q — haqiqiy foyda bundan kam.
             </p>
           )}
         </Panel>
@@ -404,9 +402,7 @@ function MineView({ user, tasks, mine, onOpenOpportunity, onGo }: {
 
       {!user.broker_id && (
         <p className="text-caption text-soon-strong">
-          Hisobingiz hodimga bog'lanmagan — shuning uchun "mening
-          kartalarim" bo'sh. Administratordan hisobni hodimga bog'lashni
-          so'rang.
+          Hisobingiz hodimga bog'lanmagan — kartalaringiz ko'rinmaydi.
         </p>
       )}
 
