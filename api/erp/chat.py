@@ -435,6 +435,32 @@ def tarix(msg_id: int) -> List[Dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # Yozish
 # ---------------------------------------------------------------------------
+# `pg_notify` — HOZIR HECH KIM TINGLAMAYDI va bu ataylab.
+#
+# Interfeys so'rov (polling) bilan yangilanadi, 5 soniyada
+# (`docs/erp_chat.md` §5): 5-15 hodimlik kompaniyada bu yetarli va
+# WebSocket joylashtirishga (Caddy, systemd) alohida talab qo'yadi.
+#
+# NEGA UNDA HOZIR YOZILADI: signal YOZILISHI — xabar yozilayotgan
+# joyda bo'lishi kerak, tinglovchi esa istalgan paytda qo'shiladi.
+# Keyin qo'shilsa, "qaysi joylarda yozishni unutdik" degan savol
+# paydo bo'lardi va bir-ikkitasi albatta unutilardi — natijada
+# WebSocket "ba'zan ishlaydi" bo'lib qolardi. Bu esa umuman
+# ishlamasligidan yomonroq.
+#
+# YIQITMAYDI: signal ketmasa ham xabar yozilgan va u polling bilan
+# baribir yetadi.
+NOTIFY_KANAL = "erp_chat"
+
+
+def _signal(chat_id: int) -> None:
+    try:
+        db.execute_returning("SELECT pg_notify(%(k)s, %(v)s) AS x",
+                             {"k": NOTIFY_KANAL, "v": str(chat_id)})
+    except Exception:                               # noqa: BLE001
+        import logging
+        logging.getLogger("erp.chat").debug(
+            "pg_notify yuborilmadi (chat %s)", chat_id, exc_info=True)
 def yoz(chat_id: int, user_id: int, text: str,
         reply_to_id: Optional[int] = None) -> Dict[str, Any]:
     _need_schema25()
@@ -453,6 +479,7 @@ def yoz(chat_id: int, user_id: int, text: str,
     row = db.execute_returning(MSG_INSERT_SQL, {
         "chat": chat_id, "author": user_id, "text": matn,
         "reply": reply_to_id})
+    _signal(chat_id)
     return _bitta(row["id"])
 
 
@@ -471,6 +498,7 @@ def tizim_xabari(chat_id: Optional[int], text: str) -> Optional[int]:
         row = db.execute_returning(MSG_INSERT_SQL, {
             "chat": chat_id, "author": None,
             "text": (text or "").strip()[:MAX_MATN], "reply": None})
+        _signal(chat_id)
         return row["id"] if row else None
     except Exception:                               # noqa: BLE001
         import logging
@@ -503,6 +531,9 @@ def tahrir(msg_id: int, user_id: int, text: str) -> Dict[str, Any]:
     db.execute_returning(HISTORY_INSERT_SQL, {
         "msg": msg_id, "amal": "tahrir", "old": m["text"], "by": user_id})
     db.execute_returning(MSG_EDIT_SQL, {"id": msg_id, "text": matn})
+    # Tahrir ham LENTANI o'zgartiradi: tinglovchi uchun "yangi xabar"
+    # va "o'zgargan xabar" farqi yo'q — u chatni qayta so'raydi.
+    _signal(m["chat_id"])
     return _bitta(msg_id)
 
 
@@ -534,6 +565,7 @@ def ochir(msg_id: int, user_id: int, moderator: bool = False,
         "msg": msg_id, "amal": "ochirish", "old": m["text"], "by": user_id})
     db.execute_returning(MSG_DELETE_SQL, {
         "id": msg_id, "by": user_id, "note": izoh})
+    _signal(m["chat_id"])
 
     if not oziniki:
         # Import shu yerda: `xabar` moduli `chat` ni bilmaydi va aylanma

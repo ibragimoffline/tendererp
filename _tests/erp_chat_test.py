@@ -408,6 +408,50 @@ def test_arxiv_va_oqilganlik(ctx):
 
 
 # ---------------------------------------------------------------------------
+# 5b. pg_notify — WebSocket uchun tayyorgarlik
+# ---------------------------------------------------------------------------
+def test_signal(ctx):
+    head("5b. pg_notify signali")
+    if not ctx:
+        print("  SKIP")
+        return
+    import os
+
+    import psycopg2
+    import psycopg2.extensions
+
+    # TINGLOVCHI HOZIR YO'Q va bu ataylab (polling ishlaydi). Lekin
+    # signalning YOZILISHI xabar yozilayotgan joyda bo'lishi kerak:
+    # keyin qo'shilsa bir-ikki joyda unutilardi va WebSocket "ba'zan
+    # ishlaydi" bo'lib qolardi. Sinov aynan shuni qo'riqlaydi.
+    conn = psycopg2.connect(os.environ["XT_DB_DSN"])
+    conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(f"LISTEN {C.NOTIFY_KANAL};")
+
+        m = C.yoz(ctx["cid"], ctx["egasi"], f"{MARK} signal sinovi")
+        conn.poll()
+        kelgan = [(n.channel, n.payload) for n in conn.notifies]
+        check((C.NOTIFY_KANAL, str(ctx["cid"])) in kelgan,
+              "xabar yozilganda signal ketdi", str(kelgan))
+
+        conn.notifies.clear()
+        C.tahrir(m["id"], ctx["egasi"], f"{MARK} tahrirlandi")
+        conn.poll()
+        check(any(n.payload == str(ctx["cid"]) for n in conn.notifies),
+              "TAHRIR ham signal beradi (lenta o'zgardi)")
+
+        conn.notifies.clear()
+        C.ochir(m["id"], ctx["egasi"])
+        conn.poll()
+        check(any(n.payload == str(ctx["cid"]) for n in conn.notifies),
+              "O'CHIRISH ham signal beradi")
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
 # 6. Tozalash va chegara
 # ---------------------------------------------------------------------------
 PUBLIC_SQL = """
@@ -469,6 +513,7 @@ if __name__ == "__main__":
             ctx = test_oqim()
             test_azolar(ctx)
             test_arxiv_va_oqilganlik(ctx)
+            test_signal(ctx)
         finally:
             test_tozalash(before)
 

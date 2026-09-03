@@ -1,9 +1,9 @@
 # Ichki chat — qurilish hisoboti (25-patch)
 
-> **Manba:** `erp_chat.md` — talab hujjati, loyiha egasi bergan.
-> U REPODA YO'Q (kelgan nusxada belgilar kodlashi buzilgan edi va
-> buzilgan matnni repoga qo'yish uni "rasmiy" qilib ko'rsatardi).
-> Talabning qaror qismi quyida to'liq keltirilgan.
+> **Manba:** `docs/erp_chat.md` — talab hujjati (loyiha egasi bergan
+> toza nusxa, 2026-09-04). Birinchi ikki nusxa cp1252 sifatida o'qilib
+> buzilgan edi va shuning uchun repoga qo'yilmagan; uchinchisi tiklab
+> yozildi. Bu fayl esa TALABDAN CHETGA CHIQILGAN joylarni yozadi.
 > **Kod:** `schema_patch_erp_25.sql`, `api/erp/chat.py`,
 > `frontend/src/components/erp/Muloqot.tsx`, `_tests/erp_chat_test.py`
 
@@ -88,9 +88,9 @@ javob bo'sh" bo'lardi. Endi `BITTA_SQL` alohida turadi.
 
 | | |
 |---|---|
-| `_tests/erp_chat_test.py` | **73** tekshiruv |
+| `_tests/erp_chat_test.py` | **76** tekshiruv |
 | Ekran sinovi | **5** yangi qoida (jami 47) |
-| Backend jami | **1 287 / 1 287**, 0 xato |
+| Backend jami | **1 290 / 1 290**, 0 xato |
 
 Sinov to'rtta buzilish sinfini qo'riqlaydi: jim sizib chiqish (begona
 broker), izsiz o'zgartirish (tahrir jurnali), yozilgan narsaning
@@ -101,9 +101,14 @@ xabarlari), "jimgina kuzatib yozish".
 
 ## 5. Hali qilinmadi
 
-- `pg_notify('erp_chat', chat_id)` — talabda "allaqachon yozilsin"
-  deyilgan, hozir **yo'q**. So'rov (polling) ishlaydi; WebSocket
-  qo'shilganda shu qator kerak bo'ladi.
+- ~~`pg_notify('erp_chat', chat_id)`~~ — **qilindi** (`chat._signal`).
+  Xabar yozilganda, tahrirlanganda va o'chirilganda yuboriladi.
+  Tinglovchi hozir yo'q va bu ataylab: signal YOZILISHI xabar
+  yozilayotgan joyda bo'lishi kerak, tinglovchi esa istalgan paytda
+  qo'shiladi. Keyin qo'shilsa "qaysi joyda yozishni unutdik" degan
+  savol paydo bo'lardi va bir-ikkitasi albatta unutilardi — natijada
+  WebSocket "ba'zan ishlaydi" bo'lib qolardi, bu esa umuman
+  ishlamasligidan yomonroq.
 - `@ism` tanlash interfeysi — server tomoni (`mentions`) tayyor,
   ekranda tanlash ro'yxati hali yo'q.
 - Chat ichida qidiruv — server tomoni (`?q=`) tayyor, ekranda maydon yo'q.
