@@ -452,6 +452,75 @@ def test_signal(ctx):
 
 
 # ---------------------------------------------------------------------------
+# 5c. Eslatish (@ism)
+# ---------------------------------------------------------------------------
+def test_eslatish(ctx):
+    head("5c. @ism eslatish")
+    if not ctx:
+        print("  SKIP")
+        return
+    cid, egasi, boshliq, begona = (ctx["cid"], ctx["egasi"],
+                                   ctx["boshliq"], ctx["begona"])
+
+    def xabarlar(uid):
+        return db.query_one(
+            "SELECT count(*) AS n FROM erp.notification "
+            "WHERE app_user_id = %(u)s AND kind = 'chat_mention'",
+            {"u": uid})["n"]
+
+    # `begona` hozir a'zo (4-bo'limda qayta qo'shilgan); ishonch uchun.
+    try:
+        C.azo_qosh(cid, boshliq, begona)
+    except O.ErpError:
+        pass
+
+    m = C.yoz(cid, egasi, f"{MARK} @kimdir qarab yuboring")
+    oldin = xabarlar(begona)
+    r = C.eslat(cid, egasi, m["id"], [begona])
+    eq("a'zoni eslatish -> bildirishnoma", r["eslatildi"], 1)
+    eq("bildirishnoma yozildi", xabarlar(begona), oldin + 1)
+
+    # TAKROR YO'Q: "eslatishni unutdim, tahrirlab qo'shdim" ishlashi
+    # kerak, lekin har tahrirda hammaga takror ketmasligi ham.
+    r = C.eslat(cid, egasi, m["id"], [begona])
+    eq("ikkinchi marta -> takror YO'Q", r["eslatildi"], 0)
+    eq("bildirishnoma soni o'zgarmadi", xabarlar(begona), oldin + 1)
+
+    # A'ZO BO'LMAGAN id JIMGINA tashlanadi, 400 EMAS: foydalanuvchi
+    # tuzata olmaydigan holat (u ro'yxatdan tanlagan, oradan a'zo
+    # chiqarilgan bo'lishi mumkin). Xato qaytarsak uning XABARI
+    # sababsiz yuborilmay qolardi.
+    yoq = _user("zztest_chat_azo_emas", "broker")
+    r = C.eslat(cid, egasi, m["id"], [yoq])
+    eq("a'zo bo'lmagan id -> jimgina tashlandi", r["eslatildi"], 0)
+    eq("tashlangani SANALADI", r["tashlandi"], 1)
+    eq("unga bildirishnoma yozilmadi", xabarlar(yoq), 0)
+
+    # O'ZINI eslatish sanalmaydi.
+    r = C.eslat(cid, egasi, m["id"], [egasi])
+    eq("o'zini eslatish -> 0", r["eslatildi"], 0)
+
+    # TAHRIRDA yangi odam qo'shilsa — unga ketadi.
+    oldin_b = xabarlar(boshliq)
+    C.tahrir(m["id"], egasi, f"{MARK} @boshliq ham qarasin")
+    r = C.eslat(cid, egasi, m["id"], [begona, boshliq])
+    eq("tahrirda YANGI id ga ketdi", r["eslatildi"], 1)
+    eq("boshliqqa yozildi", xabarlar(boshliq), oldin_b + 1)
+    eq("eskisiga TAKROR ketmadi", xabarlar(begona), oldin + 1)
+
+    # Jadvalda kimga yuborilgani QOLADI (26-patch).
+    saqlangan = db.query_one(
+        "SELECT eslatilgan FROM erp.chat_message WHERE id = %(i)s",
+        {"i": m["id"]})["eslatilgan"]
+    check(set(saqlangan) == {begona, boshliq},
+          "kimga yuborilgani xabarda saqlandi", str(saqlangan))
+
+    db.execute_returning(
+        "UPDATE erp.app_user SET active = FALSE WHERE id = %(i)s "
+        "RETURNING id", {"i": yoq})
+
+
+# ---------------------------------------------------------------------------
 # 6. Tozalash va chegara
 # ---------------------------------------------------------------------------
 PUBLIC_SQL = """
@@ -514,6 +583,7 @@ if __name__ == "__main__":
             test_azolar(ctx)
             test_arxiv_va_oqilganlik(ctx)
             test_signal(ctx)
+            test_eslatish(ctx)
         finally:
             test_tozalash(before)
 

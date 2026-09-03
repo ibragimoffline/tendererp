@@ -1257,9 +1257,18 @@ def erp_chat_send(chat_id: int, body: ChatMessageIn,
 @app.put("/erp/chats/{chat_id}/messages/{mid}")
 def erp_chat_edit(chat_id: int, mid: int, body: ChatMessageIn,
                   user: Dict[str, Any] = Depends(me)):
-    """FAQAT o'z xabari. Eski matn tarixga yoziladi."""
+    """FAQAT o'z xabari. Eski matn tarixga yoziladi.
+
+    ESLATISH TAHRIRDA HAM ISHLAYDI: "eslatishni unutdim, tahrirlab
+    qo'shdim" — haqiqiy holat. Lekin faqat YANGI id larga yuboriladi
+    (`chat_message.eslatilgan`), aks holda har tahrirda hammaga takror
+    ketardi va odam bildirishnomalarni o'qimay yopishni odat qilardi."""
     _can(user, "chat.yozish")
-    return _erp(erp_chat.tahrir, mid, auth.user_id(user), body.text)
+    uid = auth.user_id(user)
+    msg = _erp(erp_chat.tahrir, mid, uid, body.text)
+    if body.mentions:
+        _erp(erp_chat.eslat, chat_id, uid, mid, body.mentions)
+    return msg
 
 
 @app.delete("/erp/chats/{chat_id}/messages/{mid}")

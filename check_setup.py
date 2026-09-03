@@ -90,6 +90,11 @@ PATCH_COLUMNS = [
      "bizning QQS holatimiz"),
     ("schema_patch_erp_14.sql", "erp", "stock_move", "unit_cost",
      "muzlatilgan tannarx (foyda hisobi)"),
+    # 26-patch YANGI JADVAL QO'SHMAYDI — faqat ustun. Yuqoridagi
+    # `PATCHES` ro'yxatiga qo'yilsa `chat_message` allaqachon 25-patchda
+    # yaratilgani uchun tekshiruv YOLG'ON "OK" berardi.
+    ("schema_patch_erp_26.sql", "erp", "chat_message", "eslatilgan",
+     "chatda eslatish: kimga bildirishnoma yuborilgan"),
 ]
 
 

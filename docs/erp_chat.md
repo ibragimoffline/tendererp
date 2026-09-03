@@ -18,7 +18,7 @@ tegilmaydi. ERP'da bo'lim nomi "Muloqot". Chegara o'zgarmaydi: chat
 
 **Holat (2026-09-04):** qurilgan va yurgizilgan —
 `schema_patch_erp_25.sql`, `api/erp/chat.py`, 11 endpoint, `Muloqot.tsx`,
-`_tests/erp_chat_test.py` (76 tekshiruv). Qurilish jurnali va chetlanishlar
+`_tests/erp_chat_test.py` (88 tekshiruv). Qurilish jurnali va chetlanishlar
 sabablari: `docs/erp_chat_qurilish.md`.
 
 ---
@@ -52,9 +52,17 @@ Belgilar: `+` mumkin · `oz` faqat o'z xabari/kartasi · `-` mumkin emas.
 > Sinov `can()` ni emas, shu matritsani tekshiradi — u sozlama yoqilganda
 > xulq qanday bo'lishini qo'riqlaydi.
 >
-> **Ochiq savol:** `admin_faqat_koradi` qachon va kim tomonidan yoqiladi?
-> Agar u hech qachon yoqilmasa, bu ustun va uni qo'riqlayotgan sinov
-> ishlatilmaydigan apparatga aylanadi (`UPDATED.md` §18 sinfi).
+> **Yoqish tartibi (hal qilindi).** Savol "qachon yoqamiz" emas edi:
+> hozir uni yoqib BO'LMAYDI, chunki bazada faol `rahbar` ham,
+> `menejer` ham yo'q — yoqilsa kompaniyada biznes ma'lumotni
+> o'zgartira oladigan hech kim qolmasdi. Tartib: rahbar hisobini
+> oching -> faollashtiring -> shundan keyin yoqing.
+>
+> Himoya endi KODDA: `sozlama.saqla("admin_faqat_koradi", True)` faol
+> rahbar/menejer bo'lmasa **400** qaytaradi va sababini aytadi. Ilgari
+> u faqat izohda edi, ya'ni odam o'qishiga tayanardi — bu loyihada
+> takrorlangan sinf ("izoh bilan himoyalangan qoida", `UPDATED.md`
+> §16). O'chirish har doim mumkin: u huquqni kengaytiradi.
 
 | Amal | admin | rahbar | menejer | broker |
 |---|---|---|---|---|
@@ -200,9 +208,30 @@ Hammasi ERP sessiyasi ostida; huquq `perm.can()` orqali (endpoint ichida
 Xato kodlari: a'zo emas -> 403; arxiv chatga yozish -> 400; biriktirilgan
 hodimni chiqarish -> 400; o'zganing xabarini tahrirlash -> 403.
 
-**`mentions` id bilan yuboriladi, matndan qidirilmaydi.** Matndan
-`@ism` qidirilsa bir xil ismli ikki hodimda bildirishnoma noto'g'ri odamga
-ketardi. Ekran qismi hali yo'q (§9).
+**Eslatish (`@ism`) — uch filtr, uchalasi ham ongli qaror:**
+
+1. **Id bilan yuboriladi, matndan qidirilmaydi.** Matndan `@ism`
+   qidirilsa bir xil ismli ikki hodimda bildirishnoma noto'g'ri odamga
+   ketardi, umuman topilmasa esa jim qolardi.
+2. **Faqat SHU CHATNING faol a'zolari.** Ekranda taklif ro'yxati
+   `GET /erp/chats/{id}/members` dan quriladi (qo'shimcha endpoint
+   yo'q) va faolsiz hodim ko'rsatilmaydi. A'zo bo'lmagan id server
+   tomonda **jimgina tashlanadi**, 400 emas: bu foydalanuvchi tuzata
+   olmaydigan holat (u ro'yxatdan tanlagan, oradan a'zo chiqarilgan
+   bo'lishi mumkin) va xato qaytarsak uning XABARI sababsiz
+   yuborilmay qolardi. Chatda yo'q odamni eslatmoqchi bo'lsa — avval
+   qo'shadi.
+3. **Takror yo'q.** Kimga yuborilgani `chat_message.eslatilgan`
+   (26-patch) da qoladi. Bu TAHRIRDA muhim: "eslatishni unutdim,
+   tahrirlab qo'shdim" ishlashi kerak, lekin har tahrirda hammaga
+   takror ketsa odam bildirishnomalarni o'qimay yopishni odat
+   qilardi — shundan keyin haqiqiy eslatish ham ko'rinmay qolardi.
+
+**Matn va id bog'lanishi.** Tanlangach matnga `@Ism Familiya` yoziladi
+va id mijozda eslab qolinadi. Yuborishdan oldin ro'yxat MATN bo'yicha
+filtrlanadi: foydalanuvchi ismni o'chirgan bo'lsa id ham ketadi —
+ko'rinmaydigan eslatish yuborilmasin. Server bunga ISHONMAYDI va
+a'zolikni qayta tekshiradi (2-band).
 
 **O'qilgan chegara faqat oldinga siljiydi** — `greatest(eski, yangi)`. Aks
 holda eski sahifani ochish unread ni "tiriltirar" edi.
@@ -244,7 +273,7 @@ bo'lib qolardi, bu esa umuman ishlamasligidan yomonroq.
 
 ---
 
-## 8. Sinov — `_tests/erp_chat_test.py` (76 tekshiruv)
+## 8. Sinov — `_tests/erp_chat_test.py` (88 tekshiruv)
 
 1. Umumiy chat bitta (baza darajasida ham); har kartada chat bor.
 2. Broker begona karta chatini ko'rmaydi (403); a'zo qilingach ko'radi.
@@ -267,12 +296,18 @@ bo'lib qolardi, bu esa umuman ishlamasligidan yomonroq.
     `admin_faqat_koradi` hozir o'chiq.
 13. `pg_notify` — xabar yozilganda, tahrirlanganda va o'chirilganda
     signal ketadi (haqiqiy `LISTEN` ulanishi bilan tekshiriladi).
-14. `ZZTEST` yozuvlari `finally` da tozalanadi; `public.*` qator soni
+14. Eslatish: a'zoga ketadi; ikkinchi marta takror yo'q; a'zo
+    bo'lmagan id jimgina tashlanadi; o'zini eslatish sanalmaydi;
+    tahrirda YANGI id ga ketadi, eskisiga takror emas; kimga
+    yuborilgani xabarda saqlanadi.
+15. `ZZTEST` yozuvlari `finally` da tozalanadi; `public.*` qator soni
     o'zgarmagan.
 
-Ekran sinovi (`qoidalar.test.tsx`, 5 qoida): o'chirilgan xabar yo'qolmaydi;
+Ekran sinovi (`qoidalar.test.tsx`, 10 qoida): o'chirilgan xabar yo'qolmaydi;
 unga javob ko'rinadi; arxivda / a'zo bo'lmaganda / huquqsiz yozish maydoni
-yo'q va SABABI yoziladi; tizim xabarida tugmalar yo'q.
+yo'q va SABABI yoziladi; tizim xabarida tugmalar yo'q; `@` ro'yxati
+faqat faol a'zolardan va harf bo'yicha filtrlanadi; matndan ism
+o'chirilsa `mentions` yuborilmaydi.
 
 ---
 
@@ -280,7 +315,7 @@ yo'q va SABABI yoziladi; tizim xabarida tugmalar yo'q.
 
 | Nima | Server | Ekran | Izoh |
 |---|---|---|---|
-| `@ism` tanlash ro'yxati | tayyor (`mentions[]`) | **yo'q** | Ekransiz maydonni to'ldirib bo'lmaydi — server tomoni hozircha o'lik kod. **Birinchi navbatda** |
+| `@ism` tanlash ro'yxati | tayyor | **tayyor** | Bajarildi: taklif ro'yxati a'zolardan, matndan o'chirilsa id ham ketadi |
 | Chat ichida qidiruv | tayyor (`?q=`) | yo'q | `ILIKE`, chat ichida |
 | WebSocket/SSE | `pg_notify` yoziladi | yo'q | Polling 5 s yetarli; deploy talabi (Caddy/systemd) tufayli keyinga |
-| `admin_faqat_koradi` yoqish qarori | — | — | Yoqilmasa §2 admin ustuni ishlatilmaydigan apparat bo'lib qoladi |
+| `admin_faqat_koradi` yoqish | himoya qo'shildi | — | Yoqish uchun avval FAOL rahbar hisobi kerak (§2). Bu `check_setup.py` 9-bo'limidagi "birinchi real ma'lumot" qadami |

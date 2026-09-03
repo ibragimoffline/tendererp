@@ -88,9 +88,9 @@ javob bo'sh" bo'lardi. Endi `BITTA_SQL` alohida turadi.
 
 | | |
 |---|---|
-| `_tests/erp_chat_test.py` | **76** tekshiruv |
-| Ekran sinovi | **5** yangi qoida (jami 47) |
-| Backend jami | **1 290 / 1 290**, 0 xato |
+| `_tests/erp_chat_test.py` | **88** tekshiruv |
+| Ekran sinovi | **10** yangi qoida (jami 52) |
+| Backend jami | **1 304 / 1 304**, 0 xato |
 
 Sinov to'rtta buzilish sinfini qo'riqlaydi: jim sizib chiqish (begona
 broker), izsiz o'zgartirish (tahrir jurnali), yozilgan narsaning
@@ -109,6 +109,10 @@ xabarlari), "jimgina kuzatib yozish".
   savol paydo bo'lardi va bir-ikkitasi albatta unutilardi — natijada
   WebSocket "ba'zan ishlaydi" bo'lib qolardi, bu esa umuman
   ishlamasligidan yomonroq.
-- `@ism` tanlash interfeysi — server tomoni (`mentions`) tayyor,
-  ekranda tanlash ro'yxati hali yo'q.
+- ~~`@ism` tanlash interfeysi~~ — **qilindi**. Taklif ro'yxati
+  `GET /erp/chats/{id}/members` dan (qo'shimcha endpoint yo'q), faqat
+  FAOL a'zolar. Matndan ism o'chirilsa id ham ketadi; server a'zolikni
+  qayta tekshiradi va a'zo bo'lmagan id ni JIMGINA tashlaydi.
+  Tahrirda eslatish qo'shilsa faqat YANGI id larga yuboriladi
+  (`chat_message.eslatilgan`, 26-patch).
 - Chat ichida qidiruv — server tomoni (`?q=`) tayyor, ekranda maydon yo'q.

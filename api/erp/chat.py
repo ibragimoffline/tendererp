@@ -265,6 +265,19 @@ WHERE opportunity_id = %(opp)s
 RETURNING id, archived_at
 """
 
+# Eslatish holati (26-patch). `eslatilgan` = kimga bildirishnoma
+# YUBORILGAN, "hozir kim eslatilgan" emas.
+ESLATILGAN_SQL = ("SELECT id, chat_id, eslatilgan FROM erp.chat_message "
+                  "WHERE id = %(id)s")
+
+# `||` emas, birlashtirish: bir xil id ikki marta tushmasin.
+ESLATILGAN_QOSH_SQL = """
+UPDATE erp.chat_message
+SET eslatilgan = ARRAY(SELECT DISTINCT unnest(eslatilgan || %(ids)s::int[]))
+WHERE id = %(id)s
+RETURNING id
+"""
+
 USER_BY_BROKER_SQL = ("SELECT id FROM erp.app_user "
                       "WHERE broker_id = %(b)s AND active ORDER BY id LIMIT 1")
 
@@ -767,29 +780,57 @@ def eslat(chat_id: int, kim_id: int, msg_id: int,
           user_ids: List[int]) -> Dict[str, Any]:
     """`@ism` eslatish -> bildirishnoma.
 
-    MATNDAN QIDIRILMAYDI: bir xil ismli ikki hodim bo'lsa xabar
-    noto'g'ri odamga ketardi, umuman topilmasa esa JIM qolardi.
-    Interfeys kimni eslatganini aniq yuboradi.
+    UCH FILTR, uchalasi ham ongli qaror (`docs/erp_chat.md` §5):
 
-    Faqat CHATNING FAOL A'ZOLARI eslatiladi: a'zo bo'lmagan odamga
-    "sizni eslatishdi" deb yuborish, u ochganda 403 bilan tugardi."""
+    1. MATNDAN QIDIRILMAYDI — interfeys id yuboradi. Matndan `@ism`
+       qidirilsa bir xil ismli ikki hodimda bildirishnoma noto'g'ri
+       odamga ketardi, umuman topilmasa esa JIM qolardi.
+    2. FAQAT CHAT A'ZOLARI. A'zo bo'lmagan id JIMGINA TASHLANADI,
+       400 emas: bu foydalanuvchi tuzata olmaydigan holat (u shunchaki
+       ro'yxatdan tanlagan, oradan a'zo chiqarilgan bo'lishi mumkin).
+       Xato qaytarsak, uning xabari sababsiz yuborilmay qolardi.
+    3. TAKROR YO'Q. Kimga bildirishnoma yuborilgani `chat_message.
+       eslatilgan` da qoladi va ikkinchi marta yuborilmaydi. Bu
+       TAHRIRDA muhim: "eslatishni unutdim, tahrirlab qo'shdim"
+       ishlashi kerak, lekin har tahrirda hammaga takror yuborilsa
+       odam bildirishnomalarni o'qimay yopishni odat qilardi.
+
+    O'ZINI ESLATISH sanalmaydi.
+    """
     _need_schema25()
     ch = _chat_yoki_404(chat_id)
-    kimlar = {int(u) for u in (user_ids or []) if int(u) != kim_id}
-    if not kimlar:
-        return {"eslatildi": 0}
+    m = db.query_one(ESLATILGAN_SQL, {"id": msg_id})
+    if not m:
+        raise ErpError("Xabar topilmadi.", 404)
+    allaqachon = set(m["eslatilgan"] or [])
+    soralgan = {int(u) for u in (user_ids or []) if int(u) != kim_id}
+    if not soralgan:
+        return {"eslatildi": 0, "message_id": msg_id, "tashlandi": 0}
+
     if ch["turi"] == "umumiy":
         mumkin = {r["app_user_id"] for r in db.query(UMUMIY_AZO_SQL, {})}
     else:
         mumkin = {r["app_user_id"] for r in db.query(AZO_SQL, {"chat": chat_id})}
+    azolar_ = soralgan & mumkin
+    yangi = azolar_ - allaqachon
+
     kim = db.query_one("SELECT full_name FROM erp.app_user WHERE id = %(id)s",
                        {"id": kim_id}) or {}
     nom = ch["title"] or "Umumiy"
     from api.erp import xabar
-    n = 0
-    for uid in sorted(kimlar & mumkin):
+    ketgan = []
+    for uid in sorted(yangi):
         if xabar.yoz(uid, "chat_mention",
                      f"{kim.get('full_name') or 'Hodim'} sizni eslatdi "
                      f"({nom}).", ch["opportunity_id"]):
-            n += 1
-    return {"eslatildi": n, "message_id": msg_id}
+            ketgan.append(uid)
+    if ketgan:
+        # FAQAT YUBORILGANLARI yoziladi. `xabar.yoz()` yiqilsa (hisobi
+        # yo'q hodim) uni "yuborilgan" deb belgilash keyingi urinishni
+        # ham to'sib qo'yardi.
+        db.execute_returning(ESLATILGAN_QOSH_SQL,
+                             {"id": msg_id, "ids": ketgan})
+    return {"eslatildi": len(ketgan), "message_id": msg_id,
+            # Interfeys uchun emas, SINOV va jurnal uchun: a'zo
+            # bo'lmagani uchun tashlanganlar soni.
+            "tashlandi": len(soralgan - mumkin)}

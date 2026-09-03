@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import Icon from '../Icon'
 import { cn } from '@/lib/utils'
 import type {
-  ErpChat, ErpChatLenta, ErpChatMembers, ErpChatMessage,
+  ErpChat, ErpChatLenta, ErpChatMember, ErpChatMembers, ErpChatMessage,
 } from '@/types'
 import { ErpError, can } from './erpShared'
 
@@ -30,6 +30,17 @@ import { ErpError, can } from './erpShared'
 /** So'rov oralig'i (ms). */
 const POLL_MS = 5000
 
+/** Taklif ro'yxatida ko'rsatiladigan eng ko'p hodim. */
+const TAKLIF_MAX = 6
+
+// `@` dan KURSORGACHA bo'lgan qism. Ikkinchi `@` va qator uzilishi uni
+// tugatadi, ya'ni "@Ali va @Vali" da faqat OXIRGISI qidiriladi.
+//
+// BO'SH JOY ATAYLAB tugatmaydi: ism ikki so'zdan iborat ("Ism
+// Familiya") va probelda to'xtasak, familiyani yozayotgan odamda
+// taklif ro'yxati yo'qolib qolardi.
+const AT_RE = /@([^@\n]{0,40})$/
+
 interface Props {
   /** Berilsa — faqat SHU chat ko'rsatiladi (karta oynasi uchun). */
   chatId?: number
@@ -50,6 +61,14 @@ export default function Muloqot({ chatId, oppId, compact }: Props) {
   const [tahrir, setTahrir] = useState<ErpChatMessage | null>(null)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  // ESLATISH. Kalit — hisob id si, qiymat — TANLANGAN paytdagi ism.
+  //
+  // Ism saqlanadi, chunki yuborishdan oldin "bu ism matnda hali ham
+  // turibdimi" deb tekshiriladi: foydalanuvchi `@Ism` ni o'chirsa id
+  // ham ketishi kerak, aks holda ko'rinmaydigan eslatish yuborilardi.
+  const [eslatilgan, setEslatilgan] = useState<Record<number, string>>({})
+  const [taklif, setTaklif] = useState<ErpChatMember[]>([])
+  const [kursor, setKursor] = useState(0)
   const oxiri = useRef<HTMLDivElement>(null)
   const yolg = useRef(false)          // birinchi yuklashdan keyin pastga surish
 
@@ -122,20 +141,57 @@ export default function Muloqot({ chatId, oppId, compact }: Props) {
     yolg.current = true
   }, [lenta?.messages.length])
 
+  // --- eslatish (@ism) ---------------------------------------------------
+  // RO'YXAT FAQAT SHU CHATNING FAOL A'ZOLARIDAN. A'zo bo'lmagan
+  // hodimni eslatib bo'lmaydi: "eslatdim, lekin u chatni ko'rmaydi"
+  // degan holat chiqardi. Kerak bo'lsa avval chatga qo'shiladi.
+  function matnOzgardi(v: string, caret: number) {
+    setMatn(v)
+    setKursor(caret)
+    const m = AT_RE.exec(v.slice(0, caret))
+    if (!m || !azolar) { setTaklif([]); return }
+    const q = m[1].toLowerCase()
+    setTaklif(azolar.members
+      .filter((a) => a.active && a.full_name.toLowerCase().includes(q))
+      .slice(0, TAKLIF_MAX))
+  }
+
+  function tanla(a: ErpChatMember) {
+    const oldi = matn.slice(0, kursor).replace(AT_RE, `@${a.full_name} `)
+    setMatn(oldi + matn.slice(kursor))
+    setKursor(oldi.length)
+    setEslatilgan((p) => ({ ...p, [a.app_user_id]: a.full_name }))
+    setTaklif([])
+  }
+
+  /** MATNDA hali ham turgan eslatishlar. Foydalanuvchi ismni
+   *  o'chirgan bo'lsa id ham ketadi — server ham tekshiradi, lekin
+   *  ko'rinmaydigan eslatishni umuman yubormaslik to'g'riroq. */
+  function joriyEslatishlar(): number[] {
+    return Object.entries(eslatilgan)
+      .filter(([, nom]) => matn.includes(`@${nom}`))
+      .map(([id]) => Number(id))
+  }
+
   async function yubor() {
     if (!aktiv || !matn.trim()) return
     setBusy(true)
     try {
+      const mentions = joriyEslatishlar()
       if (tahrir) {
-        await api.chatEdit(aktiv, tahrir.id, matn.trim())
+        await api.chatEdit(aktiv, tahrir.id, matn.trim(),
+                           mentions.length ? mentions : undefined)
         setTahrir(null)
       } else {
         await api.chatSend(aktiv, {
           text: matn.trim(), reply_to_id: javob?.id ?? null,
+          mentions: mentions.length ? mentions : undefined,
         })
         setJavob(null)
       }
       setMatn('')
+      setEslatilgan({})
+      setTaklif([])
       await lentaniYukla(aktiv)
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
@@ -331,13 +387,38 @@ export default function Muloqot({ chatId, oppId, compact }: Props) {
               lentada ko'rinadi.
             </p>
           ) : (
-            <div className="flex items-end gap-2">
+            <div className="relative flex items-end gap-2">
+              {/* @ISM TAKLIFI — faqat shu chatning faol a'zolari. */}
+              {taklif.length > 0 && (
+                <ul role="listbox" aria-label="Eslatish uchun hodimlar"
+                  className="absolute bottom-full left-0 z-10 mb-1 w-64
+                             overflow-hidden rounded-md border bg-popover shadow-lg">
+                  {taklif.map((a) => (
+                    <li key={a.app_user_id}>
+                      <button type="button"
+                        className="w-full px-3 py-1.5 text-left text-body hover:bg-accent"
+                        onClick={() => tanla(a)}>
+                        {a.full_name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
               <Input
                 value={matn} disabled={busy}
                 aria-label="Xabar matni"
-                placeholder="Xabar…"
-                onChange={(e) => setMatn(e.target.value)}
+                placeholder="Xabar… (@ bilan hodimni eslatish)"
+                onChange={(e) => matnOzgardi(
+                  e.target.value, e.target.selectionStart ?? e.target.value.length)}
                 onKeyDown={(e) => {
+                  // Taklif ochiq bo'lsa Escape uni yopadi, Enter esa
+                  // xabarni YUBORMAYDI: odam ismni tanlamoqchi edi.
+                  if (e.key === 'Escape' && taklif.length) {
+                    e.preventDefault(); setTaklif([]); return
+                  }
+                  if (e.key === 'Enter' && taklif.length) {
+                    e.preventDefault(); tanla(taklif[0]); return
+                  }
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
                     void yubor()

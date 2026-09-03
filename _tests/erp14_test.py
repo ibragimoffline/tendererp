@@ -182,7 +182,31 @@ def test_db():
             eq("menejer: foyda yoqilgan -> 200",
                c.get("/erp/profit").status_code, 200)
 
+            # YOQISHDAN OLDINGI SHART: faol rahbar/menejer bo'lmasa
+            # sozlama kompaniyani o'z ERP sidan QULFLAB qo'yardi —
+            # biznes ma'lumotni o'zgartira oladigan hech kim qolmasdi.
+            # Himoya endi KODDA, izohda emas.
+            db.execute_returning(
+                "UPDATE erp.app_user SET active = FALSE "
+                "WHERE role IN ('rahbar','menejer') AND active RETURNING id")
+            S.kesh_tozala()
+            try:
+                S.saqla("admin_faqat_koradi", True, actor="ZZTEST Sinov")
+                check(False, "faol rahbarsiz yoqish RAD ETILISHI kerak edi")
+            except Exception as e:                  # noqa: BLE001
+                check("rahbar yoki menejer" in str(e),
+                      "faol rahbar/menejer yo'q -> yoqish RAD ETILADI",
+                      str(e)[:80])
+
+            # Endi shart bajariladi va sozlama yoqiladi.
+            mid = db.execute_returning(
+                "INSERT INTO erp.app_user (username, full_name, "
+                "password_hash, role, active) VALUES ('zztest_rahbar', "
+                "'ZZTEST Rahbar', 'x', 'rahbar', TRUE) "
+                "ON CONFLICT (username) DO UPDATE SET active = TRUE "
+                "RETURNING id")["id"]
             S.saqla("admin_faqat_koradi", True, actor="ZZTEST Sinov")
+            check(True, "faol rahbar bor -> yoqildi")
             kir(_user("admin"))
             eq("admin: faqat ko'radi -> kartani tahrirlay olmaydi",
                c.put(f"/erp/opportunities/{d['opp']}",
@@ -192,6 +216,9 @@ def test_db():
             eq("admin: tizim ishi o'ziniki",
                c.get("/erp/users").status_code, 200)
             S.saqla("admin_faqat_koradi", False, actor="ZZTEST Sinov")
+            db.execute_returning(
+                "UPDATE erp.app_user SET active = FALSE WHERE id = %(i)s "
+                "RETURNING id", {"i": mid})
 
             head("4. Sozlamalar ekrani — faqat admin")
             kir(_user("admin"))

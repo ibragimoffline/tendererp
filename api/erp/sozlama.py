@@ -65,6 +65,48 @@ SOZLAMALAR: Dict[str, Any] = {
         "ERP siga yozolmay qoladi."),
 }
 
+# ---------------------------------------------------------------------------
+# YOQISHDAN OLDINGI SHART
+# ---------------------------------------------------------------------------
+# `admin_faqat_koradi` ni yoqish — QAYTARIB BO'LMAYDIGAN qulf bo'lishi
+# mumkin: agar faol `rahbar` ham, `menejer` ham bo'lmasa, yoqilgandan
+# keyin kompaniyada biznes ma'lumotni o'zgartira oladigan HECH KIM
+# qolmaydi. Sozlamani o'chirish esa `tizim.sozlama` huquqini talab
+# qiladi — u adminda bor, ya'ni chiqib ketish yo'li bor. Lekin bu
+# yo'lni topgunicha kompaniya "ERP buzildi" deb o'ylaydi.
+#
+# NEGA KODDA, IZOHDA EMAS: shu paytgacha himoya `perm.py` dagi izohda
+# va sozlama ta'rifida edi — ya'ni ODAM O'QISHIGA tayanardi. Bu
+# loyihada takrorlangan sinf ("izoh bilan himoyalangan qoida",
+# `UPDATED.md` §16): izoh xatoni to'smaydi, faqat tushuntiradi.
+YOQISH_UCHUN_SQL = """
+SELECT count(*) AS n FROM erp.app_user
+WHERE active AND role = ANY(%(rollar)s)
+"""
+
+#: kalit -> (kerakli rollar, xato matni). Faqat YOQISHDA tekshiriladi:
+#: o'chirish har doim mumkin (u huquqni kengaytiradi, toraytirmaydi).
+YOQISH_SHARTI: Dict[str, Any] = {
+    "admin_faqat_koradi": (
+        ("rahbar", "menejer"),
+        "Bu sozlamani yoqish uchun avval FAOL rahbar yoki menejer "
+        "hisobi kerak. Hozir bunday hisob yo'q: yoqilsa kompaniyada "
+        "karta, mijoz, ombor va pul hujjatini o'zgartira oladigan hech "
+        "kim qolmaydi. Tartib: rahbar hisobini oching -> faollashtiring "
+        "-> shundan keyin yoqing."),
+}
+
+
+def _shartni_tekshir(key: str, value: bool) -> None:
+    shart = YOQISH_SHARTI.get(key)
+    if not value or not shart:
+        return
+    rollar, matn = shart
+    r = db.query_one(YOQISH_UCHUN_SQL, {"rollar": list(rollar)})
+    if not r or not r["n"]:
+        raise ErpError(matn, 400)
+
+
 #: Kesh muddati (soniya). Qisqa: sozlama kamdan-kam o'zgaradi, lekin
 #: o'zgargani darhol sezilishi kerak.
 TTL = 15.0
@@ -154,6 +196,7 @@ def saqla(key: str, value: bool, actor: Optional[str] = None) -> Dict[str, Any]:
         raise ErpError("Sozlama qiymati ha/yo'q bo'lishi kerak.", 400)
     if not schema_ready():
         raise ErpError("schema_patch_erp_18.sql qo'llanmagan.", 503)
+    _shartni_tekshir(key, value)
     db.execute_returning(SET_SQL, {"k": key, "v": "true" if value else "false",
                                    "a": actor}, actor=actor)
     kesh_tozala()

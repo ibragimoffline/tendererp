@@ -525,9 +525,12 @@ export const api = {
   chatSend: (chatId: number, body: { text: string; reply_to_id?: number | null;
                                      mentions?: number[] }) =>
     request<{ id: number }>('POST', `/erp/chats/${chatId}/messages`, { body }),
-  chatEdit: (chatId: number, mid: number, text: string) =>
+  /** Tahrirda ham `mentions` yuboriladi: "eslatishni unutdim,
+   *  tahrirlab qo'shdim" ishlashi kerak. Server faqat YANGI id larga
+   *  bildirishnoma yuboradi (`chat_message.eslatilgan`). */
+  chatEdit: (chatId: number, mid: number, text: string, mentions?: number[]) =>
     request<{ id: number }>('PUT', `/erp/chats/${chatId}/messages/${mid}`,
-                            { body: { text } }),
+                            { body: { text, mentions } }),
   chatDelete: (chatId: number, mid: number, note?: string) =>
     request<{ id: number }>('DELETE', `/erp/chats/${chatId}/messages/${mid}`,
                             { body: note ? { note } : {} }),

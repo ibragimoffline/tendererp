@@ -808,3 +808,79 @@ describe('Muloqot: tizim xabari MULOQOT emas', () => {
     expect(screen.queryByRole('button', { name: /Tahrir/ })).toBeNull()
   })
 })
+
+
+// ---------------------------------------------------------------------------
+// MULOQOT: @ISM ESLATISH
+// ---------------------------------------------------------------------------
+// Ikki qoida faqat EKRANDA ushlanadi:
+//   1) taklif ro'yxati FAQAT shu chatning faol a'zolaridan — a'zo
+//      bo'lmagan odamni eslatib bo'lmasin ("eslatdim, lekin u chatni
+//      ko'rmaydi" holati);
+//   2) matndan ism o'chirilsa id ham ketsin — ko'rinmaydigan eslatish
+//      yuborilmasin.
+describe('Muloqot: @ism faqat A‘ZOLARDAN', () => {
+  const AZOLAR = {
+    chat_id: 7, turi: 'opportunity', virtual: false,
+    members: [
+      { app_user_id: 11, full_name: 'A. Karimov', username: 'ak',
+        role: 'broker', active: true, added_at: null, added_by_name: null },
+      { app_user_id: 12, full_name: 'B. To‘xtayev', username: 'bt',
+        role: 'menejer', active: true, added_at: null, added_by_name: null },
+      { app_user_id: 13, full_name: 'C. Faolsiz', username: 'cf',
+        role: 'broker', active: false, added_at: null, added_by_name: null },
+    ],
+  }
+
+  async function yoz(v: string) {
+    setPerms({ 'chat.korish': 'full', 'chat.yozish': 'full' })
+    muloqot(LENTA({}, [MSG()]), AZOLAR)
+    const maydon = await screen.findByLabelText(/Xabar matni/)
+    await userEvent.type(maydon, v)
+    return maydon as HTMLInputElement
+  }
+
+  it('@ yozilganda A‘ZOLAR ro‘yxati chiqadi', async () => {
+    await yoz('salom @')
+    const ro = await screen.findByRole('listbox', { name: /Eslatish uchun/ })
+    expect(ro).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'A. Karimov' })).toBeTruthy()
+    // FAOLSIZ hodim ro'yxatda YO'Q.
+    expect(screen.queryByRole('button', { name: /C\. Faolsiz/ })).toBeNull()
+  })
+
+  it('yozilgan harf bo‘yicha FILTRLANADI', async () => {
+    await yoz('@Kari')
+    expect(await screen.findByRole('button', { name: 'A. Karimov' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /To.xtayev/ })).toBeNull()
+  })
+
+  it('tanlangach matnga ISM qo‘yiladi', async () => {
+    const maydon = await yoz('@Kari')
+    await userEvent.click(await screen.findByRole('button', { name: 'A. Karimov' }))
+    expect(maydon.value).toContain('@A. Karimov')
+    // Ro'yxat yopiladi.
+    expect(screen.queryByRole('listbox', { name: /Eslatish uchun/ })).toBeNull()
+  })
+
+  it('matndan ism o‘chirilsa mentions YUBORILMAYDI', async () => {
+    api.chatSend.mockResolvedValue({ id: 99 })
+    const maydon = await yoz('@Kari')
+    await userEvent.click(await screen.findByRole('button', { name: 'A. Karimov' }))
+    await userEvent.clear(maydon)
+    await userEvent.type(maydon, 'ism o‘chirildi')
+    await userEvent.click(screen.getByRole('button', { name: /Yuborish/ }))
+    const [, body] = api.chatSend.mock.calls.at(-1) ?? []
+    expect(body.mentions).toBeUndefined()
+  })
+
+  it('ism matnda qolsa mentions YUBORILADI', async () => {
+    api.chatSend.mockResolvedValue({ id: 99 })
+    const maydon = await yoz('@Kari')
+    await userEvent.click(await screen.findByRole('button', { name: 'A. Karimov' }))
+    await userEvent.type(maydon, 'qarab yuboring')
+    await userEvent.click(screen.getByRole('button', { name: /Yuborish/ }))
+    const [, body] = api.chatSend.mock.calls.at(-1) ?? []
+    expect(body.mentions).toEqual([11])
+  })
+})

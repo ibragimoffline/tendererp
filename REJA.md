@@ -676,12 +676,34 @@ chiqishlar: `docs/erp_chat_qurilish.md`.
       "Muloqot" bo'limi va karta oynasida tab. So'rov (polling) 5 s;
       WebSocket ataylab yo'q.
 - [x] **7.7. Sinov** — `_tests/erp_chat_test.py` (73 tekshiruv) va
-      ekranda 5 ta yangi qoida. Jami: **1 287 backend + 47 ekran**.
+      ekranda 5 ta yangi qoida (7.8-7.11 dan keyin: 1 304 va 52).
 
-**Qilinmadi (ochiq):** `pg_notify('erp_chat', ...)` — talabda
-"allaqachon yozilsin" deyilgan, WebSocket qo'shilganda kerak bo'ladi;
-`@ism` tanlash ro'yxati (server tomoni tayyor); chat ichida qidiruv
-maydoni (server tomoni `?q=` tayyor).
+- [x] **7.8. Talab hujjati repoda** — `docs/erp_chat.md`. Uch nusxa
+      cp1252 orqali buzilib kelgan edi (`—` -> `â`); tiklab yozildi va
+      `charset=utf-8` tekshirildi. `.gitattributes` ga `*.md text
+      eol=lf`; `erp_audit.md` va `erp_foyda.md` LF ga keltirildi.
+- [x] **7.9. `pg_notify('erp_chat', ...)`** — xabar yozilganda,
+      TAHRIRLANGANDA va O'CHIRILGANDA. Tinglovchi hozir yo'q va bu
+      ataylab; signal YOZILISHI esa hozir qilindi — keyin qo'shilsa
+      bir-ikki joyda unutilardi va WebSocket "ba'zan ishlaydi" bo'lib
+      qolardi. Sinov haqiqiy `LISTEN` bilan tekshiradi.
+- [x] **7.10. `@ism` eslatish ekrani** — taklif ro'yxati
+      `GET /erp/chats/{id}/members` dan (qo'shimcha endpoint yo'q),
+      faqat FAOL a'zolar. Matndan ism o'chirilsa id ham ketadi.
+      Server a'zolikni qayta tekshiradi va a'zo bo'lmagan id ni
+      JIMGINA tashlaydi (400 emas: foydalanuvchi tuzata olmaydi).
+      `schema_patch_erp_26.sql` — `chat_message.eslatilgan`: tahrirda
+      faqat YANGI id larga yuboriladi, takror emas.
+- [x] **7.11. `admin_faqat_koradi` himoyasi** — sozlamani yoqishga
+      urinish endi O'ZI tekshiradi: faol rahbar/menejer yo'q bo'lsa
+      **400** va sabab. Ilgari himoya faqat IZOHDA edi, ya'ni odam
+      o'qishiga tayanardi (`UPDATED.md` §16 sinfi: "izoh bilan
+      himoyalangan qoida"). O'chirish har doim mumkin.
+
+**Qilinmadi (ochiq):** WebSocket/SSE tinglovchisi (`pg_notify`
+tayyor); chat ichida qidiruv maydoni (server tomoni `?q=` tayyor);
+`admin_faqat_koradi` ni yoqish — avval FAOL rahbar hisobi kerak
+(`check_setup.py` 9-bo'lim).
 
 ---
 
