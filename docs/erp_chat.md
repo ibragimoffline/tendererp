@@ -52,11 +52,21 @@ Belgilar: `+` mumkin · `oz` faqat o'z xabari/kartasi · `-` mumkin emas.
 > Sinov `can()` ni emas, shu matritsani tekshiradi — u sozlama yoqilganda
 > xulq qanday bo'lishini qo'riqlaydi.
 >
-> **Yoqish tartibi (hal qilindi).** Savol "qachon yoqamiz" emas edi:
-> hozir uni yoqib BO'LMAYDI, chunki bazada faol `rahbar` ham,
-> `menejer` ham yo'q — yoqilsa kompaniyada biznes ma'lumotni
-> o'zgartira oladigan hech kim qolmasdi. Tartib: rahbar hisobini
-> oching -> faollashtiring -> shundan keyin yoqing.
+> **Yoqish tartibi.** Savol "qachon yoqamiz" emas edi: texnik to'siq
+> bor edi — faol `rahbar` ham, `menejer` ham yo'q bo'lsa, yoqilganda
+> kompaniyada biznes ma'lumotni o'zgartira oladigan hech kim qolmasdi.
+>
+> To'siq 2026-09-04 da olindi: `rahbar` hisobi ochildi va qulf
+> ochilishi tekshirildi. **Lekin sozlama YOQILMADI va hozircha
+> yoqilmasin.** Sabab: faol rahbar bitta va u hali ISHLATILMAGAN
+> hisob. Sozlamani yoqish adminni cheklaydi, ya'ni hamma ish o'sha
+> yangi hisobga o'tadi — agar unga kirishda muammo chiqsa (parol,
+> cookie, ekran) kompaniya to'xtaydi.
+>
+> Tartib: rahbar hisobi bilan HAQIQIY ish qilinsin (bir-ikki karta,
+> chat, status o'tishi) -> ishlashiga ishonch hosil bo'lsin -> shundan
+> keyin sozlama yoqilsin. Ya'ni yana o'sha qoida: ikkinchi qadam
+> birinchisi ishlatilgani KO'RINGANDAN keyin.
 >
 > Himoya endi KODDA: `sozlama.saqla("admin_faqat_koradi", True)` faol
 > rahbar/menejer bo'lmasa **400** qaytaradi va sababini aytadi. Ilgari

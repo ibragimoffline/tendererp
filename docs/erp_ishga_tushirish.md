@@ -305,6 +305,13 @@ Tartib:
 3. `check_setup.py` 3-bo'limi endi "N ta faol rahbar/menejer — rollar
    ajratilgan" deb yozadi. Yozmasa — qadam bajarilmagan.
 
+**`admin_faqat_koradi` ni DARHOL yoqmang.** Rahbar hisobi ochilgani
+qulfni ochadi, lekin sozlamani yoqish adminni cheklaydi va hamma ish
+yangi hisobga o'tadi. Agar o'sha hisobga kirishda muammo chiqsa
+(parol, cookie, ekran) kompaniya to'xtaydi. Avval rahbar hisobi bilan
+haqiqiy ish qiling — bir-ikki karta, chat, status o'tishi — keyin
+yoqing.
+
 **2-qadam `auth-6` bilan bog'liq:** hodim hisobi ochilgach, unga parolni
 o'zi almashtirish kerak bo'ladi — yon paneldagi "Parolni o'zgartirish"
 har kim uchun ochiq (`erp_auth.md` 11).

@@ -227,6 +227,20 @@ manbada yo'q" deb ko'rsatadi, snapshot esa o'z joyida qoladi.
   bazasiz ham sinaladi — bitta sinov fayli ikkala turni ham o'z ichiga oladi.
 - **Chegara sinovi majburiy:** `public.*` asosiy jadvallarining qator soni
   va `max(updated_at)` sinovdan oldin va keyin bir xil.
+- **BEGONA yozuvni o'zgartirsa — TIKLASIN.** `ZZTEST` prefiksi sinov
+  YARATGAN yozuvni himoya qiladi, lekin sinov MAVJUD qatorni ham
+  o'zgartirishi mumkin. Xavfli shakl — `WHERE` da toifa (`role IN
+  (...)`, `WHERE active`), xavfsizi — sinovning O'Z id si.
+  Toifa bo'yicha o'zgartirish kerak bo'lsa: id larni yozib oling,
+  `finally` da tiklang va tiklanganini OCHIQ ayting.
+
+  Bir marta buzilgan: `erp14_test.py` shartni sinash uchun BARCHA
+  rahbar/menejer hisoblarini faolsizlantirardi va qaytarmasdi — ya'ni
+  sinov to'plamini yurgizish kompaniyaning rahbar hisobini o'chirib
+  qo'yardi, JIMGINA. Oqibati faqat keyingi `check_setup` javobida
+  ko'rinardi. Butun `_tests/` ko'rib chiqildi (2026-09-04): boshqa
+  hech qayerda bu shakl yo'q — qolgan `UPDATE`/`DELETE` lar o'z id si
+  yoki `ZZ` belgisi bo'yicha tanlaydi.
 - Bazadagi haqiqiy tender kerak (`take` uchun): `SELECT id FROM tender LIMIT 1`;
   baza bo'sh bo'lsa sinov shu qismini `SKIP` deb belgilaydi, yiqilmaydi.
 
