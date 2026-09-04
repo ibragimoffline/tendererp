@@ -745,6 +745,25 @@ chiqishlar: `docs/erp_chat_qurilish.md`.
 3. **WebSocket/SSE** — oxirida. `pg_notify` tayyor; tinglovchi
    joylashtirishga (Caddy, systemd) talab qo'yadi.
 
+**Bajarildi (2026-09-04):**
+
+- [x] **Rahbar hisobi OCHILDI** (`rahbar`, egasi ruxsati bilan). Ism
+      ATAYLAB o'rin egallovchi — haqiqiy odam nomini dasturchi o'ylab
+      topmaydi. `check_setup` 3-bo'limi yashilga o'tdi va
+      `admin_faqat_koradi` qulfi ochilishi tekshirildi (sozlama
+      O'CHIQ qoldirildi — bu egasining qarori).
+- [x] **`olchov.py`** — inson halqasi hisoblagichlari. Faqat o'qiydi;
+      JAMI va ODAM alohida ustunda; o'lchanmagan narsa `—`, nol emas;
+      oldingi yurish bilan farq (`_olchov/YYYY-MM-DD.json`).
+      `check_setup` rahbar sonini shundan oladi — manba bitta.
+      Sinov: `_tests/olchov_test.py` (38 tekshiruv), ikkala nuqson
+      ataylab kiritilib yiqilishi ko'rsatildi.
+- [x] **`erp14_test.py` BEGONA yozuvni tiklamasdi** — u shartni sinash
+      uchun BARCHA rahbar/menejer hisoblarini faolsizlantirardi va
+      qaytarmasdi. Ya'ni sinov to'plamini yurgizish kompaniyaning
+      rahbar hisobini o'chirib qo'yardi (yangi ochilgan `rahbar` bilan
+      aynan shunday bo'ldi). Endi id lar yozib olinadi va tiklanadi.
+
 **Ochiq qarz — IKKI TOMONLI (bu repoda yopib bo'lmaydi):**
 
 `ERP_SERVICE_KEY` tekshiruvi (`check_setup.py` 5-bo'lim) hozir

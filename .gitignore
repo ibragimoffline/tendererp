@@ -18,3 +18,7 @@ logs/
 .claude/
 .agents/
 skills-lock.json
+
+# O'lchov natijalari (olchov.py) - MA'LUMOT, kod emas. Har o'rnatmada
+# o'z raqamlari bo'ladi va ular birlashtirilmaydi.
+_olchov/

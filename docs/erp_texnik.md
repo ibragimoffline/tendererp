@@ -283,6 +283,36 @@ Bu qoida sinovlarga ham tegishli: `patch_test.py` da izohlardagi
 `CREATE TABLE` obyekt deb sanalmasligi ALOHIDA tekshiriladi — aks
 holda tekshiruvni tekshiruvchining o'zi yolg'on "OK" bergan bo'lardi.
 
+### 6.2 O'lchov — `olchov.py`
+
+```
+.venv/Scripts/python.exe olchov.py
+.venv/Scripts/python.exe olchov.py --saqlamasdan
+```
+
+Loyihaning qoidasi — "yangi qatlam qo'shishdan OLDIN hisoblagichlarni
+ko'ring" — bajarib bo'lmaydigan holatda edi: ko'radigan buyruq yo'q,
+raqamlar har safar qo'lda so'rov yozib olinardi. Bu asbob o'sha
+bo'shliqni yopadi. **Yangi qatlam emas — qoidani bajarish uchun
+kerak bo'lgan o'lchagich.**
+
+Uchta va'da (`_tests/olchov_test.py` qo'riqlaydi):
+
+1. **Faqat o'qiydi.** Bazaga hech narsa yozmaydi; yagona yozuvi —
+   o'z natijasi (`_olchov/YYYY-MM-DD.json`, `.gitignore` da).
+2. **JAMI va ODAM alohida.** Yig'ma raqam yolg'on tasalli beradi:
+   karta tarixi 77 ta ko'rinadi, odam yozgani 9 ta.
+3. **O'lchanmagan narsa NOL EMAS.** Jadval yo'q bo'lsa `—`, `0`
+   emas. Nol — o'lchandi va hech narsa topilmadi degani.
+
+Chiqishda oxirgi oldingi yurish bilan farq ham bor (`+2`, `0`), ya'ni
+"ikki hafta ishlangandan keyin o'zgardimi" degan savolga javob o'zi
+keladi. Jadval ham, jurnal ham kerak emas.
+
+**Manba bitta:** `check_setup.py` faol rahbar/menejer sonini
+`olchov.boshliq_soni()` dan oladi va o'z SQL so'rovini yozmaydi.
+Sinov buni tekshiradi (`check_setup` da qo'lda rol so'rovi qolmagan).
+
 ---
 
 ## 7. Yurgizish va muhit

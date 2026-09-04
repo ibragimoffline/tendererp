@@ -99,6 +99,7 @@ tender erp/
 ├── schema_patch_erp_17.sql      # ROLLAR: rahbar va menejer ajratildi
 ├── create_user.py               # hodim hisobi CLI (birinchi admin)
 ├── check_setup.py               # TAYYORLIK tekshiruvi (7 bo'lim)
+├── olchov.py                    # INSON HALQASI hisoblagichlari (faqat o'qiydi)
 ├── cleanup_demo.py              # demo/sinov yozuvlarini tozalash
 ├── register_erp_task.ps1        # eslatmani jadvalga qo'yadi
 ├── backup_erp.ps1               # ZAXIRA: faqat erp sxemasi (pg_dump -Fc)

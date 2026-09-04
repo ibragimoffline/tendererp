@@ -186,9 +186,20 @@ def test_db():
             # sozlama kompaniyani o'z ERP sidan QULFLAB qo'yardi —
             # biznes ma'lumotni o'zgartira oladigan hech kim qolmasdi.
             # Himoya endi KODDA, izohda emas.
+            #
+            # DIQQAT — SINOV BEGONA YOZUVGA TEGADI. Shartni sinash
+            # uchun HAQIQIY rahbar hisoblarini vaqtincha faolsizlantirish
+            # kerak. Birinchi yozuvda ular QAYTARILMAGAN edi va sinov
+            # to'plamini yurgizish kompaniyaning rahbar hisobini
+            # o'chirib qo'yardi — `check_setup` esa keyingi yurishda
+            # "rollar ajratilmagan" deb yozardi. Endi id lar yozib
+            # olinadi va `finally` da TIKLANADI.
+            ochirilgan = [r["id"] for r in db.query(
+                "SELECT id FROM erp.app_user WHERE active "
+                "AND role IN ('rahbar','menejer')", {})]
             db.execute_returning(
                 "UPDATE erp.app_user SET active = FALSE "
-                "WHERE role IN ('rahbar','menejer') AND active RETURNING id")
+                "WHERE id = ANY(%(ids)s) RETURNING id", {"ids": ochirilgan})
             S.kesh_tozala()
             try:
                 S.saqla("admin_faqat_koradi", True, actor="ZZTEST Sinov")
@@ -219,6 +230,13 @@ def test_db():
             db.execute_returning(
                 "UPDATE erp.app_user SET active = FALSE WHERE id = %(i)s "
                 "RETURNING id", {"i": mid})
+            # BEGONA yozuvlarni TIKLAYMIZ (yuqoridagi izohga qarang).
+            if ochirilgan:
+                db.execute_returning(
+                    "UPDATE erp.app_user SET active = TRUE "
+                    "WHERE id = ANY(%(ids)s) RETURNING id",
+                    {"ids": ochirilgan})
+                check(True, f"{len(ochirilgan)} ta begona hisob TIKLANDI")
 
             head("4. Sozlamalar ekrani — faqat admin")
             kir(_user("admin"))

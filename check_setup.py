@@ -30,6 +30,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import olchov  # noqa: E402
 from api import auth, db  # noqa: E402
 
 OK, WARN, ERR = "OK  ", "OGOH", "XATO"
@@ -315,9 +316,11 @@ def main() -> int:
             # ko'rinmasdi — 9-bo'lim "hisoblar bor" deb "joyida"
             # yozardi. Ya'ni tekshiruv BOR edi, lekin BOSHQA narsani
             # o'lchardi (`_tests/patch_test.py` dagi bilan bir sinf).
-            boshliq = db.scalar(
-                "SELECT count(*) FROM erp.app_user WHERE active "
-                "AND role IN ('rahbar', 'menejer')") or 0
+            # SO'ROV `olchov.py` DA, bu yerda emas. Ikki joyda ikki
+            # so'rov bo'lsa, rol ro'yxati o'zgarganda bittasi
+            # yangilanib ikkinchisi eskirardi ("bir tuzatish, ikki
+            # chaqiruv joyi" sinfi).
+            boshliq = olchov.boshliq_soni() or 0
             if boshliq:
                 say(OK, f"{boshliq} ta faol rahbar/menejer — rollar ajratilgan")
             else:
@@ -467,8 +470,7 @@ def main() -> int:
                              "WHERE active") or 0
         linked = db.scalar("SELECT count(*) FROM erp.app_user "
                            "WHERE active AND broker_id IS NOT NULL") or 0
-        boshliq_n = db.scalar("SELECT count(*) FROM erp.app_user WHERE active "
-                              "AND role IN ('rahbar', 'menejer')") or 0
+        boshliq_n = olchov.boshliq_soni() or 0
         steps.append((f"Hodimlar ({brokers} ta), hisoblar ({accounts} ta), "
                       f"rahbar/menejer ({boshliq_n} ta)",
                       # RAHBAR/MENEJER ham SHART: usiz qadam "bajarildi"
