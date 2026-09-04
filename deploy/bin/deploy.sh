@@ -126,10 +126,26 @@ log "frontend quriladi"
 
 # QURILMA TEKSHIRUVI — mahalliy manzil singib qolmaganiga ISHONMAYMIZ,
 # QARAYMIZ. `VITE_API_BASE` nisbiy (`/api`) bo'lishi kerak; qotirilgan
-# `localhost` ommaviy sahifada ishlamaydi.
-if grep -rqE 'localhost|127\.0\.0\.1|0\.0\.0\.0' "${YANGI}/frontend/dist/assets"; then
-    grep -roE 'localhost:[0-9]*|127\.0\.0\.1:[0-9]*' "${YANGI}/frontend/dist/assets" \
-        | sort -u | head -20 >&2
+# `localhost` foydalanuvchi brauzerida O'SHA BRAUZERNING mashinasini
+# bildiradi, serverni emas — ya'ni havola hammada singan bo'lardi.
+#
+# NAQSH `//` DAN BOSHLANADI va bu ATAYLAB. Oddiy
+# `localhost|127\.0\.0\.1` ni qidirish YOLG'ON OGOHLANTIRISH beradi
+# — o'lchandi (2026-09-04, birinchi qurilma):
+#
+#     dist/assets/index-*.js:
+#       psql "dbname=xtxarid user=postgres host=localhost" -f ...
+#
+# Bu interfeys OPERATORGA KO'RSATADIGAN buyruq namunasi, tarmoq
+# manzili emas. Uni to'sish qurilmani bekorga bloklardi va tekshiruvni
+# "har safar o'chirib qo'yiladigan" narsaga aylantirardi.
+#
+# `//localhost` esa faqat URL da uchraydi (`http://localhost:8100`),
+# ya'ni naqsh AYNAN qidirilayotgan narsani ushlaydi.
+if grep -rqE '(https?:)?//(localhost|127\.0\.0\.1|0\.0\.0\.0)' \
+        "${YANGI}/frontend/dist/assets"; then
+    grep -roE '(https?:)?//(localhost|127\.0\.0\.1|0\.0\.0\.0)(:[0-9]+)?' \
+        "${YANGI}/frontend/dist/assets" | sort -u | head -20 >&2
     xato "qurilmada MAHALLIY manzil bor (yuqorida) — ommaviy sahifada ishlamaydi"
 fi
 log "qurilma toza: mahalliy manzil yo'q"
