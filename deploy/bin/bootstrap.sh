@@ -37,8 +37,25 @@ fi
 # `var/logs` — ERP jurnali shu yerga tushadi. Sabab `tendererp-api@.service`
 # dagi izohda: jurnal yo'li kodda qotirilgan va reliz katalogi yozishdan
 # yopilgan, shuning uchun `<reliz>/logs` shu yerga havola qilinadi.
+#
+# ORALIQ KATALOGLAR HAM SANALADI. `install -d` egalik va rejimni FAQAT
+# yo'lning OXIRGI qismiga qo'yadi; oraliq kataloglarni u yaratadi,
+# lekin ular standart egalikda — `root:root` — qoladi.
+#
+# Bu tender-ai da o'lchangan nuqson (o'sha repozitoriyda ham
+# tuzatildi): `releases` xizmat foydalanuvchisiniki bo'lardi, uning
+# USTIDAGI `/opt/tendererp/<muhit>` esa root niki. `deploy.sh` esa
+# `current` havolasini AYNAN o'sha katalogda yaratadi va
+# `tendererp` nomidan yuradi:
+#
+#     ln: Permission denied
+#
+# Ya'ni joylashtirish oxirgi qadamda, migratsiyalar qo'llangandan
+# KEYIN yiqilardi.
 install -d -o tendererp -g tendererp -m 0755 \
+    "/opt/tendererp/${MUHIT}" \
     "/opt/tendererp/${MUHIT}/releases" \
+    "/opt/tendererp/${MUHIT}/var" \
     "/opt/tendererp/${MUHIT}/var/logs" \
     "/opt/tendererp/${MUHIT}/var/cache"
 install -d -o root -g tendererp -m 0750 /etc/tendererp
