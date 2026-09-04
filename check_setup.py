@@ -303,6 +303,31 @@ def main() -> int:
             else:
                 say(OK, f"{n} ta faol hisob, shundan {admins} tasi admin")
 
+            # ROLLAR AJRATILGANMI. Bu XATO emas va OGOHLANTIRISH ham
+            # "ishlamayapti" degani emas: `admin_faqat_koradi` o'chiq
+            # turganda admin hamma narsani qila oladi, ya'ni tizim
+            # ISHLAYDI. Lekin u holda kompaniyada bitta hisob HAMMA
+            # ishni bajaradi va 18 ta amal (karta yaratish, chat
+            # moderatsiyasi, yakuniydan qaytarish...) rollar bo'yicha
+            # AJRATILMAYDI.
+            #
+            # NEGA KERAK: shu paytgacha bu holat hech qayerda
+            # ko'rinmasdi — 9-bo'lim "hisoblar bor" deb "joyida"
+            # yozardi. Ya'ni tekshiruv BOR edi, lekin BOSHQA narsani
+            # o'lchardi (`_tests/patch_test.py` dagi bilan bir sinf).
+            boshliq = db.scalar(
+                "SELECT count(*) FROM erp.app_user WHERE active "
+                "AND role IN ('rahbar', 'menejer')") or 0
+            if boshliq:
+                say(OK, f"{boshliq} ta faol rahbar/menejer — rollar ajratilgan")
+            else:
+                say(WARN, "faol rahbar/menejer yo'q — hamma ish ADMIN "
+                          "hisobidan qilinadi",
+                    "tizim ishlaydi, lekin: (1) rollar ajratilmagan, "
+                    "(2) `admin_faqat_koradi` sozlamasini yoqib bo'lmaydi. "
+                    "Interfeys -> Hodimlar -> hisob ochib, rolini "
+                    "'rahbar' qiling")
+
         # --- 4. Bizning rekvizitlar ---
         head("4. Bizning rekvizitlar")
         own = db.query_one("SELECT name, inn, bank_account, bank_mfo, "
@@ -392,10 +417,17 @@ def main() -> int:
                              "WHERE active") or 0
         linked = db.scalar("SELECT count(*) FROM erp.app_user "
                            "WHERE active AND broker_id IS NOT NULL") or 0
-        steps.append((f"Hodimlar ({brokers} ta) va hisoblar ({accounts} ta)",
-                      brokers > 0 and linked > 0,
-                      "interfeys -> Hodimlar; hisob HODIMGA bog'lansin, "
-                      "aks holda 'mening ishlarim' bo'sh qoladi"))
+        boshliq_n = db.scalar("SELECT count(*) FROM erp.app_user WHERE active "
+                              "AND role IN ('rahbar', 'menejer')") or 0
+        steps.append((f"Hodimlar ({brokers} ta), hisoblar ({accounts} ta), "
+                      f"rahbar/menejer ({boshliq_n} ta)",
+                      # RAHBAR/MENEJER ham SHART: usiz qadam "bajarildi"
+                      # deb ko'rinardi, holbuki kompaniyada rollar
+                      # ajratilmagan va bitta hisob hamma ishni qiladi.
+                      brokers > 0 and linked > 0 and boshliq_n > 0,
+                      "interfeys -> Hodimlar; hisob HODIMGA bog'lansin "
+                      "(aks holda 'mening ishlarim' bo'sh qoladi) va "
+                      "kamida bittasi 'rahbar' yoki 'menejer' bo'lsin"))
 
         # 3) Mijoz passportlari.
         clients = db.scalar("SELECT count(*) FROM erp.client_company") or 0

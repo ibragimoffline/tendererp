@@ -721,10 +721,25 @@ chiqishlar: `docs/erp_chat_qurilish.md`.
       qaytarilganda 2 ta XATO berishi tasdiqlangan.
 
 **Qilinmadi (ochiq), tartib bilan:**
-1. **Rahbar hisobi** — EGASINING ishi, dasturchining emas. U faqat
-   `admin_faqat_koradi` ni emas, umuman ish jarayonini to'sib turibdi:
-   matritsadagi ko'p amal rahbar/menejerga bog'langan, faol boshliq
-   esa **0 ta**.
+1. **Rahbar hisobi** — EGASINING ishi. Oqim uchidan-uchiga sinaldi
+   (2026-09-04) va TO'LIQ ISHLAYDI: hodim -> hisob (rol bilan) ->
+   rolni o'zgartirish -> faollashtirish -> parol -> kirish; kirgan
+   rahbarda 40 ta huquq. Ekranda ham hammasi bor (`StaffPage.tsx`),
+   buyruq satri kerak emas.
+
+   TUZATISH: avvalgi "ish jarayonini to'sib turibdi" degan bahom
+   NOTO'G'RI edi. `admin_faqat_koradi` o'chiq turganda admin hamma
+   narsani qila oladi, ya'ni tizim ishlaydi. To'silgani —
+   JAVOBGARLIK AJRATILISHI: 18 ta amal rahbar/menejerga tegishli va
+   hozir ularni admin bajaradi, ya'ni tizim sozlovchi va biznes qaror
+   qabul qiluvchi bitta odam.
+
+   DASTURCHI TOMONIDAN QILINDI: bu holat hech qayerda ko'rinmasdi —
+   `check_setup.py` "hisoblar bor" deb "joyida" yozardi (yana o'sha
+   sinf: tekshiruv bor, boshqa narsani o'lchaydi). Endi 3-bo'lim
+   ogohlantiradi va 9-bo'limdagi 2-qadam rahbar/menejerni ham talab
+   qiladi. Sabab `docs/erp_ishga_tushirish.md` "Nega RAHBAR hisobi
+   kerak" da yozildi.
 2. **Chat ichida qidiruv** — server tomoni (`?q=`) tayyor, ekran
    kichik.
 3. **WebSocket/SSE** — oxirida. `pg_notify` tayyor; tinglovchi
