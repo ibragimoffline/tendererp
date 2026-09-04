@@ -700,10 +700,35 @@ chiqishlar: `docs/erp_chat_qurilish.md`.
       o'qishiga tayanardi (`UPDATED.md` §16 sinfi: "izoh bilan
       himoyalangan qoida"). O'chirish har doim mumkin.
 
-**Qilinmadi (ochiq):** WebSocket/SSE tinglovchisi (`pg_notify`
-tayyor); chat ichida qidiruv maydoni (server tomoni `?q=` tayyor);
-`admin_faqat_koradi` ni yoqish — avval FAOL rahbar hisobi kerak
-(`check_setup.py` 9-bo'lim).
+- [x] **7.12. `check_setup.py` — yolg'on OK lar tuzatildi.** Butun
+      patch ro'yxati ko'rib chiqildi ("har patch uchun: u yaratadigan
+      obyekt tekshirilyaptimi"). Ikkita HAQIQIY nuqson topildi:
+      * **2-patch** `client_company` ga qarardi — u 1-patchda
+        yaratilgan, ya'ni 2-patch qo'llanmasa ham "OK". Endi
+        `client_document` (`api/erp/clients.py` ning O'ZI ham shunga
+        qaraydi — ikki manba ajralib ketgan edi).
+      * **20-patch** UMUMAN tekshirilmasdi. U `erp.v_tai_actor` ni
+        tashlab BOSHQA SHAKLDA qayta yaratadi; qo'llanmasa view eski
+        shaklda qoladi va Tender-AI undan hech narsa topolmaydi —
+        patchning o'zi buni "eng yomon holat: ikkala tomon ham
+        ulandik deb o'ylaydi" deb yozgan. Endi `v_tai_actor.
+        token_hash` tekshiriladi (ikki shaklni ajratadigan ustun).
+- [x] **7.13. Tuzilishdagi bo'shliq yopildi** — `_tests/patch_test.py`
+      (32 tekshiruv). Har `check_setup` qatori uchun: obyekt AYNAN
+      shu patchda yaratilganmi; ro'yxatga tushmagan patch qo'lda
+      tekshirilganmi. Bazaga tegmaydi (`.sql` fayllarini o'qiydi).
+      Sinovning o'zi ham tekshiriladi: eski nuqsonli holat
+      qaytarilganda 2 ta XATO berishi tasdiqlangan.
+
+**Qilinmadi (ochiq), tartib bilan:**
+1. **Rahbar hisobi** — EGASINING ishi, dasturchining emas. U faqat
+   `admin_faqat_koradi` ni emas, umuman ish jarayonini to'sib turibdi:
+   matritsadagi ko'p amal rahbar/menejerga bog'langan, faol boshliq
+   esa **0 ta**.
+2. **Chat ichida qidiruv** — server tomoni (`?q=`) tayyor, ekran
+   kichik.
+3. **WebSocket/SSE** — oxirida. `pg_notify` tayyor; tinglovchi
+   joylashtirishga (Caddy, systemd) talab qo'yadi.
 
 ---
 

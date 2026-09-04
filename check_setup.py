@@ -52,7 +52,11 @@ def head(t: str) -> None:
 #: javob shu yerda bo'lishi kerak — README da emas, ishlaydigan joyda.
 PATCHES = [
     ("schema_patch_erp_1.sql",  "erp", "opportunity",     "ish kartalari"),
-    ("schema_patch_erp_2.sql",  "erp", "client_company",  "mijoz passporti"),
+    # `client_company` EMAS: u 1-patchda yaratilgan va bu qator 2-patch
+    # qo'llanmagan bo'lsa ham "OK" berardi. `client_document` — aynan
+    # 2-patch qo'shadigan jadval va `api/erp/clients.py` ning O'ZI ham
+    # tayyorlikni shundan tekshiradi (`SCHEMA2_CHECK_SQL`).
+    ("schema_patch_erp_2.sql",  "erp", "client_document", "mijoz passporti"),
     ("schema_patch_erp_3.sql",  "erp", "opportunity_task", "vazifalar"),
     ("schema_patch_erp_4.sql",  "erp", "submission",      "takliflar"),
     ("schema_patch_erp_5.sql",  "erp", "contract",        "shartnomalar"),
@@ -95,6 +99,15 @@ PATCH_COLUMNS = [
     # yaratilgani uchun tekshiruv YOLG'ON "OK" berardi.
     ("schema_patch_erp_26.sql", "erp", "chat_message", "eslatilgan",
      "chatda eslatish: kimga bildirishnoma yuborilgan"),
+    # 20-patch `erp.v_tai_actor` ni TASHLAB, BOSHQA SHAKLDA qayta
+    # yaratadi (`token_hash`, `login`, `ism`). U umuman tekshirilmasdi,
+    # va aynan shu patch tuzatgan nuqson eng yomon turdan edi: view
+    # "bor" bo'lib turadi, Tender-AI esa undan hech narsa topolmaydi —
+    # ikkala tomon ham "ulandik" deb o'ylaydi. `token_hash` — 19-patch
+    # shaklida BO'LMAGAN ustun, ya'ni ikkalasini ajratadigan yagona
+    # belgi.
+    ("schema_patch_erp_20.sql", "erp", "v_tai_actor", "token_hash",
+     "kimlik shartnomasi (Tender-AI sessiya isboti)"),
 ]
 
 
