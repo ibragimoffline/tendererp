@@ -159,7 +159,25 @@ log "migratsiya qo'llanadi"
 "${YANGI}/deploy/bin/migratsiya.sh" --qolla --dsn "$XT_DB_DSN_OWNER"
 
 # --- 8) ALMASHTIRISH (atomar) ------------------------------------------------
-ESKI="$(readlink -f "$JORIY" 2>/dev/null || true)"
+# BIRINCHI JOYLASHTIRUVDA `current` HALI YO'Q. O'shanda `readlink -f`
+# BO'SH QAYTARMAYDI: u yo'lning FAQAT OXIRGI qismi yetishmasa ham
+# kanonik yo'lni chop etadi va nol kod bilan tugaydi -- ya'ni ESKI
+# "eski reliz" emas, `current` NING O'ZI bo'lib qolardi.
+#
+# Bu tender-ai da O'LCHANGAN nuqson (2026-09-04, o'sha repozitoriyda
+# ham tuzatildi). U yerda sog'liq tekshiruvi o'tmagach 10-bo'lim
+# qo'riqchisi o'tib ketdi va:
+#
+#     ln -sfn /opt/tenderai/staging/current /opt/tenderai/staging/current
+#     current -> current
+#     Too many levels of symbolic links   ->   203/EXEC
+#
+# Eng yomoni: bu ASL nosozlikni ko'madi. Operator `203/EXEC` ni
+# ko'radi, sog'liq tekshiruvi nima uchun o'tmagani esa yo'qoladi.
+ESKI=""
+if [ -L "$JORIY" ]; then
+    ESKI="$(readlink -f "$JORIY" 2>/dev/null || true)"
+fi
 ln -sfn "$YANGI" "$JORIY"
 # ALMASHTIRILDI: bundan keyin reliz TIRIK, o'chirib bo'lmaydi. Keyingi
 # qadamlar yiqilsa 10-bo'lim ORQAGA QAYTARADI — bu boshqa va TO'G'RI
@@ -174,7 +192,9 @@ sudo systemctl enable --now "tendererp-remind@${MUHIT}.timer" >/dev/null
 # --- 10) SOG'LIQ TEKSHIRUVI — o'tmasa AVTOMATIK QAYTARILADI ------------------
 if ! "${YANGI}/deploy/bin/health-check.sh" "$MUHIT"; then
     log "sog'liq tekshiruvi O'TMADI — orqaga qaytarilmoqda"
-    if [ -n "$ESKI" ] && [ -d "$ESKI" ]; then
+    # `"$ESKI" != "$JORIY"` -- IKKINCHI QO'RIQCHI: yuqoridagi `-L`
+    # tekshiruvi sababni yopadi, bu esa oqibatni.
+    if [ -n "$ESKI" ] && [ -d "$ESKI" ] && [ "$ESKI" != "$JORIY" ]; then
         ln -sfn "$ESKI" "$JORIY"
         sudo systemctl restart "tendererp-api@${MUHIT}"
         xato "qaytarildi -> $ESKI"
