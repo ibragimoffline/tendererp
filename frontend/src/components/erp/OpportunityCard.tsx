@@ -14,17 +14,21 @@ import {
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 import type {
-  ComplianceResult, ErpBroker, ErpClient, ErpStatus, Opportunity, OpportunityInput,
+  ComplianceResult, ErpBroker, ErpClient, ErpMeta, ErpStatus, Opportunity,
+  OpportunityInput,
   TenderDiff,
 } from '@/types'
 import StatusChangeDialog from './StatusChangeDialog'
 import ContractList from './ContractList'
 import SubmissionPanel from './SubmissionPanel'
+import SababFayl from './SababFayl'
+import Muloqot from './Muloqot'
 import TaskList from './TaskList'
 import ReservePanel from './ReservePanel'
 import InvoiceLinks from './InvoiceLinks'
 import ProfitLine from './ProfitLine'
-import { ErpError, OPP_LABEL, StatusBadge } from './erpShared'
+import { ErpError, OPP_LABEL, StatusBadge, can } from './erpShared'
+import TahlilPanel from './TahlilPanel'
 
 // OPPORTUNITY KARTASI (drawer).
 //
@@ -57,16 +61,28 @@ interface OpportunityCardProps {
   /** Tender-AI interfeysining manzili (`/erp/meta` -> tender_web).
    *  Kartadagi "Tender-AI panelida ochish" havolasi shundan quriladi. */
   tenderWeb?: string
+  /** To'liq `/erp/meta` — sabab hujjati bloki undan chegaralarni oladi
+   *  (ruxsat etilgan turlar, hajm, qaysi holatlarda biriktiriladi).
+   *  Ekran o'z lug'atini tutmaydi: ikki ro'yxat ajralib ketardi. */
+  meta?: ErpMeta | null
 }
 
 export default function OpportunityCard(props: OpportunityCardProps) {
   const { id, statuses, brokers, clients, priorities, lostReasons,
-          contractStatuses, onClose, onChanged, tenderWeb } = props
+          contractStatuses, onClose, onChanged, tenderWeb, meta } = props
   const f = useFormat()
   const [o, setO] = useState<Opportunity | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<OpportunityInput | null>(null)
   const [saving, setSaving] = useState(false)
+  // Muloqot ATAYLAB yopiq turadi: u so'rov (polling) yuritadi va har
+  // karta ochilganda avtomatik boshlansa, bir nechta ochiq oyna
+  // serverga bejiz so'rov yog'dirardi.
+  const [chatOpen, setChatOpen] = useState(false)
+  // "Qayta taqsimlashni so'rash" — brokerda kartani o'tkazish
+  // huquqi yo'q, lekin so'rovi IZ QOLDIRISHI kerak.
+  const [sorov, setSorov] = useState<string | null>(null)
+  const [sorovNatija, setSorovNatija] = useState<string | null>(null)
   const [ask, setAsk] = useState<ErpStatus | null>(null)
   // Snapshot jonli tenderdan farq qiladimi — karta bilan birga yuklanadi
   // (bitta yengil so'rov) va SNAPSHOTNI O'ZGARTIRMAYDI.
@@ -127,6 +143,18 @@ export default function OpportunityCard(props: OpportunityCardProps) {
   const d = o ? f.deadline(o.tender.deadline_at) : null
   const set = (patch: Partial<OpportunityInput>) =>
     setForm((x) => (x ? { ...x, ...patch } : x))
+
+  // TAHRIRLASH IKKI SHARTGA BOG'LIQ va ikkalasi ham EKRANDA ko'rinadi.
+  //
+  //  1. HUQUQ — brokerda `karta.tahrirlash` faqat o'z kartasiga
+  //     (server ham shuni tekshiradi; bu yerda faqat ko'rinish).
+  //  2. YAKUNLANGAN KARTA — "Yutildi / Yutqazildi / Rad etildi" dan
+  //     keyin maydonlar qotadi. Ilgari yopilgan kartani ham to'liq
+  //     tahrirlash mumkin edi: yutilgan tenderning summasi yoki mijozi
+  //     jimgina o'zgarib ketardi va buni hech narsa qayd qilmasdi.
+  //     Tuzatish yo'li yopilmagan — avval statusni qaytarish kerak, u
+  //     esa IZOH so'raydi va tarixda qoladi.
+  const editable = !!o && !o.is_final && can('karta.tahrirlash')
 
   return (
     <Sheet open onOpenChange={(x) => { if (!x) onClose() }}>
@@ -192,7 +220,7 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                     <div className="mb-2 rounded-md border border-soon/40 bg-soon-soft px-2.5 py-1.5 text-caption text-soon-strong">
                       Tender manbada yopilgan
                       {diff.source?.status_name ? ` (${diff.source.status_name})` : ''} —
-                      kartani yakunlash kerakmi? Natijani o'zingiz belgilaysiz.
+                      kartani yakunlash kerakmi?
                     </div>
                   )}
                   {diff && diff.exists && diff.changed.length > 0 && (
@@ -258,17 +286,69 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {statuses.map((s) => (
+                        {/* YAKUNIY status (yutildi / yutqazildi / rad) —
+                            alohida huquq (`karta.yopish`) va u kompaniya
+                            sozlamasi bilan brokerdan olib qo'yilishi
+                            mumkin ("Broker kartani o'zi yakunlaydi").
+                            Ro'yxatdan CHIQARIB tashlanadi: tanlanib
+                            403 olinadigan variant — yolg'on va'da. */}
+                        {statuses.filter((s) => !s.final || can('karta.yopish'))
+                          .map((s) => (
                           <SelectItem key={s.code} value={s.code}>{s.label}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
 
+                  {/* Broker mas'ulni O'ZI o'zgartira olmaydi
+                      (`karta.biriktirish` unda yo'q), lekin
+                      "menga to'g'ri kelmadi" deya oladi — aks holda
+                      u menejerni og'zaki qidiradi va iz qolmaydi. */}
+                  {!can('karta.biriktirish') && can('karta.taqsimlash_sorovi') && (
+                    <div className="rounded-md border border-dashed p-2">
+                      {sorov === null ? (
+                        <button type="button"
+                          className="text-caption underline"
+                          onClick={() => { setSorov(''); setSorovNatija(null) }}>
+                          Qayta taqsimlashni so'rash
+                        </button>
+                      ) : (
+                        <div className="space-y-2">
+                          <Input autoFocus placeholder="Sabab (majburiy)"
+                            value={sorov}
+                            onChange={(e) => setSorov(e.target.value)} />
+                          <div className="flex gap-2">
+                            <Button size="sm" disabled={!sorov.trim()}
+                              onClick={async () => {
+                                try {
+                                  await api.requestReassign(o.id, sorov)
+                                  setSorov(null)
+                                  setSorovNatija('So‘rov menejerga yuborildi.')
+                                  // Tarixda ko'rinishi uchun kartani
+                                  // qayta o'qiymiz.
+                                  apply(await api.opportunity(o.id))
+                                } catch (e) {
+                                  setSorovNatija((e as Error).message)
+                                }
+                              }}>So'rash</Button>
+                            <Button size="sm" variant="outline"
+                              onClick={() => setSorov(null)}>Bekor</Button>
+                          </div>
+                        </div>
+                      )}
+                      {sorovNatija && (
+                        <div className="mt-1 text-caption text-muted-foreground">
+                          {sorovNatija}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex gap-2">
                     <div className="flex-1">
                       <Label>Mas'ul</Label>
-                      <Select value={form.broker_id ? String(form.broker_id) : undefined}
+                      <Select value={form.broker_id ? String(form.broker_id) : ''}
+                        disabled={!editable}
                         onValueChange={(v) => set({ broker_id: Number(v) })}>
                         <SelectTrigger className="h-9 w-full bg-card text-body">
                           <SelectValue placeholder="—" />
@@ -282,7 +362,8 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                     </div>
                     <div className="flex-1">
                       <Label>Mijoz</Label>
-                      <Select value={form.client_id ? String(form.client_id) : undefined}
+                      <Select value={form.client_id ? String(form.client_id) : ''}
+                        disabled={!editable}
                         onValueChange={(v) => set({ client_id: Number(v) })}>
                         <SelectTrigger className="h-9 w-full bg-card text-body">
                           <SelectValue placeholder="—" />
@@ -300,11 +381,13 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                     <Label>Ustuvorlik</Label>
                     <div className="flex gap-1.5">
                       {priorities.map((p) => (
-                        <button key={p.code} type="button" onClick={() => set({ priority: p.code })}
+                        <button key={p.code} type="button" disabled={!editable}
+                          onClick={() => set({ priority: p.code })}
                           className={cn('rounded-md border px-3 py-1.5 text-body transition-colors',
+                            'disabled:cursor-not-allowed disabled:opacity-60',
                             form.priority === p.code
                               ? 'border-primary bg-secondary font-semibold text-primary'
-                              : 'hover:bg-accent')}>
+                              : 'enabled:hover:bg-accent')}>
                           {p.label}
                         </button>
                       ))}
@@ -315,6 +398,7 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                     <Label>Yutish ehtimoli (xodim bahosi)</Label>
                     <div className="flex items-center gap-3">
                       <Slider className="flex-1" min={0} max={100} step={5}
+                        disabled={!editable}
                         value={[form.win_probability ?? 0]}
                         onValueChange={([v]) => set({ win_probability: v })} />
                       <span className="tabular w-12 text-right text-body">
@@ -326,27 +410,32 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                   <div>
                     <Label>Izoh</Label>
                     <textarea
-                      className="min-h-16 w-full rounded-md border bg-card px-3 py-2 text-body outline-none focus-visible:border-primary"
+                      disabled={!editable}
+                      className="min-h-16 w-full rounded-md border bg-card px-3 py-2 text-body outline-none focus-visible:border-primary disabled:cursor-not-allowed disabled:opacity-70"
                       value={form.note ?? ''}
                       onChange={(e) => set({ note: e.target.value || null })} />
                   </div>
 
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <Label>Keyingi vazifa</Label>
-                      <Input value={form.next_task ?? ''}
-                        onChange={(e) => set({ next_task: e.target.value || null })} />
-                    </div>
-                    <div>
-                      <Label>Muddati</Label>
-                      <Input type="date" value={form.next_task_at ?? ''}
-                        onChange={(e) => set({ next_task_at: e.target.value || null })} />
-                    </div>
-                  </div>
+                  {/* "Keyingi vazifa" maydoni OLIB TASHLANDI: u
+                      `erp.opportunity` ustuniga yozilardi va hech
+                      qayerda ko'rinmasdi — vazifalar ro'yxati ham,
+                      "mening ishlarim" ham, eslatma ham
+                      `erp.opportunity_task` dan o'qiydi. Endi ish
+                      pastdagi "Vazifalar" ro'yxatiga yoziladi. */}
 
-                  <Button size="sm" disabled={saving} onClick={save}>
-                    {saving ? 'Saqlanmoqda…' : 'Saqlash'}
-                  </Button>
+                  {editable ? (
+                    <Button size="sm" disabled={saving} onClick={save}>
+                      {saving ? 'Saqlanmoqda…' : 'Saqlash'}
+                    </Button>
+                  ) : (
+                    <p className="text-caption text-muted-foreground">
+                      {o.is_final
+                        ? 'Karta yakunlangan — maydonlar tahrirlanmaydi. '
+                          + 'Tuzatish kerak bo\'lsa avval statusni ochiq '
+                          + 'holatga qaytaring (izoh so\'raladi va tarixda qoladi).'
+                        : 'Kartani tahrirlash — rahbar yoki menejer huquqi.'}
+                    </p>
+                  )}
                 </section>
               </div>
 
@@ -369,6 +458,11 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                 <ContractList oppId={o.id} statuses={contractStatuses}
                   submissions={[]} createdBy={o.broker?.name ?? null} />
               )}
+
+              {/* --- TENDER-AI TAHLILI (qaror paytidagi surat) ---
+                  Qo'lda ochilgan kartada bo'lmaydi va u holda blok
+                  umuman ko'rsatilmaydi. */}
+              <TahlilPanel oppId={o.id} />
 
               {/* --- TARIX --- */}
               <section className="mt-5">
@@ -406,6 +500,32 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                   </div>
                 )}
               </section>
+
+              {/* --- MULOQOT (25-patch) ---
+                  Karta oynasida chat RO'YXATI ko'rsatilmaydi: bu yerda
+                  boshqa kartaning chatiga o'tish chalg'itardi. */}
+              {meta?.chat_ready !== false && (
+                <section className="mt-5">
+                  <button type="button"
+                    onClick={() => setChatOpen((v) => !v)}
+                    className={cn('rounded-md px-3 py-1.5 text-body transition-colors',
+                      chatOpen ? 'bg-secondary font-semibold text-primary'
+                        : 'hover:bg-accent')}>
+                    Muloqot
+                  </button>
+                  {chatOpen && (
+                    <div className="mt-2">
+                      <Muloqot oppId={o.id} compact />
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {/* --- SABAB HUJJATI (24-patch) ---
+                  Yopiq kartada YO'QLIGI ham yoziladi: jimgina bo'sh joy
+                  "biriktirilmagan" degani ham, "bunday narsa yo'q"
+                  degani ham bo'lib ko'rinardi. */}
+              <SababFayl oppId={o.id} oppStatus={o.status} meta={meta} />
 
               {/* --- CHEKLIST: mijoz hujjatlariga qarab --- */}
               <section className="mt-5">

@@ -18,13 +18,28 @@
 #   * -Host bilan tarmoqqa ochiladi (default 127.0.0.1 - faqat shu
 #     kompyuter).
 #
-# DIQQAT: tarmoqqa ochilganda HTTPS bo'lmasa .env dagi
-# AUTH_COOKIE_SECURE ni 0 qiling - aks holda brauzer sessiya
-# cookie'sini saqlamaydi va kirish JIMGINA ishlamaydi.
+# COOKIE VA HTTPS. `AUTH_COOKIE_SECURE=1` (default) da brauzer
+# sessiya cookie'sini faqat HTTPS orqali yuboradi. `localhost` ni
+# u ishonchli deb hisoblaydi, shuning uchun mahalliy ishda
+# hech narsa qilish kerak emas.
+#
+# TARMOQQA HTTPS'siz chiqilganda kirish ishlamaydi. Ilgari bu
+# izoh 'AUTH_COOKIE_SECURE ni 0 qiling' derdi - va aynan shu yo'l
+# bilan ishlab chiqish qulayligi ishlab chiqarishga sizib o'tardi:
+# `Secure` siz sessiya cookie'si OCHIQ ketadi va bir tarmoqdagi
+# istalgan odam uni ushlab boshqa hisobga kira oladi.
+#
+# Shuning uchun -Prod rejimida bunday ishga tushirish TO'XTATILADI
+# (pastdagi 0a-bo'lim). Ikkita haqiqiy yechim: HTTPS qo'yish yoki
+# tarmoqqa chiqmaslik. Ishonchli ichki tarmoq uchun ongli chetlab
+# o'tish: -InsecureCookies.
 param(
     [switch] $Stop,
     [switch] $Prod,
-    [string] $BindHost = '127.0.0.1'
+    [string] $BindHost = '127.0.0.1',
+    # ONGLI QAROR: HTTPS'siz tarmoqqa chiqishga ruxsat. Usiz -Prod
+    # rejimida bunday ishga tushirish TO'XTATILADI (pastga qarang).
+    [switch] $InsecureCookies
 )
 
 $ErrorActionPreference = 'Stop'
@@ -43,6 +58,58 @@ if ($Stop) {
     Stop-OnPort 5174
     Write-Host "[OK] ERP to'xtatildi."
     return
+}
+
+# --- 0a) XAVFSIZLIK QULFI ----------------------------------------------------
+# `AUTH_COOKIE_SECURE=0` - IShLAB CHIQISH uchun qulaylik. Yuqoridagi izoh
+# uni tarmoqqa chiqishda 0 qilishni TAVSIYA qiladi, va aynan shu yo'l
+# bilan u ishlab chiqarishga sizib o'tadi.
+#
+# NIMA YO'QOTILADI: `Secure` bayrog'isiz sessiya cookie'si HTTP orqali
+# OCHIQ ketadi. Bir tarmoqdagi istalgan odam uni ushlab, boshqa
+# hisobga kira oladi - parol ham, tasdiq ham talab qilinmaydi.
+#
+# LOCALHOST ISTISNO: brauzerlar `127.0.0.1` ni ishonchli deb hisoblaydi
+# va u tarmoqqa umuman chiqmaydi.
+#
+# Bu `localhost` havolasi qoidasi bilan bir sinf: ishlab chiqishdagi
+# qulaylik ishlab chiqarishda teshik bo'lib qoladi.
+if ($Prod) {
+    $envPath = Join-Path $Root '.env'
+    $secure = '1'
+    if (Test-Path $envPath) {
+        $hit = Select-String -Path $envPath -Pattern '^\s*AUTH_COOKIE_SECURE\s*=\s*(.+)$' |
+               Select-Object -Last 1
+        if ($hit) { $secure = $hit.Matches[0].Groups[1].Value.Trim() }
+    }
+    $secureOff = $secure -in @('0', 'false', 'no', 'off', '')
+    $loopback  = $BindHost -in @('127.0.0.1', 'localhost', '::1')
+
+    if ($secureOff -and -not $loopback -and -not $InsecureCookies) {
+        Write-Host ""
+        Write-Host "TO'XTATILDI: AUTH_COOKIE_SECURE=0 va tarmoqqa chiqilyapti ($BindHost)." -ForegroundColor Red
+        Write-Host "Sessiya cookie'si HTTP orqali OCHIQ ketadi - bir tarmoqdagi" -ForegroundColor Red
+        Write-Host "istalgan odam uni ushlab, boshqa hisobga kira oladi." -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Ikkita HAQIQIY yechim:" -ForegroundColor Yellow
+        Write-Host "  1. HTTPS qo'ying (teskari proksi) va .env da AUTH_COOKIE_SECURE=1;"
+        Write-Host "  2. yoki tarmoqqa chiqmang: -BindHost 127.0.0.1 (default)."
+        Write-Host ""
+        Write-Host "Ishonchli ichki tarmoqda ONGLI ravishda davom etmoqchi bo'lsangiz:"
+        # `./` ATAYLAB, `.\` emas: teskari chiziq matn ichida oson
+        # yo'qoladi (birinchi yozuvda aynan shunday bo'ldi -
+        # qaytarish belgisiga aylanib, qator "un_erp.ps1" bo'lib
+        # chiqdi). PowerShell ikkala shaklni ham qabul qiladi.
+        Write-Host "  ./run_erp.ps1 -Prod -BindHost $BindHost -InsecureCookies"
+        exit 1
+    }
+    if ($secureOff -and -not $loopback) {
+        Write-Host ""
+        Write-Host "OGOHLANTIRISH: -InsecureCookies bilan ishga tushirildi." -ForegroundColor Yellow
+        Write-Host "Sessiya cookie'si HTTP orqali ochiq ketadi ($BindHost)." -ForegroundColor Yellow
+        Write-Host "Bu FAQAT ishonchli ichki tarmoq uchun." -ForegroundColor Yellow
+        Write-Host ""
+    }
 }
 
 # --- 0) Ishlab chiqarish: frontendni QURAMIZ ---------------------------------

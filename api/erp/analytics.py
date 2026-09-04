@@ -32,18 +32,36 @@ done AS (
            EXTRACT(EPOCH FROM (next_at - changed_at)) / 86400.0 AS days
     FROM steps WHERE next_at IS NOT NULL
 ),
+-- HOZIR shu bosqichda turgan kartalar IKKIGA bo'linadi.
+--
+-- NEGA: muddati o'tib ketgan karta ham shu yerda sanalardi va u
+-- "hozir ishlanmoqda" degan ma'noni berardi. Aslida u ishlanmayapti —
+-- tender o'tib ketgan, kartani yopish kerak. 24-patchda `ulgurmadik`
+-- holati qo'shildi, lekin uni TIZIM QO'YMAYDI (qaror odamniki), ya'ni
+-- karta hech kim yopmaguncha shu yerda turaveradi va ko'rsatkichni
+-- shishiradi. Endi ular ALOHIDA sanaladi va ekran ikkalasini ajratib
+-- ko'rsatadi; eslatma esa yopishni so'raydi (`api/erp/remind.py`).
+--
+-- Ro'yxat KODDAN keladi (`opportunity.FINAL`) — bu yerda
+-- ('won','lost','rejected') qo'lda yozilgan edi va `ulgurmadik`
+-- undan tashqarida qolardi.
 ongoing AS (
-    SELECT s.to_status, count(*) AS n,
+    SELECT s.to_status,
+           count(*) FILTER (WHERE o.deadline_at IS NULL
+                              OR o.deadline_at >= now())  AS faol_n,
+           count(*) FILTER (WHERE o.deadline_at < now())   AS kechikkan_n,
            EXTRACT(EPOCH FROM (now() - max(s.changed_at))) / 86400.0 AS oldest_days
     FROM steps s
     JOIN erp.opportunity o ON o.id = s.opportunity_id
-    WHERE s.next_at IS NULL AND o.status NOT IN ('won','lost','rejected')
+    WHERE s.next_at IS NULL AND o.status <> ALL(%(final)s)
     GROUP BY s.to_status
 )
 SELECT st.code AS status,
        coalesce(d.n, 0)         AS finished_n,
        d.avg_days, d.median_days, d.max_days,
-       coalesce(g.n, 0)         AS ongoing_n,
+       coalesce(g.faol_n, 0) + coalesce(g.kechikkan_n, 0) AS ongoing_n,
+       coalesce(g.faol_n, 0)      AS faol_n,
+       coalesce(g.kechikkan_n, 0) AS kechikkan_n,
        g.oldest_days
 FROM (SELECT unnest(%(codes)s::text[]) AS code) st
 LEFT JOIN (
@@ -111,7 +129,10 @@ SELECT o.id, o.title, o.status, o.deadline_at, o.start_price, o.currency,
 FROM erp.opportunity o
 LEFT JOIN erp.broker b ON b.id = o.broker_id
 LEFT JOIN erp.client_company c ON c.id = o.client_id
-WHERE o.status NOT IN ('won','lost','rejected')
+-- YAKUNIY statuslar ro'yxati KODDAN keladi (`opportunity.FINAL`), bu
+-- yerda takrorlanmaydi: 24-patchda `ulgurmadik` qo'shilganda qo'lda
+-- yozilgan har bir nusxa uni JIMGINA "ochiq" deb sanardi.
+WHERE o.status <> ALL(%(final)s)
   AND o.status_changed_at < now() - (%(days)s || ' days')::interval
 ORDER BY o.status_changed_at
 """
@@ -138,13 +159,17 @@ def build(stuck_days: int = 14) -> Dict[str, Any]:
     codes = [c for c, _ in STATUS_LABEL.items()]
 
     stages = []
-    for r in db.query(STAGE_TIME_SQL, {"codes": codes}):
+    for r in db.query(STAGE_TIME_SQL,
+                      {"codes": codes, "final": sorted(FINAL)}):
         stages.append({
             "code": r["status"], "label": STATUS_LABEL.get(r["status"]),
             "finished_n": r["finished_n"],
             "avg_days": _num(r["avg_days"]), "median_days": _num(r["median_days"]),
             "max_days": _num(r["max_days"]),
             "ongoing_n": r["ongoing_n"],
+            # `ongoing_n` = `faol_n` + `kechikkan_n`. Eski nom SAQLANADI
+            # (interfeys uni o'qiyapti), lekin endi u ikkiga ajraladi.
+            "faol_n": r["faol_n"], "kechikkan_n": r["kechikkan_n"],
             "oldest_days": (round(float(r["oldest_days"]), 1)
                             if r["oldest_days"] is not None else None),
             "final": r["status"] in FINAL,
@@ -185,7 +210,8 @@ def build(stuck_days: int = 14) -> Dict[str, Any]:
                    "start_price": _num(r["start_price"]), "currency": r["currency"],
                    "broker_name": r["broker_name"], "client_name": r["client_name"],
                    "open_tasks": r["open_tasks"]}
-                  for r in db.query(STUCK_SQL, {"days": str(stuck_days)})],
+                  for r in db.query(STUCK_SQL, {"days": str(stuck_days),
+                                           "final": sorted(FINAL)})],
         "lost_reasons": lost,
         "stuck_days": stuck_days,
     }

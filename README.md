@@ -85,8 +85,21 @@ tender erp/
 ├── schema_patch_erp_10.sql      # REZERV: ajratilgan tovar + mavjud
 ├── schema_patch_erp_11.sql      # HISOB-FAKTURA: qatorlar, QQS, to'lovlar
 ├── schema_patch_erp_12.sql      # DALOLATNOMA (akt)
+├── schema_patch_erp_13.sql      # bizning QQS holatimiz
+├── schema_patch_erp_14.sql      # muzlatilgan tannarx (foyda hisobi)
+├── schema_patch_erp_15.sql      # kirish urinishlari jurnali
+├── schema_patch_erp_16.sql      # pul hujjatlari o'zgarishlar jurnali
+├── schema_patch_erp_17.sql      # rollar: rahbar va menejer ajratildi
+├── schema_patch_erp_18.sql      # tizim sozlamalari (erp.setting)
+├── schema_patch_erp_19.sql      # tender-ai uchun shartnoma-view'lar
+├── schema_patch_erp_20.sql      # v_tai_actor: kimlik shartnomasi (sessiya isboti)
+├── schema_patch_erp_21.sql      # Tender-AI yo'naltirishi (topshiriq -> karta)
+├── schema_patch_erp_22.sql      # hodimga bildirishnoma
+├── schema_patch_erp_23.sql      # erp roli: public.* dan faqat 6 obyekt (o'qish)
+├── schema_patch_erp_17.sql      # ROLLAR: rahbar va menejer ajratildi
 ├── create_user.py               # hodim hisobi CLI (birinchi admin)
 ├── check_setup.py               # TAYYORLIK tekshiruvi (7 bo'lim)
+├── olchov.py                    # INSON HALQASI hisoblagichlari (faqat o'qiydi)
 ├── cleanup_demo.py              # demo/sinov yozuvlarini tozalash
 ├── register_erp_task.ps1        # eslatmani jadvalga qo'yadi
 ├── backup_erp.ps1               # ZAXIRA: faqat erp sxemasi (pg_dump -Fc)
@@ -237,7 +250,7 @@ vaqtinchalik bazaga tiklanib, qator sonlari asl bilan solishtirilgan.
 `register_backup_task.ps1` — har kuni 02:00 da.
 
 ### Ishga tushirish va tayyorlik
-`check_setup.py` — baza, 11 ta patch, kirish, rekvizitlar, tender-ai
+`check_setup.py` — baza, sxema patchlari, kirish, rekvizitlar, tender-ai
 bilan bog'lanish, cookie va demo ma'lumotni **bir joyda** tekshiradi
 (chiqish kodi: 0/1). `cleanup_demo.py` — demo va sinov yozuvlarini
 belgisi bo'yicha tozalaydi; **sukut bo'yicha hech narsa o'chirmaydi**,

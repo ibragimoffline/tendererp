@@ -10,7 +10,7 @@ import {
 import { cn } from '@/lib/utils'
 import type { ClientRow } from '@/types'
 import ClientCard from './ClientCard'
-import { ErpError, SchemaMissing } from './erpShared'
+import { ErpError, SchemaMissing, can } from './erpShared'
 
 // "MIJOZLAR" bo'limi (ERP 2-bosqich) — korxona passportlari ro'yxati.
 //
@@ -59,10 +59,15 @@ export default function ClientsPage({ focusId, onOpenOpportunity }: ClientsPageP
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={() => setCreating(true)}>
-          <Icon name="plus" size={13} />
-          Yangi korxona
-        </Button>
+        {/* Mijoz yaratish — rahbar-menejer ishi (`mijoz.tahrirlash`).
+            Broker mijozni KO'RADI (o'z kartalaridagini), lekin
+            passportini o'zi ochmaydi: bu buxgalteriya ma'lumoti. */}
+        {can('mijoz.tahrirlash') && (
+          <Button size="sm" onClick={() => setCreating(true)}>
+            <Icon name="plus" size={13} />
+            Yangi korxona
+          </Button>
+        )}
         <Input className="h-9 w-64" placeholder="Nom yoki INN…"
           value={q} onChange={(e) => setQ(e.target.value)} />
         <label className="flex cursor-pointer items-center gap-1.5 text-body">

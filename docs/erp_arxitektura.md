@@ -84,18 +84,43 @@ frontend/src/styles/erp.css
 Endpointlar: **`/erp/...`** prefiksi ostida. `api/main.py` ga faqat
 `include_router` (yoki endpoint bloki) qo'shiladi.
 
-### 2.4. Bog'liqlik bir tomonlama
+### 2.4. Bog'liqlik bir tomonlama — KOD darajasida
+
+> **2026-09-02 da aniqlashtirildi** (`erp_rollar.md` §10). Quyidagi
+> jadval **kod** bog'liqligini tasvirlaydi va u o'zgarmadi.
+> **Ma'lumot** darajasida esa aloqa endi IKKI TOMONLAMA — lekin
+> faqat SHARTNOMA-VIEW'lar orqali (`erp_integratsiya_6.md`,
+> `erp_integratsiya_7.md`).
 
 ```
-Tender-AI  ──(o'qish)──▶  ERP          ✔
-ERP        ──(yozish)──▶  Tender-AI    ✘
+KOD:
 Tender-AI  ──(import)──▶  api.erp      ✘   (tender moduli ERP haqida bilmaydi)
+ERP        ──(import)──▶  api.*        ✘   (ERP alohida loyiha)
+
+MA'LUMOT (faqat view orqali):
+Tender-AI  ──(SELECT)──▶  erp.v_tai_actor, v_tender_status,
+                          v_stock, v_client_document
+ERP        ──(SELECT)──▶  public.tender, dim_*, v_tender_manba,
+                          catalog_product, v_erp_topshiriq
+
+YOZISH: hech kim qarshi tomonning jadvaliga YOZMAYDI.
 ```
 
-`api/erp/*` `api.db`, `api.queries` ni import qiladi. `api/main.py`,
-`api/compliance.py`, `api/pricing.py` va boshqalar `api.erp` ni **import
-qilmaydi**. `TenderDrawer.jsx` dagi "Ishga olish" tugmasi — yagona ulanish
-nuqtasi, u `api.erp*` chaqiruvini qiladi, xolos.
+Ya'ni qoida "bir tomonlama o'qish" emas, **"o'z tomoniga yozish,
+qarshi tomondan view orqali o'qish"**. Ikkala loyihaning sinovi buni
+tekshiradi va 2026-09-02 dan beri `erp` DB roli ham cheklangan
+(`schema_patch_erp_23.sql`).
+
+`api/erp/*` `api.db` ni import qiladi. Tender-AI tomonidagi modullar
+`api.erp` ni **import qilmaydi**.
+
+**"Ishga olish" tugmasi qayerda:** ilgari `TenderDrawer` da edi va
+yagona ulanish nuqtasi hisoblanardi. Endi asosiy yo'l — Tender-AI
+navbatidagi (`BrokerQueue`) **"Olindi"** qarori: u ERP da kartani
+o'zi ochadi (`erp_integratsiya_7.md`). `TenderDrawer` faqat
+`ErpLink` orqali holatni ko'rsatadi. ERP dagi qo'lda ochish
+(`POST /erp/tenders/{id}/take`) qoladi — u endi rahbar-menejer
+huquqi va Tender-AI'siz kelgan tender uchun.
 
 ### 2.5. Mavjud modullar bilan integratsiya — `tender_id` orqali
 

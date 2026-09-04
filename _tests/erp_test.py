@@ -54,7 +54,6 @@ TEST_USER = {"id": 0, "username": "zztest", "full_name": "ZZTEST Sinov",
 def _auth_override(app):
     from api import main as _main
     app.dependency_overrides[_main.me] = lambda: TEST_USER
-    app.dependency_overrides[_main.manager] = lambda: TEST_USER
 
 _fail = 0
 _pass = 0
@@ -84,9 +83,12 @@ def head(t):
 def test_sof():
     head("1. Sof mantiq (bazasiz)")
 
-    eq("9 ta status", len(O.STATUSES), 9)
+    eq("10 ta status", len(O.STATUSES), 10)
     eq("3 ta ustuvorlik", len(O.PRIORITIES), 3)
-    eq("yakuniylar", O.FINAL, {"won", "lost", "rejected"})
+    # 24-patch: `ulgurmadik` YAKUNIY. Bu shunchaki ro'yxat emas —
+    # `stock.on_status_change` `to_status in FINAL` ga qaraydi, ya'ni
+    # bu qatordagi xato ombor rezervini JIMGINA osilib qoldirardi.
+    eq("yakuniylar", O.FINAL, {"won", "lost", "rejected", "ulgurmadik"})
     check(all(c in O.STATUS_LABEL for c in O.FINAL),
           "yakuniy statuslar umumiy ro'yxatda ham bor")
     check(len(O.STATUS_LABEL) == len(O.STATUSES), "status kodlari takrorlanmaydi")
@@ -181,8 +183,8 @@ def test_db():
               "schema_patch_erp_1.sql bazaga qo'llanmagan")
         if not m["schema_ready"]:
             return
-        eq("meta: 9 status", len(m["statuses"]), 9)
-        eq("meta: 3 yakuniy", sum(1 for s in m["statuses"] if s["final"]), 3)
+        eq("meta: 10 status", len(m["statuses"]), 10)
+        eq("meta: 4 yakuniy", sum(1 for s in m["statuses"] if s["final"]), 4)
         eq("meta: 3 ustuvorlik", len(m["priorities"]), 3)
 
         # Kod va bazadagi CHECK bir xil ro'yxatmi — ikki manba ajralib
@@ -216,13 +218,18 @@ def test_db():
             check(not wrong, "view dagi nomlar kod bilan bir xil", str(wrong))
             # Ustunlar SHARTNOMA: tender-ai aynan shularni o'qiydi
             # (`tender-ai/api/erp_status.py`).
+            #
+            # `assignee_full_name` schema_patch_erp_19.sql da OXIRIGA
+            # qo'shildi — eski o'quvchi buzilmaydi. Ustunlar TARTIBI
+            # va qolgan uch shartnoma-view `_tests/erp15_test.py` da
+            # qulflangan; bu yerda faqat shu view ning to'plami.
             cols = {r["column_name"] for r in db.query(
                 "SELECT column_name FROM information_schema.columns "
                 "WHERE table_schema='erp' AND table_name='v_tender_status'")}
             eq("view ustunlari (shartnoma)", cols,
                {"opportunity_id", "tender_id", "status", "status_label",
                 "priority", "broker_name", "client_name", "created_at",
-                "updated_at"})
+                "updated_at", "assignee_full_name"})
 
         try:
             # --- lug'atlar -------------------------------------------------
@@ -267,6 +274,42 @@ def test_db():
                str(live["source_id"] or tid))
             check(snap["source_url"] is None or str(live["source_id"] or tid) in snap["source_url"],
                   "manba havolasi asl id bilan qurilgan", str(snap["source_url"]))
+            # MANBA HAVOLASI BAZADAN (`v_tender_manba`), kodda lug'at
+            # EMAS: ilgari `SOURCE_URL` lug'ati tender-ai dagi view
+            # bilan ikkinchi nusxa edi va ular ajralib ketishi mumkin
+            # edi (`erp_rollar.md` §10).
+            import inspect
+            src = inspect.getsource(O)
+            # IZOHLARSIZ matn: izohda `SOURCE_URL` BOR (nega olib
+            # tashlangani yozilgan) va u kod bilan adashmasligi kerak.
+            sof = chr(10).join(q for q in src.split(chr(10))
+                               if not q.strip().startswith("#"))
+            check("SOURCE_URL" not in sof, "kodda SOURCE_URL lug'ati QOLMAGAN")
+            check("v_tender_manba" in src, "havola v_tender_manba dan olinadi")
+            bazada = db.query_one("SELECT ommaviy_url FROM v_tender_manba "
+                                  "WHERE ichki_id = %(i)s", {"i": tid})
+            if bazada:
+                eq("havola bazadagi bilan AYNAN bir xil",
+                   snap["source_url"], bazada["ommaviy_url"])
+
+            # --- "KEYINGI VAZIFA" HAQIQIY VAZIFAGA AYLANADI -----------------
+            # Ilgari u faqat `erp.opportunity.next_task` ustuniga
+            # yozilardi va HECH QAYERDA ko'rinmasdi: vazifalar ro'yxati,
+            # "mening ishlarim" va eslatma skripti — hammasi
+            # `erp.opportunity_task` dan o'qiydi. Ya'ni odam muddat
+            # yozardi va u jimgina yo'qolardi.
+            rt = c.get(f"/erp/opportunities/{opp['id']}/tasks")
+            if rt.status_code == 200:
+                nomlar = [t["title"] for t in rt.json()]
+                check("KP yuborish" in nomlar,
+                      "ishga olishdagi 'keyingi vazifa' VAZIFAGA aylandi",
+                      str(nomlar))
+                v = next((t for t in rt.json() if t["title"] == "KP yuborish"), {})
+                eq("vazifa muddati ko'chdi", v.get("due_at"), "2026-09-01")
+                eq("vazifa mas'uli — kartaning brokeri",
+                   (v.get("assignee") or {}).get("id"), broker["id"])
+            else:
+                print("  SKIP vazifalar sxemasi yo'q — ko'chirish tekshirilmadi")
 
             # --- takror va 404/400 ------------------------------------------
             r = c.post(f"/erp/tenders/{tid}/take", json=body)
@@ -286,12 +329,20 @@ def test_db():
 
             # --- status quvuri ----------------------------------------------
             oid = opp["id"]
-            for st in ("reviewing", "submitted", "won"):
+            # 24-patch: `submitted` va `won` ga SAKRAB bo'lmaydi.
+            # `preparing` -> `submitted` -> `won` — yagona yo'l.
+            r = c.patch(f"/erp/opportunities/{oid}/status",
+                        json={"status": "submitted", "changed_by": PREFIX + "Broker"})
+            eq("new'dan to'g'ridan-to'g'ri submitted -> 409", r.status_code, 409)
+            check("Taklif tayyorlanmoqda" in str(r.json()["detail"]),
+                  "409 SABABNI aytadi: qaysi holatdan o'tish mumkin")
+
+            for st in ("reviewing", "preparing", "submitted", "won"):
                 r = c.patch(f"/erp/opportunities/{oid}/status",
                             json={"status": st, "changed_by": PREFIX + "Broker"})
                 eq(f"status -> {st}", (r.status_code, r.json()["status"]), (200, st))
             cur = r.json()
-            eq("tarixda 4 yozuv (new + 3 o'tish)", len(cur["history"]), 4)
+            eq("tarixda 5 yozuv (new + 4 o'tish)", len(cur["history"]), 5)
             check(cur["closed_at"] is not None, "yakuniy status closed_at ni qo'ydi")
             eq("is_final", cur["is_final"], True)
 
@@ -386,7 +437,12 @@ def test_db():
                   "status filtri")
             check(oid in ids(q=(before_put["tender"]["title"] or "")[:8]), "qidiruv (q)")
             check(oid in ids(open_only=True), "open_only ochiq kartani ko'rsatadi")
-            c.patch(f"/erp/opportunities/{oid}/status", json={"status": "lost"})
+            # 24-patch: yakunlanmagan uchta holatda SABAB majburiy.
+            eq("sababsiz yutqazish -> 400",
+               c.patch(f"/erp/opportunities/{oid}/status",
+                       json={"status": "lost"}).status_code, 400)
+            c.patch(f"/erp/opportunities/{oid}/status",
+                    json={"status": "lost", "lost_reason": "price"})
             check(oid not in ids(open_only=True), "open_only yopilgan kartani yashiradi")
 
             # --- tender paneli uchun ro'yxat -------------------------------------
@@ -395,7 +451,7 @@ def test_db():
 
             # --- rahbar hisoboti --------------------------------------------------
             st = c.get("/erp/stats", params={"days": 7}).json()
-            eq("stats: by_status 9 qator", len(st["by_status"]), 9)
+            eq("stats: by_status 10 qator", len(st["by_status"]), 10)
             eq("stats: upcoming_days", st["upcoming_days"], 7)
             check(st["total"] >= 2, "stats: jami kartalar sanaldi", str(st["total"]))
             n_lost = sum(s["n"] for s in st["by_status"] if s["code"] == "lost")

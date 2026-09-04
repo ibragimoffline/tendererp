@@ -183,14 +183,32 @@ deb ko'rsatadi.
 
 ## 5. Rollar — faqat ERP da
 
-`broker < manager < admin` (ierarxiya: yuqoridagi quyidagining hamma
-huquqini oladi).
+`broker < menejer < rahbar < admin` (ierarxiya: yuqoridagi
+quyidagining hamma huquqini oladi).
 
 - **broker** — kartalar, mijozlar, vazifalar, shartnomalar.
-- **manager** — qo'shimcha: `/erp/analytics`, `/erp/stats`,
-  `/erp/contracts/stats`. Bular **odamlar haqidagi** ko'rsatkichni ham
-  beradi (kim necha kunda topshiradi), shuning uchun har kimga emas.
+- **menejer** — qo'shimcha: `/erp/analytics`, `/erp/stats`,
+  `/erp/contracts/stats`, `/erp/profit`, `/erp/audit`. Bular **odamlar
+  haqidagi** ko'rsatkichni ham beradi (kim necha kunda topshiradi),
+  shuning uchun har kimga emas.
+- **rahbar** — menejer huquqlari + kompaniya passporti
+  (`tizim.kompaniya`). Farq huquqlar MATRITSASIDA
+  (`api/erp/perm.py`, `erp_huquqlar.md`): menejer kundalik ishni
+  yuritadi (taqsimlash, muddat), rahbar qaror va tasdiq beradi.
 - **admin** — qo'shimcha: hodim hisoblarini boshqarish (`/erp/users`).
+
+**Rol endi endpointda tekshirilmaydi.** Ierarxiya (`ROLE_RANK`) —
+faqat quyi qatlam; haqiqiy qoida AMALLAR matritsasida
+(`api/erp/perm.py`): endpoint "menejer kerak" demaydi, "bu amal —
+`hujjat.chiqarish`" deydi. Batafsil: `erp_huquqlar.md`.
+
+Rol ro'yxati UCH joyda: bazadagi `CHECK` (`schema_patch_erp_17.sql`),
+`api/auth.py` (`ROLES`, `ROLE_RANK`) va interfeys turlari. Ular
+ajralib ketmasligini `_tests/erp11_test.py` tekshiradi.
+
+Avval rol uchta edi (`broker < manager < admin`) va `manager` ikki xil
+odamni — direktorni va tender bo'limi boshlig'ini — bitta nom ostiga
+qo'yardi. Sabab va ko'chirish: `schema_patch_erp_17.sql` sarlavhasi.
 
 Kompaniya hisobida rol **yo'q**: huquq taqsimoti odamlar orasida bo'ladi,
 odamlar esa ERP da. Tender-AI sinovi buni tekshiradi (`role` ustuni
@@ -673,7 +691,7 @@ kelib chiqadi:
 
 | | ERP | Tender-AI |
 |---|---|---|
-| Ro'yxatni kim ko'radi | **admin** (uch rol bor) | kirgan hisob (**rol yo'q**, hisob bitta) |
+| Ro'yxatni kim ko'radi | **admin** (to'rt rol bor) | kirgan hisob (**rol yo'q**, hisob bitta) |
 | Hisobni bloklamaslik sababi | loginni bilgan har kim hodimni to'sib qo'yardi | hisob BITTA — uni yopish butun kompaniyani uzib qo'yardi |
 
 Cheklov raqamlari **bir xil** (`.env` dagi bir xil nomlar):

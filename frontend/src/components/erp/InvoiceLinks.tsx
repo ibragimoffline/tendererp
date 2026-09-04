@@ -59,8 +59,7 @@ export default function InvoiceLinks({ oppId }: { oppId: number }) {
       else parts.push('qator topilmadi — ombordan tovar ajratilmagan')
       if (fl?.no_price) parts.push(`${fl.no_price} tasining narxi yo'q`)
       if (fl?.contract_number) parts.push(`shartnoma: ${fl.contract_number}`)
-      setNote(`Qoralama yaratildi. ${parts.join(', ')}. Narxlarni tekshirib, `
-        + `"Hisob-fakturalar" bo'limida chiqaring.`)
+      setNote(`Qoralama yaratildi: ${parts.join(', ')}.`)
       load()
     } catch (e) {
       setError((e as Error).message.replace(/^\d+:\s*/, ''))
@@ -133,8 +132,8 @@ export default function InvoiceLinks({ oppId }: { oppId: number }) {
           <Icon name="plus" size={13} /> Faktura chiqarish
         </Button>
         <span className="text-caption text-muted-foreground">
-          Qatorlar ajratilgan tovardan to'ldiriladi; tahrirlash va to'lov —
-          "Hisob-fakturalar" bo'limida
+          Qatorlar ajratilgan tovardan to'ldiriladi. Tahrirlash va to'lov —
+          Hisob-fakturalar bo'limida.
         </span>
       </div>
     </section>

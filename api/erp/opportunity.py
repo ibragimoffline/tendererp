@@ -27,10 +27,47 @@ STATUSES = [
     ("won",            "Yutildi"),
     ("lost",           "Yutqazildi"),
     ("rejected",       "Rad etildi"),
+    # 24-patch. `rejected` dan FARQI ma'noda: rad etish — BIZNING qaror,
+    # ulgurmaslik — natija. Ilgari bunday karta `preparing` da abadiy
+    # qolardi va `analytics.py` uni "hozir ishlanmoqda" deb sanardi.
+    ("ulgurmadik",     "Ulgurmadik (muddat o'tdi)"),
 ]
 STATUS_LABEL = dict(STATUSES)
-FINAL = {"won", "lost", "rejected"}
+# `ulgurmadik` YAKUNIY: bu kartada boshqa ish qilinmaydi. Bundan
+# `stock.on_status_change` avtomatik foyda ko'radi — u `to_status in FINAL`
+# ga qaraydi, ya'ni tender o'tib ketganda rezerv BO'SHAYDI va tovar boshqa
+# kartaga band qilinadi. `stock.py` ga bir qator ham qo'shilmadi.
+FINAL = {"won", "lost", "rejected", "ulgurmadik"}
+# YAKUNLANMAGAN uchtalik: sabab kodi va sabab hujjati AYNAN shularga
+# tegishli. `won` da "nega yutqazdik" degan savol yo'q. Ro'yxat shu
+# yerda — `api/erp/fayl.py` uni IMPORT qiladi, o'zida takrorlamaydi.
+SABAB_HOLATLARI = FINAL - {"won"}
 PRIORITIES = {"low": "Past", "medium": "O'rta", "high": "Yuqori"}
+
+# TIZIM STATUS QO'YMAYDI. Ro'yxat ataylab BO'SH va shu holda qoladi:
+# `muddati_otdi` ni avtomatik qo'yish taklif qilingan edi va RAD ETILDI —
+# tizim kartani odam o'rniga yopsa, "qarorni inson qabul qiladi" degan
+# 1-patchdagi tamoyil buzilardi. Muddati o'tgan ochiq kartani `remind.py`
+# eslatadi; yopishni odam hal qiladi.
+TIZIM_QOYADI: set = set()
+
+# --- O'TISH SHARTLARI -------------------------------------------------------
+# To'liq matritsa ATAYLAB emas. Sabab: `sent_to_client` va `confirmed`
+# mijozli kartalarga tegishli va mijozsiz kartada o'tkazib yuboriladi —
+# qattiq matritsa ularni majburiy qilib qo'yardi.
+#
+# Faqat IKKI kirish qulflanadi va ikkalasining ham narxi bor:
+#   `submitted` — "ariza berildi". Unga sakrash tayyorgarlik bosqichini
+#                 tarixdan o'chiradi, ya'ni `analytics.py` dagi bosqich
+#                 vaqti yolg'on bo'lardi.
+#   `won`       — `stock.on_status_change` bu yerda rezervni SARFLAYDI.
+#                 `new` dan to'g'ridan-to'g'ri `won` ga sakralsa, rezerv
+#                 qilinmagan tovar sarflangan bo'lib chiqadi va ombor
+#                 qoldig'i JIMGINA buziladi. Aynan shu sababli qulf.
+KIRISH_SHARTI = {
+    "submitted": {"preparing"},
+    "won":       {"submitted"},
+}
 
 # Yutqazish sabablari — bazadagi CHECK bilan BIR XIL ro'yxat
 # (schema_patch_erp_3.sql). Statusga tegishli bo'lgani uchun shu modulda:
@@ -46,13 +83,20 @@ LOST_REASONS = [
 ]
 LOST_REASON_LABEL = dict(LOST_REASONS)
 
-# frontend/src/format.ts dagi sourceUrl() bilan BIR XIL naqsh.
-# MUHIM: manbadagi ASL id (tender.source_id) ishlatiladi — bizning t.id global
-# (source_id + platforma ofseti) va manba saytida mavjud emas.
-SOURCE_URL = {
-    "xt-xarid": "https://xt-xarid.uz/procedure/{id}/core",
-    "uzex":     "https://etender.uzex.uz/lot/{id}",
-}
+# MANBA HAVOLASI — BAZADAN, kodda lug'at emas.
+#
+# Ilgari bu yerda `SOURCE_URL` lug'ati turardi: platforma -> URL
+# shabloni. U tender-ai dagi `v_tender_manba` view i bilan IKKINCHI
+# NUSXA edi va ular ajralib ketishi mumkin edi (yangi platforma
+# qo'shilsa yoki manba saytining manzili o'zgarsa — bir tomonda
+# yangilanadi, ikkinchisida yo'q). `erp_rollar.md` §10: "SOURCE_URL
+# lug'ati o'chadi, manba_url bazadan".
+#
+# ZAXIRA yo'q: view bo'lmasa havola BERILMAYDI. Noto'g'ri havola
+# "bor, lekin ochilmaydi" degan holat yaratardi — havola yo'qligi
+# ochiqroq.
+MANBA_SQL = ("SELECT ommaviy_url FROM v_tender_manba "
+             "WHERE ichki_id = %(id)s")
 
 
 class ErpError(Exception):
@@ -147,11 +191,17 @@ OPP_LIST_SQL = f"""
 SELECT {_OPP_COLS} {_OPP_FROM}
 WHERE (%(status)s::text IS NULL OR o.status = %(status)s)
   AND (%(broker_id)s::int IS NULL OR o.broker_id = %(broker_id)s)
+  -- "TAQSIMLANMAGAN": Tender-AI yo'naltirishi hodimni topa olmasa
+  -- karta baribir ochiladi (`api/erp/topshiriq.py`) va u YO'QOLMASLIGI
+  -- kerak. Menejer aynan shu ro'yxatni ochadi.
+  AND (%(unassigned)s::bool IS NOT TRUE OR o.broker_id IS NULL)
   AND (%(client_id)s::int IS NULL OR o.client_id = %(client_id)s)
   AND (%(q)s::text IS NULL OR o.title ILIKE '%%' || %(q)s || '%%'
                            OR o.customer_name ILIKE '%%' || %(q)s || '%%'
                            OR o.tender_ref ILIKE '%%' || %(q)s || '%%')
-  AND (%(open_only)s::bool IS NOT TRUE OR o.status NOT IN ('won','lost','rejected'))
+  -- YAKUNIY ro'yxat KODDAN (`FINAL`): qo'lda yozilgan nusxa
+  -- `ulgurmadik` ni JIMGINA "ochiq" deb sanardi.
+  AND (%(open_only)s::bool IS NOT TRUE OR o.status <> ALL(%(final)s))
 ORDER BY o.deadline_at NULLS LAST, o.id
 """
 OPP_GET_SQL = f"SELECT {_OPP_COLS} {_OPP_FROM} WHERE o.id = %(id)s"
@@ -174,11 +224,18 @@ RETURNING id
 
 # Faqat XODIM maydonlari. Snapshot va status bu yerdan O'ZGARMAYDI: snapshot
 # ataylab muzlatilgan, status esa o'z endpointi orqali (tarix yozilishi uchun).
+#
+# `next_task` / `next_task_at` bu yerda YO'Q va bu ataylab. Ular
+# 1-bosqichdagi bitta "keyingi vazifa" maydoni edi; 3-bosqichda o'rniga
+# VAZIFALAR RO'YXATI keldi (`erp.opportunity_task`) va ekranlar, eslatma
+# skripti, "mening ishlarim" — hammasi o'sha ro'yxatdan o'qiydi. Ustunga
+# yozishda davom etish "saqlandi, lekin hech qayerda ko'rinmaydi" degan
+# o'lik maydon yaratardi. Ishga olishda kiritilgani esa HAQIQIY vazifaga
+# aylantiriladi (`take()` ga qarang).
 OPP_UPDATE_SQL = """
 UPDATE erp.opportunity SET
     broker_id=%(broker_id)s, client_id=%(client_id)s, priority=%(priority)s,
-    win_probability=%(win_probability)s, note=%(note)s,
-    next_task=%(next_task)s, next_task_at=%(next_task_at)s, updated_at=now()
+    win_probability=%(win_probability)s, note=%(note)s, updated_at=now()
 WHERE id = %(id)s
 RETURNING id
 """
@@ -186,10 +243,16 @@ RETURNING id
 OPP_STATUS_SQL = """
 UPDATE erp.opportunity SET
     status=%(status)s, status_changed_at=now(), updated_at=now(),
-    closed_at = CASE WHEN %(status)s IN ('won','lost','rejected') THEN now() ELSE NULL END,
-    -- Sabab faqat 'lost' ga tegishli: boshqa statusga o'tilganda tozalanadi,
-    -- aks holda qayta ochilgan kartada eski sabab qolib ketardi.
-    lost_reason = CASE WHEN %(status)s = 'lost' THEN %(lost_reason)s ELSE NULL END
+    -- Ro'yxat KODDAN keladi (`FINAL`), bu yerda TAKRORLANMAYDI. Ilgari
+    -- shu qatorda ('won','lost','rejected') yozilgan edi va `ulgurmadik`
+    -- qo'shilganda u JIMGINA tashqarida qoldi: karta yakuniy bo'lardi,
+    -- `closed_at` esa NULL — ya'ni "qachon yopildi" degan savol javobsiz.
+    closed_at = CASE WHEN %(status)s = ANY(%(final)s) THEN now() ELSE NULL END,
+    -- Sabab yakunlanMAGAN uchta holatga tegishli (`SABAB_HOLATLARI`):
+    -- boshqa statusga o'tilganda tozalanadi, aks holda qayta ochilgan
+    -- kartada eski sabab qolib ketardi.
+    lost_reason = CASE WHEN %(status)s = ANY(%(sabab)s)
+                       THEN %(lost_reason)s ELSE NULL END
 WHERE id = %(id)s
 RETURNING id, status
 """
@@ -274,15 +337,27 @@ def _check_fields(data: dict) -> None:
 # ---------------------------------------------------------------------------
 # Amallar
 # ---------------------------------------------------------------------------
+def _manba_url(tender_id: int) -> Optional[str]:
+    """Manbadagi e'lon havolasi — `v_tender_manba` dan.
+
+    View yo'q bo'lsa (eski o'rnatma) `None`: ERP yiqilmaydi, havola
+    ko'rsatilmaydi, xolos."""
+    try:
+        r = db.query_one(MANBA_SQL, {"id": tender_id})
+    except Exception:                           # noqa: BLE001
+        return None
+    return (r or {}).get("ommaviy_url")
+
+
 def _tender_snapshot(tender_id: int) -> dict:
     """Tenderdan 9 maydon. ERP ajratilsa — SHU BITTA funksiya HTTP chaqiruviga
     almashadi."""
     t = db.query_one(TENDER_SNAPSHOT_SQL, {"id": tender_id})
     if not t:
         raise ErpError("Tender topilmadi.", 404)
-    # Manbadagi asl raqam: havola ham, ko'rsatiladigan raqam ham shundan.
+    # Manbadagi asl raqam: KO'RSATILADIGAN raqam shundan (bizning
+    # `t.id` global va manba saytida mavjud emas).
     ref = t["source_id"] or t["id"]
-    url_tpl = SOURCE_URL.get(t["source_platform"] or "")
     return {
         "tender_id": t["id"],
         "source_platform": t["source_platform"],
@@ -294,7 +369,7 @@ def _tender_snapshot(tender_id: int) -> dict:
         "currency": (t["currency"] or "").strip() or None,
         "deadline_at": t["deadline_at"],
         "region_name": t["region_name"],
-        "source_url": url_tpl.format(id=ref) if url_tpl else None,
+        "source_url": _manba_url(tender_id),
     }
 
 
@@ -378,11 +453,15 @@ def diff_with_tender(opp_id: int) -> dict:
             "source": source, "suggest_close": suggest_close}
 
 
-def list_(status=None, broker_id=None, client_id=None, q=None, open_only=False):
+def list_(status=None, broker_id=None, client_id=None, q=None,
+          open_only=False, unassigned=False):
+    """`unassigned` — mas'uli yo'q kartalar (Tender-AI yo'naltirishi
+    hodimni topa olmagan yoki karta hali taqsimlanmagan)."""
     _need_schema()
     rows = db.query(OPP_LIST_SQL, {"status": status, "broker_id": broker_id,
                                    "client_id": client_id, "q": q or None,
-                                   "open_only": open_only})
+                                   "open_only": open_only, "final": sorted(FINAL),
+                                   "unassigned": bool(unassigned)})
     return [shape(r) for r in rows]
 
 
@@ -431,21 +510,139 @@ def take(tender_id: int, data: dict) -> dict:
     db.execute_returning(HISTORY_INSERT_SQL, {
         "opportunity_id": row["id"], "from_status": None, "to_status": "new",
         "changed_by": data.get("created_by"), "note": "Ishga olindi"})
+    _birinchi_vazifa(row["id"], data)
+    _chat_och(row["id"], data)
     return get(row["id"])
+
+
+def _chat_och(opp_id: int, data: dict) -> None:
+    """Karta ochilganda MULOQOT ham ochiladi (`docs/erp_chat.md` §4).
+
+    A'zolar: kartaning mas'uli va kartani ochgan odam. Mas'ul yo'q
+    bo'lsa ("Taqsimlanmagan") — faqat ochgan odam; hodim tayinlanganda
+    `update()` uni qo'shadi.
+
+    Import SHU YERDA: `chat` moduli `opportunity` dan `FINAL` va
+    `ErpError` ni oladi, ya'ni modul darajasida qilinsa aylanma
+    bog'lanish bo'lardi (`stock` va `tasks` bilan bir xil naqsh)."""
+    from api.erp import chat as _chat
+    _chat.karta_chati_yarat(
+        opp_id, data.get("title"), data.get("broker_id"),
+        data.get("created_by_user_id"),
+        birinchi_xabar="Karta ishga olindi — muloqot shu yerda.")
+
+
+def _birinchi_vazifa(opp_id: int, data: dict) -> None:
+    """Formadagi "Keyingi vazifa" — HAQIQIY vazifa qatoriga aylanadi.
+
+    Ilgari u faqat `erp.opportunity.next_task` ustuniga yozilardi va
+    hech qayerda ko'rinmasdi: vazifalar ro'yxati ham, "mening
+    ishlarim" ham, eslatma skripti ham `erp.opportunity_task` dan
+    o'qiydi. Ya'ni odam muddat yozardi va u jimgina yo'qolardi.
+
+    Vazifalar sxemasi qo'llanmagan bo'lsa JIM o'tamiz: karta ochilishi
+    vazifadan muhimroq va 3-bosqich patchi ixtiyoriy bo'lib qolgan."""
+    nom = (data.get("next_task") or "").strip()
+    if not nom:
+        return
+    # Import shu yerda: `tasks` moduli `opportunity` dan o'qiydi, ya'ni
+    # modul darajasida qilinsa aylanma bog'lanish bo'lardi (`stock` va
+    # `xabar` bilan bir xil naqsh).
+    from api.erp import tasks as _tasks
+    try:
+        _tasks.add(opp_id, {
+            "title": nom,
+            "assignee_broker_id": data.get("broker_id"),
+            "due_at": data.get("next_task_at"),
+            "note": None,
+            "created_by": data.get("created_by")})
+    except ErpError:
+        pass
 
 
 def update(opp_id: int, data: dict) -> dict:
     """Faqat xodim maydonlari. Snapshot va status tegilmaydi."""
     _need_schema()
     _check_fields(data)
+    # MAS'UL O'ZGARDIMI — xabar uchun kerak (pastga qarang).
+    oldingi = db.query_one("SELECT broker_id, title FROM erp.opportunity "
+                           "WHERE id = %(id)s", {"id": opp_id})
     row = db.execute_returning(OPP_UPDATE_SQL, {
         **{k: data.get(k) for k in ("broker_id", "client_id", "priority",
-                                    "win_probability", "note", "next_task",
-                                    "next_task_at")},
+                                    "win_probability", "note")},
         "id": opp_id})
     if not row:
         raise ErpError("Karta topilmadi.", 404)
+    # KARTA O'TKAZILDI — yangi mas'ulga xabar. Import SHU YERDA:
+    # modul darajasida qilinsa `xabar` -> `opportunity` aylanma
+    # bog'lanish xavfi paydo bo'lardi (`stock` bilan bir xil naqsh).
+    yangi = data.get("broker_id")
+    if oldingi and yangi and yangi != oldingi.get("broker_id"):
+        from api.erp import xabar as _xabar
+        _xabar.brokerga(yangi, "otkazildi",
+                        f"Karta sizga o'tkazildi: "
+                        f"{oldingi.get('title') or f'#{opp_id}'}.", opp_id)
+        # YANGI MAS'UL CHATGA QO'SHILADI. Aks holda unga karta
+        # berilardi-yu, u haqidagi butun yozishma ko'rinmasdi — eng
+        # kerakli paytda, ishni qabul qilib olayotganda.
+        _chat_masul_almashdi(opp_id, oldingi.get("broker_id"), yangi)
     return get(opp_id)
+
+
+def _chat_masul_almashdi(opp_id: int, eski_broker: Optional[int],
+                         yangi_broker: int) -> None:
+    """Mas'ul o'zgardi: yangisi chatga qo'shiladi, lentaga tizim xabari.
+
+    ESKISI CHIQARILMAYDI: u karta ustida ishlagan va uning konteksti
+    kerak bo'lishi mumkin. Chiqarish — alohida, ONGLI amal
+    (`chat.azo_chiqar`), avtomatik emas."""
+    from api.erp import chat as _chat
+    chat_id = _chat.karta_chati(opp_id)
+    if not chat_id:
+        return
+    nom = db.query_one("SELECT full_name FROM erp.broker WHERE id = %(b)s",
+                       {"b": yangi_broker}) or {}
+    _chat.tizim_xabari(
+        chat_id, f"Karta mas'uli o'zgardi: {nom.get('full_name') or 'hodim'}.")
+    u = db.query_one("SELECT id FROM erp.app_user WHERE broker_id = %(b)s "
+                     "AND active ORDER BY id LIMIT 1", {"b": yangi_broker})
+    if u:
+        try:
+            _chat.azo_qosh(chat_id, u["id"], u["id"])
+        except ErpError:
+            pass                        # allaqachon a'zo — normal holat
+
+
+def taqsimlash_sorovi(opp_id: int, izoh: Optional[str],
+                      kim: Optional[str]) -> dict:
+    """"Bu ish menga to'g'ri kelmadi" — MENEJERGA so'rov.
+
+    Broker kartani o'zi boshqa hodimga o'tkaza olmaydi (huquqlar
+    matritsasi): aks holda ish jimgina bir-biriga surilardi va
+    "kim mas'ul" degan savol javobsiz qolardi.
+
+    So'rov TARIXGA yoziladi va menejerga xabar boradi. Ya'ni u
+    og'zaki emas — keyin "aytgan edim" degan bahs bo'lmaydi.
+    """
+    _need_schema()
+    cur = db.query_one("SELECT id, status, title, broker_id "
+                       "FROM erp.opportunity WHERE id = %(id)s", {"id": opp_id})
+    if not cur:
+        raise ErpError("Karta topilmadi.", 404)
+    matn = (izoh or "").strip()
+    if not matn:
+        raise ErpError("Sabab majburiy: menejer nima qilishini bilishi kerak.")
+    db.execute_returning(HISTORY_INSERT_SQL, {
+        "opportunity_id": opp_id, "from_status": cur["status"],
+        "to_status": cur["status"], "changed_by": kim,
+        "note": f"Qayta taqsimlash so'raldi: {matn[:500]}"})
+    from api.erp import xabar as _xabar
+    nom = cur.get("title") or f"#{opp_id}"
+    n = _xabar.menejerlarga(
+        "otkazildi", f"Qayta taqsimlash so'rovi: {nom}. "
+                     f"So'radi: {kim or 'noma`lum'}. Sabab: {matn[:300]}",
+        opp_id)
+    return {"ok": True, "xabar_ketdi": n, "opportunity_id": opp_id}
 
 
 def set_status(opp_id: int, status: str, changed_by: Optional[str],
@@ -464,15 +661,40 @@ def set_status(opp_id: int, status: str, changed_by: Optional[str],
         # Status o'zgarmagan, lekin SABAB o'zgargan bo'lishi mumkin (yopilgan
         # kartada sababni to'g'rilash). Uni yozamiz, tarixga esa yozmaymiz:
         # bosqich o'tishi bo'lmadi.
-        if status == "lost" and lost_reason != cur.get("lost_reason"):
+        # Ilgari faqat `lost` da ishlardi; `rejected` va `ulgurmadik` da
+        # sabab kiritilsa JIMGINA tashlab yuborilardi.
+        if status in FINAL and lost_reason != cur.get("lost_reason"):
             db.execute_returning(OPP_REASON_SQL,
                                  {"id": opp_id, "lost_reason": lost_reason})
         return get(opp_id)
+    # O'TISH SHARTI (yuqoridagi KIRISH_SHARTI ga qarang). Jimgina `200`
+    # emas, `409` va SABAB bilan: interfeys kartochkani qaytaradi va
+    # nega qaytganini yozadi.
+    ruxsat = KIRISH_SHARTI.get(status)
+    if ruxsat is not None and cur["status"] not in ruxsat:
+        kutilgan = ", ".join(sorted(STATUS_LABEL[s] for s in ruxsat))
+        raise ErpError(
+            f"'{STATUS_LABEL[status]}' holatiga faqat '{kutilgan}' dan "
+            f"o'tish mumkin (hozir: '{STATUS_LABEL[cur['status']]}').", 409)
+    # SABAB MAJBURIY — yakunlanMAGAN uchta holat uchun.
+    #
+    # Ilgari faqat `lost` da (u ham FAQAT EKRANDA) so'ralardi. Natijada
+    # "to'xtatildi, nega — noma'lum" degan ko'r nuqta qolardi va
+    # `analytics.py` dagi sabab kesimi yarim bo'sh bo'lardi. Tekshiruv
+    # SERVERDA: ekrandagi shart interfeysni chetlab o'tsa ishlamaydi,
+    # va aynan shu ma'lumot ustidan hisobot quriladi.
+    #
+    # `won` bundan tashqarida: "nega yutqazdik" degan savol u yerda yo'q.
+    if status in SABAB_HOLATLARI and not lost_reason:
+        raise ErpError(
+            f"'{STATUS_LABEL[status]}' holatiga o'tish uchun SABAB "
+            "ko'rsatilishi shart — u keyingi tahlilning yagona manbai.")
     # Yakuniydan qaytish — faqat izoh bilan: "nega qayta ochildi" tarixda qolsin.
     if cur["status"] in FINAL and status not in FINAL and not (note or "").strip():
         raise ErpError("Yakuniy statusdan qaytarish uchun izoh majburiy.")
-    db.execute_returning(OPP_STATUS_SQL, {"id": opp_id, "status": status,
-                                          "lost_reason": lost_reason})
+    db.execute_returning(OPP_STATUS_SQL, {
+        "id": opp_id, "status": status, "lost_reason": lost_reason,
+        "final": sorted(FINAL), "sabab": sorted(SABAB_HOLATLARI)})
     db.execute_returning(HISTORY_INSERT_SQL, {
         "opportunity_id": opp_id, "from_status": cur["status"], "to_status": status,
         "changed_by": changed_by, "note": note})
@@ -482,6 +704,22 @@ def set_status(opp_id: int, status: str, changed_by: Optional[str],
     # Import SHU YERDA — modul darajasida qilinsa ikki modul bir-birini
     # aylanma import qilardi (`stock` allaqachon `opportunity` dan
     # `ErpError` va `FINAL` ni oladi).
+    # MULOQOT — status o'zgarishi lentada ham ko'rinadi. Bu
+    # `opportunity_history` bilan ATAYLAB takrorlanadi (§6): tarix —
+    # rasmiy jurnal, chat — muloqot oqimi; suhbatni o'qiyotgan odam
+    # "shu payt nima bo'lgan" ni bir joyda ko'rishi kerak.
+    from api.erp import chat as _chat
+    _chat_id = _chat.karta_chati(opp_id)
+    if _chat_id:
+        _izoh = f" — {note.strip()}" if (note or "").strip() else ""
+        _chat.tizim_xabari(
+            _chat_id,
+            f"Holat: {STATUS_LABEL.get(cur['status'], cur['status'])} -> "
+            f"{STATUS_LABEL[status]} ({changed_by or 'tizim'}){_izoh}")
+    # Yakuniy holat -> chat ARXIV (faqat o'qish); qaytarilsa ochiladi.
+    if (status in FINAL) != (cur["status"] in FINAL):
+        _chat.karta_arxiv(opp_id, status in FINAL)
+
     from api.erp import stock as _stock
     stock_result = _stock.on_status_change(opp_id, cur["status"], status,
                                            changed_by)

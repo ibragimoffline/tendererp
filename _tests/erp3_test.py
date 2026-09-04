@@ -24,12 +24,14 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # fixture.py
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except (AttributeError, ValueError):            # pragma: no cover
     pass
 
+import fixture as FIX                   # status yo'li (24-patch)
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -59,7 +61,6 @@ TEST_USER = {"id": 0, "username": "zztest", "full_name": "ZZTEST Sinov",
 def _auth_override(app):
     from api import main as _main
     app.dependency_overrides[_main.me] = lambda: TEST_USER
-    app.dependency_overrides[_main.manager] = lambda: TEST_USER
 
 _fail = 0
 _pass = 0
@@ -301,8 +302,9 @@ def test_db():
             eq("qayta ochilganda sabab tozalandi", r.json()["lost_reason"], None)
 
             # Yopilgan kartaning vazifasi eslatilmaydi
-            c.patch(f"/erp/opportunities/{oid}/status",
-                    json={"status": "won", "changed_by": PREFIX + "Broker"})
+            for st in FIX.yol("won"):
+                c.patch(f"/erp/opportunities/{oid}/status",
+                        json={"status": st, "changed_by": PREFIX + "Broker"})
             rem5 = c.get("/erp/reminders", params={"days": 30, "deadline_days": 0}).json()
             check(all(x["opportunity_id"] != oid for x in rem5["tasks"]),
                   "yopilgan kartaning vazifasi eslatilmaydi")

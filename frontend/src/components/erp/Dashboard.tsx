@@ -5,6 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import Icon from '../Icon'
 import { BarRow, Empty, GroupedBars, Legend, Panel, SERIES, Stat } from './charts'
+import { roleAtLeast } from './erpShared'
 import type {
   AuditReport, AuthUser, ErpAnalytics, ErpStats, MyTasks, Opportunity,
   ProfitReport,
@@ -25,7 +26,7 @@ import type {
 // HAR KIM O'ZINIKINI KO'RADI — va bu ikki BOSHQA panel.
 //
 // Kompaniya bo'yicha ko'rsatkich (`/erp/stats`, `/erp/analytics`,
-// `/erp/profit`, `/erp/audit`) `manager` huquqini talab qiladi va
+// `/erp/profit`, `/erp/audit`) `menejer` huquqini talab qiladi va
 // brokerda 403 qaytaradi. Shuning uchun brokerga xato ham, bo'sh quti
 // ham ko'rsatilmaydi: unga O'Z ishlari va O'Z kartalari chiqadi.
 //
@@ -40,7 +41,7 @@ interface Props {
 
 export default function Dashboard({ user, onOpenOpportunity, onGo }: Props) {
   const f = useFormat()
-  const isManager = user.role === 'manager' || user.role === 'admin'
+  const isManager = roleAtLeast(user.role, 'menejer')
 
   const [stats, setStats] = useState<ErpStats | null>(null)
   const [an, setAn] = useState<ErpAnalytics | null>(null)
@@ -167,8 +168,7 @@ export default function Dashboard({ user, onOpenOpportunity, onGo }: Props) {
       {stats.mixed_currency && (
         <p className="text-caption text-muted-foreground">
           Kartalar {stats.currencies.join(', ')} valyutalarida — pul
-          yig'indilari ko'rsatilmaydi. Kurs bo'yicha qo'shish qaysi kungi
-          kurs ekaniga bog'liq bo'lardi; sanoq esa to'g'ri qoladi.
+          yig'indilari ko'rsatilmaydi, sanoq esa to'g'ri qoladi.
         </p>
       )}
 
@@ -345,9 +345,8 @@ export default function Dashboard({ user, onOpenOpportunity, onGo }: Props) {
           </div>
           {!profit.complete && (
             <p className="mt-2 text-caption text-soon-strong">
-              Hisob to'liq emas: {profit.unknown_cost_moves} ta chiqimning
-              tannarxi noma'lum. Ular tannarxga qo'shilmadi — haqiqiy foyda
-              bundan kam.
+              Hisob to'liq emas: {profit.unknown_cost_moves} ta chiqimda
+              tannarx yo'q — haqiqiy foyda bundan kam.
             </p>
           )}
         </Panel>
@@ -403,9 +402,7 @@ function MineView({ user, tasks, mine, onOpenOpportunity, onGo }: {
 
       {!user.broker_id && (
         <p className="text-caption text-soon-strong">
-          Hisobingiz hodimga bog'lanmagan — shuning uchun "mening
-          kartalarim" bo'sh. Administratordan hisobni hodimga bog'lashni
-          so'rang.
+          Hisobingiz hodimga bog'lanmagan — kartalaringiz ko'rinmaydi.
         </p>
       )}
 

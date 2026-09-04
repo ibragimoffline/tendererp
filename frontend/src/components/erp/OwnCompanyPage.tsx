@@ -8,7 +8,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import type { ContractRow, OwnCompany, OwnCompanyInput } from '@/types'
-import { ErpError } from './erpShared'
+import { ErpError, can } from './erpShared'
 
 // BIZNING KOMPANIYA + SHARTNOMALAR RO'YXATI (5A-1).
 //
@@ -24,7 +24,7 @@ const FIELDS: { key: keyof OwnCompanyInput; label: string; wide?: boolean }[] = 
   { key: 'name', label: 'Kompaniya nomi', wide: true },
   { key: 'inn', label: 'INN (9 raqam)' },
   { key: 'oked', label: 'OKED' },
-  { key: 'legal_form', label: 'Tashkiliy shakl (MCHJ / AJ / YaTT)' },
+  { key: 'legal_form', label: 'Tashkiliy shakl (MCHJ, AJ…)' },
   { key: 'tax_mode', label: 'Soliq rejimi' },
   { key: 'address_legal', label: 'Yuridik manzil', wide: true },
   { key: 'address_actual', label: 'Faktik manzil', wide: true },
@@ -82,8 +82,8 @@ export default function OwnCompanyPage({ onOpenOpportunity }: {
       <section className="rounded-lg border bg-card p-4">
         <h2 className="mb-1 text-body font-semibold">Bizning rekvizitlar</h2>
         <p className="mb-3 text-caption text-muted-foreground">
-          Shartnoma va hisob-fakturada ishlatiladi. Tender-AI dagi kompaniya
-          profili (qidiruv sozlamalari) bundan alohida — u o'z joyida qoladi.
+          Shartnoma va hisob-fakturada ishlatiladi. Tender-AI dagi qidiruv
+          profili bundan alohida.
         </p>
 
         {own && own.missing.length > 0 && (
@@ -152,9 +152,19 @@ export default function OwnCompanyPage({ onOpenOpportunity }: {
         </div>
 
         <div className="mt-4 flex items-center gap-3">
-          <Button size="sm" disabled={busy} onClick={save}>
-            {busy ? 'Saqlanmoqda…' : 'Saqlash'}
-          </Button>
+          {/* Rekvizitni O'ZGARTIRISH — administrator va rahbar ishi
+              (`tizim.kompaniya`). Qolganlar ko'radi: faktura va
+              shartnoma chop etishda kerak. Tugmani ko'rsatib qo'yish
+              esa 403 va'da qilardi. */}
+          {can('tizim.kompaniya') ? (
+            <Button size="sm" disabled={busy} onClick={save}>
+              {busy ? 'Saqlanmoqda…' : 'Saqlash'}
+            </Button>
+          ) : (
+            <span className="text-caption text-muted-foreground">
+              Rekvizitlarni administrator yoki rahbar o'zgartiradi.
+            </span>
+          )}
           {saved && <span className="text-caption text-ok-strong">Saqlandi</span>}
           {own?.updated_at && (
             <span className="text-caption text-muted-foreground">

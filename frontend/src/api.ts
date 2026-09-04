@@ -16,8 +16,11 @@ import type {
   StockReserve, StockReserveInput, Invoice, InvoiceInput, InvoiceLineInput,
   PaymentInput, ReserveSuggestions, Act, ActInput, ContractSpecification,
   AuditReport, AuditRow,
+  OpportunityFile, FaylQamrov,
+  ErpChat, ErpChatLenta, ErpChatMembers, ErpChatHistory,
   LoginAttempt,
   ProfitReport, ProfitRow,
+  Setting, ErpNotification, ErpTahlil, TopshiriqHolat,
 } from './types'
 
 const BASE = import.meta.env.VITE_API_BASE || '/api'
@@ -351,6 +354,50 @@ export const api = {
       { body: { password, current_password: currentPassword } }),
   roles: () => request<{ roles: { code: string; label: string }[] }>('GET', '/erp/auth/roles'),
 
+  /** "Bu ish menga to'g'ri kelmadi" — MENEJERGA so'rov. Broker
+   *  kartani o'zi o'tkaza olmaydi (huquqlar matritsasi), lekin
+   *  so'rovi tarixda qoladi. */
+  requestReassign: (oppId: number, izoh: string) =>
+    request<{ ok: boolean; xabar_ketdi: number }>(
+      'POST', `/erp/opportunities/${oppId}/taqsimlash-sorovi`,
+      { body: { izoh } }),
+
+  /** Tender-AI tahlili — SNAPSHOT (eng yangisi birinchi). ERP uni
+   *  qayta hisoblamaydi: qoidalar Tender-AI da. */
+  tahlil: (oppId: number) =>
+    request<{ items: ErpTahlil[] }>(
+      'GET', `/erp/opportunities/${oppId}/tahlil`),
+
+  // --- bildirishnomalar (o'ziniki) ---
+  // HUQUQ yo'q: har kim faqat o'zinikini ko'radi va `app_user_id`
+  // sessiyadan olinadi (so'rovdan emas).
+  notifications: (onlyUnread = false) =>
+    request<{ ready: boolean; items: ErpNotification[]; unread: number }>(
+      'GET', '/erp/notifications', { params: { only_unread: onlyUnread } }),
+  readNotifications: (ids?: number[]) =>
+    request<{ belgilandi: number; unread: number }>(
+      'POST', '/erp/notifications/read', { body: { ids: ids ?? null } }),
+
+  // --- Tender-AI yo'naltirish oqimi (admin) ---
+  // Xarita OPERATOR qarori: qaysi Tender-AI ijarachisi ekanimiz
+  // taxmin qilinmaydi (`api/erp/topshiriq.py`).
+  topshiriqHolat: () =>
+    request<TopshiriqHolat>('GET', '/erp/topshiriq/holat'),
+  setTaiXarita: (taiCompanyId: number | null) =>
+    request<TopshiriqHolat>('PUT', '/erp/topshiriq/xarita',
+      { body: { tai_company_id: taiCompanyId } }),
+  topshiriqSync: () =>
+    request<{ holat: string; yaratildi?: number; bekor?: number
+              xato?: number }>('POST', '/erp/topshiriq/sync'),
+
+  // --- tizim sozlamalari (admin) ---
+  // Ro'yxat SERVERDAN keladi: kalitlar, standart qiymatlar va izohlar
+  // `api/erp/sozlama.py` da. Ekran ikkinchi nusxa tutmaydi.
+  settings: () => request<{ ready: boolean; settings: Setting[] }>(
+    'GET', '/erp/settings'),
+  setSetting: (key: string, value: boolean) =>
+    request<Setting>('PUT', `/erp/settings/${key}`, { body: { value } }),
+
   // --- mijoz korxonalar ---
   clients: (params?: Params) => request<ClientRow[]>('GET', '/erp/clients', { params }),
   client: (id: number) => request<ClientFull>('GET', `/erp/clients/${id}`),
@@ -417,6 +464,93 @@ export const api = {
     }
     return data as ImportResult
   },
+
+  // --- sabab hujjati (24-patch) ---
+  // "Nega yutqazdik / to'xtatdik / ulgurmadik" tafsiloti. Ro'yxat FAQAT
+  // metadata qaytaradi — fayl baytlari alohida so'rov bilan olinadi,
+  // aks holda har ochilishda 10 MB tortilardi.
+  oppFiles: (oppId: number) =>
+    request<OpportunityFile[]>('GET', `/erp/opportunities/${oppId}/files`),
+
+  /** Fayl biriktirish. `importClientDocuments` bilan bir xil sabab:
+   *  `FormData` da `Content-Type` ni BRAUZER qo'yadi (boundary bilan). */
+  addOppFile: async (oppId: number, file: File, izoh?: string) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const qs = izoh ? `?izoh=${encodeURIComponent(izoh)}` : ''
+    const url = new URL(`${BASE}/erp/opportunities/${oppId}/files${qs}`,
+                        window.location.origin)
+    const csrf = readCsrf()
+    const res = await fetch(url, {
+      method: 'POST', body: fd, credentials: 'include',
+      headers: csrf ? { 'X-CSRF-Token': csrf } : undefined,
+    })
+    const text = await res.text()
+    const data = text ? JSON.parse(text) : null
+    if (!res.ok) {
+      throw new ApiError(`${res.status}: ${errMatn(data?.detail) || res.statusText}`,
+        res.status, data?.detail)
+    }
+    return data as OpportunityFile
+  },
+
+  /** Yuklab olish — `<a href>` ISHLAMAYDI (endpoint himoyalangan,
+   *  cookie kerak), shuning uchun blob orqali. */
+  downloadOppFile: async (fileId: number, nom: string) => {
+    const url = new URL(`${BASE}/erp/files/${fileId}`, window.location.origin)
+    const res = await fetch(url, { credentials: 'include' })
+    if (!res.ok) throw new ApiError(`${res.status}: fayl olinmadi`, res.status, null)
+    const blob = await res.blob()
+    const href = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = href
+    a.download = nom
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(href)
+  },
+
+  deleteOppFile: (fileId: number) =>
+    request<{ ochirildi: boolean }>('DELETE', `/erp/files/${fileId}`),
+
+  faylQamrov: () => request<FaylQamrov>('GET', '/erp/files/qamrov'),
+
+  // --- ichki chat (25-patch) ---
+  // YANGILANISH SO'ROV BILAN: `after_id` berilganda javob odatda bo'sh
+  // va arzon. WebSocket ataylab yo'q (`docs/erp_chat.md` §5).
+  chats: () => request<ErpChat[]>('GET', '/erp/chats'),
+  chatMessages: (chatId: number, params?: Params) =>
+    request<ErpChatLenta>('GET', `/erp/chats/${chatId}/messages`, { params }),
+  chatSend: (chatId: number, body: { text: string; reply_to_id?: number | null;
+                                     mentions?: number[] }) =>
+    request<{ id: number }>('POST', `/erp/chats/${chatId}/messages`, { body }),
+  /** Tahrirda ham `mentions` yuboriladi: "eslatishni unutdim,
+   *  tahrirlab qo'shdim" ishlashi kerak. Server faqat YANGI id larga
+   *  bildirishnoma yuboradi (`chat_message.eslatilgan`). */
+  chatEdit: (chatId: number, mid: number, text: string, mentions?: number[]) =>
+    request<{ id: number }>('PUT', `/erp/chats/${chatId}/messages/${mid}`,
+                            { body: { text, mentions } }),
+  chatDelete: (chatId: number, mid: number, note?: string) =>
+    request<{ id: number }>('DELETE', `/erp/chats/${chatId}/messages/${mid}`,
+                            { body: note ? { note } : {} }),
+  chatHistory: (chatId: number, mid: number) =>
+    request<ErpChatHistory[]>(
+      'GET', `/erp/chats/${chatId}/messages/${mid}/history`),
+  chatMembers: (chatId: number) =>
+    request<ErpChatMembers>('GET', `/erp/chats/${chatId}/members`),
+  /** `appUserId` berilmasa — O'ZINI qo'shadi (server sessiyadan oladi).
+   *  Mijoz o'z hisob id sini bilishi shart emas. */
+  chatMemberAdd: (chatId: number, appUserId?: number) =>
+    request<ErpChatMembers>('POST', `/erp/chats/${chatId}/members`,
+                            { body: { app_user_id: appUserId ?? null } }),
+  chatMemberRemove: (chatId: number, uid: number) =>
+    request<ErpChatMembers>('DELETE', `/erp/chats/${chatId}/members/${uid}`),
+  chatRead: (chatId: number, lastReadId?: number) =>
+    request<{ last_read_id: number }>('PUT', `/erp/chats/${chatId}/read`,
+                                      { body: { last_read_id: lastReadId } }),
+  oppChat: (oppId: number) =>
+    request<{ chat_id: number }>('GET', `/erp/opportunities/${oppId}/chat`),
 
   // --- tender-ai bilan integratsiya (server orqali) ---
   documentTypes: () => request<DocumentType[]>('GET', '/erp/document-types'),

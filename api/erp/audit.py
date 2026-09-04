@@ -19,7 +19,7 @@ to'g'ridan-to'g'ri javob beradi — kimga ishonishdan qat'i nazar.
 holat YASHIRILMAYDI va alohida sanaladi: aynan shunday qatorlar eng
 qiziq.
 
-Kim ko'radi: `manager`. Jurnalda pul hujjatlarining ichki tarixi bor.
+Kim ko'radi: `menejer` va undan yuqori. Jurnalda pul hujjatlarining ichki tarixi bor.
 """
 from __future__ import annotations
 
@@ -29,12 +29,20 @@ from api import db
 from api.erp.opportunity import ErpError
 
 #: Hujjat turlari — kod va bazadagi qiymatlar bir xil ro'yxat.
-DOC_TYPES = [("invoice", "Hisob-faktura"), ("act", "Dalolatnoma")]
+#:
+#: `karta` — 24-patchdan: kartaga biriktirilgan sabab hujjati. U pul
+#: hujjati emas, lekin jurnal BITTA: ikkita jurnal ikkita haqiqat manbai
+#: bo'lardi va "kim o'chirdi" degan savol ikki joydan qidirilardi.
+#: Ro'yxatga qo'shilmasa yozuvlar baribir kelardi, faqat yorliqsiz —
+#: ekranda bo'sh ustun ko'rinardi.
+DOC_TYPES = [("invoice", "Hisob-faktura"), ("act", "Dalolatnoma"),
+             ("karta", "Ish kartasi")]
 DOC_LABEL = dict(DOC_TYPES)
 
 #: Yozuv turlari.
 ENTITY_LABEL = {"invoice": "Faktura", "act": "Dalolatnoma",
-                "line": "Qator", "payment": "To'lov"}
+                "line": "Qator", "payment": "To'lov",
+                "fayl": "Sabab hujjati"}
 ACTION_LABEL = {"create": "yaratildi", "update": "o'zgartirildi",
                 "delete": "o'chirildi"}
 

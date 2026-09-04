@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from api import db
-from api.erp.opportunity import ErpError, _need_schema
+from api.erp.opportunity import FINAL, STATUS_LABEL, ErpError, _need_schema
 
 # Passportning tahrirlanadigan maydonlari. Ro'yxat BITTA joyda: INSERT,
 # UPDATE va so'rov modeli ham shundan yuradi.
@@ -76,11 +76,15 @@ SELECT {_CLIENT_COLS},
        count(o.id)                                        AS opp_n,
        count(o.id) FILTER (WHERE o.status = 'won')         AS won_n,
        count(o.id) FILTER (WHERE o.status = 'lost')        AS lost_n,
-       count(o.id) FILTER (WHERE o.status NOT IN ('won','lost','rejected')) AS open_n,
+       -- YAKUNIY ro'yxat KODDAN (`opportunity.FINAL`).
+       count(o.id) FILTER (WHERE o.status <> ALL(%(final)s)) AS open_n,
        (SELECT count(*) FROM erp.client_document d WHERE d.client_id = c.id) AS doc_n
 FROM erp.client_company c
 LEFT JOIN erp.opportunity o ON o.client_id = c.id
-WHERE (%(q)s::text IS NULL OR c.name ILIKE '%%' || %(q)s || '%%'
+WHERE (%(owner_broker_id)s::int IS NULL OR EXISTS (
+          SELECT 1 FROM erp.opportunity oo
+           WHERE oo.client_id = c.id AND oo.broker_id = %(owner_broker_id)s))
+  AND (%(q)s::text IS NULL OR c.name ILIKE '%%' || %(q)s || '%%'
                            OR c.inn  ILIKE '%%' || %(q)s || '%%')
   AND (%(active_only)s::bool IS NOT TRUE OR c.active)
 GROUP BY c.id
@@ -246,10 +250,18 @@ def _params(data: dict, fields, **extra) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Amallar — korxona
 # ---------------------------------------------------------------------------
-def list_(q: Optional[str] = None, active_only: bool = False) -> List[dict]:
+def list_(q: Optional[str] = None, active_only: bool = False,
+          owner_broker_id: Optional[int] = None) -> List[dict]:
+    """`owner_broker_id` — FAQAT shu hodimning kartalari bo'lgan mijozlar.
+
+    Broker mijozni O'Z ishi orqali ko'radi (huquqlar matritsasida
+    `mijoz.korish` = `own`): mijozlar ro'yxati kompaniyaning butun
+    mijoz bazasi emas."""
     _need_schema2()
     out = []
-    for r in db.query(CLIENT_LIST_SQL, {"q": q or None, "active_only": active_only}):
+    for r in db.query(CLIENT_LIST_SQL, {"q": q or None, "active_only": active_only,
+                                        "final": sorted(FINAL),
+                                        "owner_broker_id": owner_broker_id}):
         item = shape(r)
         item.update({"opp_n": r["opp_n"], "won_n": r["won_n"], "lost_n": r["lost_n"],
                      "open_n": r["open_n"], "doc_n": r["doc_n"],
@@ -294,6 +306,9 @@ def get(client_id: int) -> dict:
     out["opportunities"] = [
         {"id": o["id"], "title": o["title"], "tender_id": o["tender_id"],
          "tender_ref": o["tender_ref"], "status": o["status"],
+         # Yorliq SERVERDAN: ekranda `submitted` emas, "Topshirildi"
+         # ko'rinishi kerak va ro'yxat frontendда takrorlanmasin.
+         "status_label": STATUS_LABEL.get(o["status"], o["status"]),
          "start_price": _num(o["start_price"]), "currency": o["currency"],
          "deadline_at": _iso(o["deadline_at"]), "closed_at": _iso(o["closed_at"]),
          "broker_name": o["broker_name"]}
@@ -302,7 +317,12 @@ def get(client_id: int) -> dict:
     lost = sum(1 for o in opps if o["status"] == "lost")
     out["summary"] = {
         "opp_n": len(opps), "won_n": won, "lost_n": lost,
-        "open_n": sum(1 for o in opps if o["status"] not in ("won", "lost", "rejected")),
+        # RAD ETILGANLAR alohida sanaladi va EKRANDA ko'rsatiladi.
+        # Ular `win_rate` maxrajiga kirmaydi (biz qatnashmadik — yutqazmadik),
+        # lekin ko'rsatilmasa hisob "1 ta karta, yutish 100%" bo'lib
+        # chiqadi va son qayerdan kelgani tushunarsiz qoladi.
+        "rejected_n": sum(1 for o in opps if o["status"] == "rejected"),
+        "open_n": sum(1 for o in opps if o["status"] not in FINAL),
         # ARALASH VALYUTA QO'SHILMAYDI. Mijozning kartalari bir nechta
         # valyutada bo'lsa summa berilmaydi: "1200 USD + 15 mln UZS"
         # degan son hech narsani anglatmaydi.

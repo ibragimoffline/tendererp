@@ -254,10 +254,23 @@
   --text-display--line-height: 2rem;
   --text-display--letter-spacing: -0.015em;
 
-  --radius-sm: calc(var(--radius) - 3px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* ---- RADIUS POG'ONASI -----------------------------------------------------
+     Pog'ona `DESIGN.md` dan: 4 / 6 / 8 / 12 / 16. U awesome-design-md
+     ro'yxatidagi Linear faylidan olingan — o'sha yerdagi yagona zich ish
+     quroli, qolganlari marketing sahifalari.
+
+     NEGA O'ZGARDI: avval tugma 6px, karta 8px edi — ikki qadam orasida
+     atigi 2px farq bor va u KO'RINMASDI. Natijada "karta" ham, uning
+     ichidagi tugma ham bir xil yumaloqlikda turardi, ya'ni shakl
+     iyerarxiyani umuman ko'rsatmasdi.
+
+     Endi qadam sezilarli va KONSENTRIK: karta 12px -> ichidagi panel va
+     tugma 8px -> nishon 4px. Bola radiusi otanikidan hech qachon katta
+     emas, shuning uchun burchaklar bir-biriga yotadi. */
+  --radius-sm: calc(var(--radius) - 2px);   /* 6px  — mayda ichki element */
+  --radius-md: var(--radius);               /* 8px  — tugma, maydon, ichki panel */
+  --radius-lg: calc(var(--radius) + 4px);   /* 12px — karta, oyna */
+  --radius-xl: calc(var(--radius) + 8px);   /* 16px — eng tashqi idish */
 }
 
 @layer base {

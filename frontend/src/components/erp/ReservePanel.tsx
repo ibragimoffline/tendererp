@@ -46,6 +46,14 @@ export default function ReservePanel({ oppId, oppStatus, onChanged }: {
   const [productId, setProductId] = useState('')
   const [qty, setQty] = useState('')
   const [why, setWhy] = useState('')
+  // MAVJUDDAN OSHGANDA — ATAYLAB TASDIQ, taqiq emas.
+  //
+  // Taqiq qo'yilsa odam raqamni "to'g'rilab" yozardi va ombor jurnali
+  // yolg'onga aylanardi (`api/erp/stock.py` boshidagi izoh). Lekin bir
+  // bosishda o'tib ketishi ham noto'g'ri edi: ogohlantirish AMAL
+  // BAJARILGANDAN KEYIN chiqardi, ya'ni odam uni o'qiganda rezerv
+  // allaqachon qo'yilgan bo'lardi. Endi tasdiq OLDIN so'raladi.
+  const [overOk, setOverOk] = useState(false)
 
   // TAKLIF: tender pozitsiyalaridan. Hech narsa avtomatik yozilmaydi —
   // moslashuv nom bo'yicha ishlaydi va har doim ham to'g'ri emas.
@@ -54,17 +62,21 @@ export default function ReservePanel({ oppId, oppStatus, onChanged }: {
   const [sugOpen, setSugOpen] = useState(false)
   const [picked, setPicked] = useState<Record<number, string>>({})
 
+  // STATUS ham bog'liqlikda va bu ataylab: rezervni odam yopmaydi —
+  // uni karta statusi yopadi (`stock.on_status_change`). "Yutildi" dan
+  // keyin ro'yxat qayta o'qilmasa, ekranda "Ushlab turilibdi" turar,
+  // bazada esa allaqachon "Sarflandi" bo'lardi — foydalanuvchi buni
+  // faqat sahifani yangilaganda ko'rardi.
   const load = useCallback(() => {
     api.reserves({ opportunity_id: oppId })
       .then(setRows)
       .catch((e: Error) => { setError(e.message); setRows([]) })
-  }, [oppId])
+    // Qoldiq ham o'zgardi (yutilganda chiqim yozildi) — mahsulot
+    // ro'yxatidagi "mavjud" soni eskirib qolmasin.
+    api.stock().then((d) => setStock(d.items)).catch(() => {})
+  }, [oppId, oppStatus])
 
   useEffect(load, [load])
-  useEffect(() => {
-    // Mahsulot ro'yxati ombordan: bu yerda katalog yuritilmaydi.
-    api.stock().then((d) => setStock(d.items)).catch(() => {})
-  }, [])
 
   async function run(fn: () => Promise<unknown>, ok: string) {
     setBusy(true); setError(null); setNote(null)
@@ -83,7 +95,7 @@ export default function ReservePanel({ oppId, oppStatus, onChanged }: {
       product_id: Number(productId), qty: Number(qty),
       note: why.trim() || null,
     })
-    setQty(''); setWhy('')
+    setQty(''); setWhy(''); setOverOk(false)
     // Mavjuddan oshib ketish TAQIQ EMAS — server ogohlantiradi.
     setNote(res.warning
       ? `Ajratildi: ${res.qty}. ${res.warning}`
@@ -92,6 +104,10 @@ export default function ReservePanel({ oppId, oppStatus, onChanged }: {
 
   const held = (rows || []).filter((r) => r.status === 'held')
   const chosen = stock.find((s) => String(s.product_id) === productId)
+  //: So'ralgan miqdor omborda BO'SH turganidan oshadimi.
+  const wanted = Number(qty)
+  const overshoot = !!chosen && Number.isFinite(wanted) && wanted > 0
+    && wanted > (chosen.available ?? 0)
 
   async function loadSuggestions() {
     setBusy(true); setError(null); setNote(null)
@@ -143,8 +159,7 @@ export default function ReservePanel({ oppId, oppStatus, onChanged }: {
 
       {rows && rows.length === 0 && (
         <p className="mb-2 text-caption text-muted-foreground">
-          Hali hech narsa ajratilmagan. Ajratilgan tovar omborda qoladi,
-          lekin boshqa kartaga "mavjud" ko'rinmaydi.
+          Ajratilgan tovar yo'q.
         </p>
       )}
 
@@ -282,7 +297,8 @@ export default function ReservePanel({ oppId, oppStatus, onChanged }: {
             <div className="mb-1 text-caption font-semibold text-muted-foreground">
               Mahsulot
             </div>
-            <Select value={productId} onValueChange={setProductId}>
+            <Select value={productId}
+              onValueChange={(v) => { setProductId(v); setOverOk(false) }}>
               <SelectTrigger className="bg-card text-body">
                 <SelectValue placeholder="Tanlang" />
               </SelectTrigger>
@@ -300,7 +316,7 @@ export default function ReservePanel({ oppId, oppStatus, onChanged }: {
               Miqdor
             </div>
             <Input inputMode="decimal" value={qty}
-              onChange={(e) => setQty(e.target.value)} />
+              onChange={(e) => { setQty(e.target.value); setOverOk(false) }} />
           </div>
           <div>
             <div className="mb-1 text-caption font-semibold text-muted-foreground">
@@ -308,8 +324,30 @@ export default function ReservePanel({ oppId, oppStatus, onChanged }: {
             </div>
             <Input value={why} onChange={(e) => setWhy(e.target.value)} />
           </div>
+          {/* Mavjuddan oshsa — TASDIQ so'raladi (taqiq emas): hujjat
+              kechikishi normal hol, lekin bu qaror ko'rib qabul
+              qilinsin. Tasdiqsiz tugma bosilmaydi. */}
+          {overshoot && (
+            <div className="sm:col-span-4 rounded-md border border-soon/40 bg-soon-soft px-3 py-2 text-caption text-soon-strong">
+              <div className="font-semibold">
+                Omborda bo'sh {chosen?.available ?? 0}
+                {chosen?.unit ? ` ${chosen.unit}` : ''}, siz {wanted} so'rayapsiz.
+              </div>
+              <div className="mt-0.5">
+                Ajratish MUMKIN — kirim hujjati kechikayotgan bo'lishi mumkin.
+                Lekin karta yutilganda shu miqdor chiqimga aylanadi va qoldiq
+                manfiy bo'lib qoladi.
+              </div>
+              <label className="mt-1.5 flex cursor-pointer items-center gap-2 font-semibold">
+                <input type="checkbox" checked={overOk}
+                  onChange={(e) => setOverOk(e.target.checked)} />
+                Tushundim, shunday bo'lsa ham ajratilsin
+              </label>
+            </div>
+          )}
           <div className="sm:col-span-4 flex flex-wrap items-center gap-2">
-            <Button size="sm" disabled={busy || !productId || !qty}
+            <Button size="sm"
+              disabled={busy || !productId || !qty || (overshoot && !overOk)}
               onClick={() => run(add, '')}>
               <Icon name="plus" size={13} /> Ajratish
             </Button>
@@ -323,9 +361,7 @@ export default function ReservePanel({ oppId, oppStatus, onChanged }: {
         </div>
       ) : (
         <p className="text-caption text-muted-foreground">
-          Rezerv "Qatnashish tasdiqlandi" bosqichidan boshlab qo'yiladi.
-          Yakuniy statusda esa avtomatik yopiladi: yutilsa — chiqimga
-          aylanadi, yutqazilsa — bo'shaydi.
+          Yutilganda chiqimga aylanadi, yutqazilganda bo'shaydi.
         </p>
       )}
     </section>

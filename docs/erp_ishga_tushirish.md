@@ -191,7 +191,8 @@ Tekshiruv o'tgach, interfeysda quyidagi tartib eng qisqa yo'l:
 ```powershell
 .ackup_erp.ps1                 # zaxira olish
 .ackup_erp.ps1 -DryRun         # nima bo'lishini ko'rsatadi
-.egister_backup_task.ps1       # har kuni 02:00 da avtomatik
+.
+egister_backup_task.ps1       # har kuni 02:00 da avtomatik
 ```
 
 **Faqat `erp` sxemasi.** `public.*` — tender-ai niki va uning zaxirasi
@@ -272,10 +273,44 @@ Tartib muhim — har qadam o'zidan oldingisiga tayanadi:
 | # | Nima | Qayerda | Nega aynan shu joyda |
 |---|---|---|---|
 | 1 | **Kompaniya passporti** (QQS holati bilan) | Kompaniya | Shartnoma va fakturaga MUZLATIB ko'chiriladi — keyin to'ldirilsa, oldin chiqarilgan hujjatlar rekvizitsiz qoladi |
-| 2 | **Hodimlar va ularning hisoblari** | Hodimlar | Hisob HODIMGA bog'lansin, aks holda "mening ishlarim" bo'sh qoladi va `created_by` da ism chiqmaydi |
+| 2 | **Hodimlar, hisoblar va kamida bitta RAHBAR** | Hodimlar | Hisob HODIMGA bog'lansin, aks holda "mening ishlarim" bo'sh qoladi va `created_by` da ism chiqmaydi. **Kamida bittasi `rahbar` yoki `menejer` bo'lsin** — pastga qarang |
 | 3 | **Mijoz passportlari** | Mijozlar | Faktura mijoz rekvizitlarisiz chiqmaydi; QQS stavkasi ham shu yerdan olinadi |
 | 4 | **Ombor boshlang'ich qoldig'i** | Ombor | Rezerv va chiqim shundan hisoblanadi |
 | 5 | **Katalogda tannarx** | Tender-AI katalogi | Tannarxsiz foyda hisoboti "to'liq emas" bo'lib turaveradi |
+
+### Nega RAHBAR hisobi kerak
+
+Tizim rahbarsiz ham ISHLAYDI: `admin_faqat_koradi` sozlamasi o'chiq
+turganda admin hamma amalni bajara oladi. Ya'ni bu to'siq emas,
+**ajratilmagan javobgarlik**:
+
+- 18 ta amal (karta yaratish, hodimga biriktirish, yakuniydan
+  qaytarish, chat moderatsiyasi va h.k.) brokerda yo'q va rahbar/
+  menejerga tegishli. Rahbar bo'lmasa ularning hammasini admin
+  bajaradi — ya'ni tizim sozlovchi va biznes qaror qabul qiluvchi
+  BITTA odam bo'lib qoladi.
+- `admin_faqat_koradi` ni yoqib bo'lmaydi: `sozlama.saqla()` faol
+  rahbar/menejer bo'lmasa **400** qaytaradi (usiz kompaniya o'z ERP
+  siga yozolmay qolardi).
+
+**Oqim uchidan-uchiga tekshirilgan** (2026-09-04) va to'liq ishlaydi:
+hodim yaratish -> hisob ochish (rol bilan) -> rolni o'zgartirish ->
+faolsizni qayta faollashtirish -> parol o'rnatish -> kirish. Hammasi
+`Hodimlar` ekranidan qilinadi, buyruq satri kerak emas.
+
+Tartib:
+
+1. Hodimlar -> **Yangi hodim** (ism, email).
+2. O'sha qatorda **Hisob ochish**: login, parol, rol = `rahbar`.
+3. `check_setup.py` 3-bo'limi endi "N ta faol rahbar/menejer — rollar
+   ajratilgan" deb yozadi. Yozmasa — qadam bajarilmagan.
+
+**`admin_faqat_koradi` ni DARHOL yoqmang.** Rahbar hisobi ochilgani
+qulfni ochadi, lekin sozlamani yoqish adminni cheklaydi va hamma ish
+yangi hisobga o'tadi. Agar o'sha hisobga kirishda muammo chiqsa
+(parol, cookie, ekran) kompaniya to'xtaydi. Avval rahbar hisobi bilan
+haqiqiy ish qiling — bir-ikki karta, chat, status o'tishi — keyin
+yoqing.
 
 **2-qadam `auth-6` bilan bog'liq:** hodim hisobi ochilgach, unga parolni
 o'zi almashtirish kerak bo'ladi — yon paneldagi "Parolni o'zgartirish"

@@ -139,7 +139,7 @@ function TakeForm({ tenderId, onClose, onDone, onOpenOpportunity }: TakeFormProp
             <Field label="Mas'ul (broker)">
               <div className="flex gap-2">
                 <Select
-                  value={form.broker_id ? String(form.broker_id) : undefined}
+                  value={form.broker_id ? String(form.broker_id) : ''}
                   onValueChange={(v) => set({ broker_id: Number(v) })}
                 >
                   <SelectTrigger className="h-9 flex-1 bg-card text-body">
@@ -151,7 +151,13 @@ function TakeForm({ tenderId, onClose, onDone, onOpenOpportunity }: TakeFormProp
                     ))}
                   </SelectContent>
                 </Select>
+                {/* NOMI VA HOLATI: `Icon` `aria-hidden`, ya'ni bu tugmada
+                    ekran o'quvchisi uchun matn UMUMAN yo'q edi — u "tugma"
+                    deb o'qilardi, xolos. `aria-expanded` esa pastda forma
+                    ochilganini aytadi. */}
                 <Button variant="outline" size="sm" type="button"
+                  aria-label="Yangi broker qo'shish"
+                  aria-expanded={newBroker !== null}
                   onClick={() => setNewBroker(newBroker === null ? '' : null)}>
                   <Icon name="plus" size={13} />
                 </Button>
@@ -171,7 +177,7 @@ function TakeForm({ tenderId, onClose, onDone, onOpenOpportunity }: TakeFormProp
               hint="Bir tenderga ikki mijoz nomidan kirish mumkin — har biriga alohida karta.">
               <div className="flex gap-2">
                 <Select
-                  value={form.client_id ? String(form.client_id) : undefined}
+                  value={form.client_id ? String(form.client_id) : ''}
                   onValueChange={(v) => set({ client_id: Number(v) })}
                 >
                   <SelectTrigger className="h-9 flex-1 bg-card text-body">
@@ -184,6 +190,8 @@ function TakeForm({ tenderId, onClose, onDone, onOpenOpportunity }: TakeFormProp
                   </SelectContent>
                 </Select>
                 <Button variant="outline" size="sm" type="button"
+                  aria-label="Yangi mijoz korxona qo'shish"
+                  aria-expanded={newClient !== null}
                   onClick={() => setNewClient(newClient === null ? '' : null)}>
                   <Icon name="plus" size={13} />
                 </Button>
@@ -268,7 +276,7 @@ function TakeForm({ tenderId, onClose, onDone, onOpenOpportunity }: TakeFormProp
           </div>
 
           <div className="mt-5 flex justify-end gap-2">
-            <Button variant="outline" size="sm" type="button" onClick={onClose}>Bekor qilish</Button>
+            <Button variant="outline" size="sm" type="button" onClick={onClose}>Bekor</Button>
             <Button size="sm" type="button" disabled={saving} onClick={submit}>
               {saving ? 'Saqlanmoqda…' : 'Ishga olish'}
             </Button>

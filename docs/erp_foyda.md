@@ -140,7 +140,7 @@ nol-nol-nol qator hech narsa aytmaydi.
 ## 7. Rahbar hisoboti
 
 `GET /erp/profit` kartalar bo'yicha ro'yxat va umumiy yig'indi beradi.
-Endpoint `manager` huquqini talab qiladi: pul haqidagi umumiy
+Endpoint `menejer` (va undan yuqori) huquqini talab qiladi: pul haqidagi umumiy
 ko'rsatkich har kimga emas. Brokerga panel ko'rinmaydi (403 kelsa UI uni
 jim yashiradi), lekin **o'z kartasining** foydasini u ko'radi — bu
 `/erp/opportunities/{id}/profit` orqali va u rollar bilan

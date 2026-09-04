@@ -55,7 +55,6 @@ TEST_USER = {"id": 0, "username": "zztest", "full_name": "ZZTEST Sinov",
 def _auth_override(app):
     from api import main as _main
     app.dependency_overrides[_main.me] = lambda: TEST_USER
-    app.dependency_overrides[_main.manager] = lambda: TEST_USER
 
 
 _fail = 0
@@ -577,7 +576,8 @@ def test_db():
                     eq("daromad nol", p0["revenue"], 0.0)
 
                     # Yutildi -> rezerv chiqimga aylanadi, TANNARX muzlaydi.
-                    O.set_status(oid3, "won", MARK, MARK)
+                    for _st in FIX.yol("won"):       # sakrab bo'lmaydi
+                        O.set_status(oid3, _st, MARK, MARK)
                     mv = db.query_one(
                         "SELECT unit_cost FROM erp.stock_move "
                         "WHERE opportunity_id = %(i)s AND kind = 'out' "

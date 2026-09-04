@@ -389,6 +389,179 @@ kodga tegishli.
 
 ---
 
+## 5-ish — ROLLAR VA HUQUQLAR (`erp_rollar.md` v2)
+
+Manba hujjat ERP ning ichki qismini (rollar, huquqlar) va Tender-AI bilan
+YANGI bog'lanish usulini (HTTP'siz yo'naltirish) belgilaydi. Ish o'nta
+bosqichga bo'lingan; tartib BOG'LIQLIK bo'yicha, ya'ni har bosqich
+o'zidan oldingisisiz ishlamaydi.
+
+1-4 bosqich FAQAT shu repozitoriyda bajariladi va Tender-AI ga tegmaydi.
+5-7 esa ikki tomonlama: ular Tender-AI repozitoriysiga kirish va
+operator qarorini (kompaniya xaritasi) talab qiladi.
+
+- [x] **5.1. Rol modeli — 4 rol.** `manager` ikki xil odamni (direktor va
+      tender bo'limi boshlig'i) bitta nom ostiga qo'yardi, ya'ni kundalik
+      ishning EGASI yo'q edi. Ajratildi: `admin < ... ` emas, balki
+      `broker < menejer < rahbar < admin`.
+      Qilingan: `schema_patch_erp_17.sql` (CHECK + ko'chirish),
+      `api/auth.py` (`ROLES`, `ROLE_RANK`), `api/main.py`
+      (`manager` bog'liqligi -> `menejer`), interfeys
+      (`erpShared.roleAtLeast` — rol shartining YAGONA nusxasi,
+      `StaffPage` rol lug'atini SERVERDAN oladi), `check_setup.py`,
+      sinov `_tests/erp11_test.py` (33/0) va ekran sinovi
+      ("menejerga kompaniya ko'rsatkichlari so'raladi").
+- [x] **5.2. Huquq markazi** — `api/erp/perm.py`: `can(user, action)`,
+      `require()`, `require_write()`, `for_user()`. Huquq tekshiruvi
+      tarqoq edi (`require_role`, `Depends(menejer)`) va `erp_rollar.md`
+      §3 matritsasining yarmi umuman yo'q edi.
+      Qilingan: 29 ta AMAL nomi va ularning rollar bo'yicha darajasi
+      (`full` / `own` / `read` / yo'q) BITTA jadvalda; `api/main.py`
+      dagi 84 ta endpoint shu jadvalga ulandi va u yerda rol nomi
+      QOLMADI (sinov shuni ham tekshiradi); huquqlar kesimi
+      `GET /erp/auth/me` javobida (`perms`) interfeysga uzatiladi va
+      ekran tugmani shundan hal qiladi (`erpShared.can`, ombor /
+      mijoz / faktura / "ishga olish" ekranlari); ikki bayroq ataylab
+      o'chiq: `ADMIN_FAQAT_KORADI` (avval `rahbar` hisobi kerak) va
+      `OZ_FILTRI_TAYYOR` (5.3 bilan keladi). Hujjat:
+      `docs/erp_huquqlar.md`. Sinov `_tests/erp12_test.py` (55/0) va
+      ekran sinovi ("ruxsat yo'q amal EKRANDA ham yo'q").
+      DIQQAT: broker endi karta va mijoz YARATMAYDI, ombor va pul
+      hujjatlariga tegmaydi — kompaniyada `rahbar` yoki `menejer`
+      hisobi bo'lishi shart.
+- [x] **5.3. Egalik — "o'z kartalari".** Obyekt darajasidagi filtr
+      yo'q edi: broker hamma kartani, mijozni va fakturani ko'rardi.
+      Qilingan: `api/erp/egalik.py` — egalik zanjiri BITTA joyda
+      (`app_user.broker_id -> broker.id -> opportunity.broker_id`),
+      o'nta obyekt turi uchun `EXISTS` so'rovi; `main.py` da
+      `_can_obj()` (45 ta endpointda) va `_oz_filtr()` (kartalar,
+      mijozlar, fakturalar, aktlar, shartnomalar, rezervlar,
+      eslatmalar, "mening ishlarim"); begona obyekt — 403 (404 EMAS:
+      mavjudligini ham aytmaydi); hisob hodimga bog'lanmagan bo'lsa
+      "o'ziniki" BO'SH va interfeys sababini yozadi;
+      `perm.OZ_FILTRI_TAYYOR = True`. Sinov `_tests/erp13_test.py`
+      (30/0) va ekran sinovi ("brokerga hodim tanlovi ko'rsatilmaydi").
+      DIQQAT: broker `everyone=true` bilan ham faqat o'zinikini
+      ko'radi — avval vazifalar hammaga ochiq edi.
+- [x] **5.4. Ma'muriy cheklovlar va SOZLAMALAR.** `own_company`,
+      faktura `issued`/storno/to'lov va ombor kirim/chiqim cheklovlari
+      5.2 da matritsa bilan yopilgan edi; bu bosqichda kompaniyaga
+      BOG'LIQ qism ajratildi.
+      Qilingan: `schema_patch_erp_18.sql` (`erp.setting`),
+      `api/erp/sozlama.py` (ta'rif + standart qiymat KODDA, qiymat
+      bazada, 15 soniyalik kesh, baza javob bermasa standartga
+      qaytadi), `perm.SOZLAMAGA_BOGLIQ` orqali huquqqa ulanish,
+      `GET/PUT /erp/settings` (amal `tizim.sozlama`, faqat admin),
+      "Hodimlar" ekranida sozlamalar paneli (izohi bilan), interfeysda
+      yakuniy statuslarni yashirish (ro'yxat va Kanban).
+      Uch sozlama: `broker_can_close` (ha), `menejer_foyda` (ha),
+      `admin_faqat_koradi` (yo'q — yoqishdan oldin RAHBAR hisobi
+      kerak). Sinov `_tests/erp14_test.py` (34/0).
+      `erp_rollar.md` §3 dagi uch noaniq katak egasi tomonidan
+      tasdiqlandi (`docs/erp_huquqlar.md` §7).
+- [x] **5.5. Shartnoma-view'lar.** ERP dan Tender-AI ga ochilgan yuza
+      bitta view edi; endi to'rtta.
+      Qilingan: `schema_patch_erp_19.sql` — `erp.v_tai_actor` (ochiq
+      qarz №1: hodimlar, `rol`/`faol` ustunlari hujjatdagi nom bilan),
+      `v_tender_status` ga `assignee_full_name` (OXIRIGA — eski
+      o'quvchi buzilmasin), `erp.v_stock` (hujjatdagi nom;
+      `v_stock_balance` ERP ning ichki ko'rinishi bo'lib qoladi),
+      `erp.v_client_document` (qarz №5: cheklist mijoz hujjatlari
+      bo'yicha, `expired` bazada hisoblanadi) va `tai_app` uchun
+      `GRANT` (rol yo'q bo'lsa patch YIQILMAYDI).
+      Maxfiylik: parol, email, sessiya, summa, izoh, tannarx va fayl
+      BERILMAYDI. Sinov `_tests/erp15_test.py` (29/0) shaklni
+      QULFLAYDI (ustunlar ro'yxati va tartibi) hamda `tai_app` ga
+      birorta JADVAL ochilmaganini tekshiradi.
+      Hujjat: `docs/erp_integratsiya_6.md`, `INTEGRATSIYA.md` §14.
+- [x] **5.6. Xaritalash — ASBOBLARI TAYYOR** (qadamning o'zi —
+      operator qarori). `actor.erp_user_id` Tender-AI da allaqachon
+      bor edi; ERP tomonida `own_company.tai_company_id` qo'shildi
+      (`schema_patch_erp_21.sql`) va `PUT /erp/topshiriq/xarita`
+      (admin) bilan qo'yiladi. Sozlanmagan holat JIM QOLMAYDI:
+      `GET /erp/topshiriq/holat` ham, `check_setup.py` ham sababini
+      ochiq aytadi. Qadamlar: `docs/erp_integratsiya_7.md` §3.
+      2026-09-02: xaritani qo'yish endi INTERFEYSDA — "Hodimlar"
+      ekranidagi "Tender-AI ulanishi" paneli (holat, xarita, "hozir
+      sinxronlash"). Ilgari buni faqat `curl` bilan qilish mumkin
+      edi. Taqsimlanmagan kartalar uchun ro'yxatda alohida filtr
+      qo'shildi (`unassigned=true`) — aks holda mas'ulsiz karta
+      hech kimning ekranida ko'rinmasdi.
+      QOLGANI: operator Tender-AI da ERP hodimlari uchun aktor
+      yaratishi va ijarachi id sini qo'yishi kerak.
+- [x] **5.7. Yo'naltirish oqimi HTTP'siz — IKKALA REPOZITORIYDA.**
+      Tender-AI: `schema_patch_topshiriq.sql` (jadval + view +
+      `pg_notify` triggeri), `api/topshiriq.py` (tahlil snapshoti,
+      yozish, bekor), `POST /routing/{id}/decision` kengaydi
+      (hodim/ustuvorlik/muddat), `BrokerQueue` da tanlov va ERP
+      natijasi, sinov `_tests/topshiriq_test.py` (37/0).
+      ERP: `schema_patch_erp_21.sql` (`routing_id` UNIQUE,
+      `tai_company_id`, `assigned_ishonch`, `opportunity_analysis`),
+      `api/erp/topshiriq.py` (`LISTEN` + 60 soniyalik zaxira so'rov,
+      idempotent `sync`), `GET /erp/topshiriq/holat`,
+      `POST /erp/topshiriq/sync`, `GET /erp/opportunities/{id}/tahlil`,
+      sinov `_tests/erp16_test.py` (35/0 + `--e2e` bilan 37/0).
+      Qoidalar: xaritalanmagan hodim -> "Taqsimlanmagan" + menejerga
+      xabar; mavjud karta ikkilanmaydi (qarorga bog'lanadi); bekor
+      qilinganda karta O'CHMAYDI (`rejected`); tahlil yangilanganda
+      karta maydonlari TEGILMAYDI.
+      Eski yo'l (`POST /erp/tenders/{id}/take`) QO'LDA karta uchun
+      qoladi — u endi rahbar-menejer huquqi.
+- [x] **5.8. Tahlil paketi.** `erp.opportunity_analysis` 5.7 da
+      keldi; bu bosqichda EKRAN va manba havolasi.
+      Qilingan: `TahlilPanel.tsx` — sarlavhada sana va ISHONCH
+      yorlig'i (dalildan oshmaydi), sakkiz bo'lim (moslik, AI,
+      malaka, talablar, cheklist, ombor, narx, havolalar), eski
+      snapshotlar tarixda (tugmalar bilan); YIQILGAN bo'lim
+      yashirilmaydi — sababi ko'rinadi; tasdiqlanmagan talab
+      "ko'rilmagan" yorlig'i bilan (`UPDATED.md` §18 saboqi).
+      `SOURCE_URL` lug'ati O'CHIRILDI — manba havolasi endi
+      `v_tender_manba` dan (`api/erp/opportunity.py`), ya'ni ikkinchi
+      nusxa yo'q. Sinov: `_tests/erp_test.py` (129/0, havola bazadagi
+      bilan aynan tengligi) va ekran sinovlari (4 ta yangi qoida).
+- [x] **5.9. Bildirishnomalar (ERP ichida).** `erp.notification`
+      (`schema_patch_erp_22.sql`), `api/erp/xabar.py`, yon paneldagi
+      qo'ng'iroq (`NotificationBell.tsx`, 60 soniyada yangilanadi),
+      `GET/POST /erp/notifications`. Hodisalar: topshiriq,
+      taqsimlanmagan (menejerga), bekor, o'tkazildi.
+      `localhost` havolasi YOZILMAYDI. Xabar yozilmasa ish
+      to'xtamaydi. Sinov `_tests/erp17_test.py` (24/0).
+      MUDDAT ESLATMASI ham ulandi (`api/erp/remind.py`): endi ERP
+      ichidagi xabar ASOSIY kanal, Tender-AI orqali Telegram/email
+      esa qo'shimcha — u yiqilsa ham eslatma odamga yetadi va
+      belgilash to'xtamaydi. Har kim faqat o'zinikini oladi,
+      mas'ulsiz muddatlar menejerga jamlanma bo'lib ketadi.
+      QAYTA TAQSIMLASH SO'ROVI (huquqlar matritsasidagi "broker —
+      so'rov" katagi): `POST /erp/opportunities/{id}/taqsimlash-sorovi`,
+      sabab majburiy, tarixga yoziladi va menejerga xabar boradi;
+      kartada tugma faqat o'tkazish huquqi YO'Q hodimga ko'rinadi.
+      QOLGANI: tashqi kanal (email/Telegram) — ERP ning o'z SMTP/bot
+      rekvizitlari sozlanmagan, sabab `docs/erp_xabar.md` §5.
+- [~] **5.10. Qattiqlashtirish — QISMAN.**
+      BAJARILDI (№6): `schema_patch_erp_23.sql` — `erp` roli
+      `public.*` dan FAQAT olti obyektni o'qiydi (hujjatda "ikki
+      view" deb hisoblangan edi; ro'yxat KODDAN olindi: `tender`,
+      `dim_status`, `dim_area`, `v_tender_manba`, `catalog_product`,
+      `v_erp_topshiriq`), `erp.*` da esa to'liq huquq. Yozish huquqi
+      umuman yo'q. Sinov `_tests/erp18_test.py` (10/0) ro'yxatni KOD
+      bilan solishtiradi — yangi jadval o'qilsa grant ham yangilanadi.
+      DIQQAT: himoya HALI YOQILMAGAN — ilova `postgres` bilan
+      ulanadi. Yoqish operator qadami (`ALTER ROLE erp LOGIN
+      PASSWORD` + `.env`), `check_setup.py` buni ogohlantirish
+      sifatida ko'rsatib turadi.
+      Hujjat moslashtirishlari (`erp_rollar.md` §10) ham BAJARILDI:
+      `erp_arxitektura.md` §2.4 (kod bir tomonlama, ma'lumot esa
+      view'lar orqali ikki tomonlama), `erp_texnik.md` §9 ("auth
+      yo'q" eskirdi — ikki mustaqil kimlik, SSO yo'q),
+      `erp_integratsiya.md` (`SOURCE_URL` o'chgani va `/take`
+      marshrutining yangi o'rni), `erp_bosqichlar.md` 2-bosqich
+      (cheklist `docs` ro'yxati / `v_client_document` orqali),
+      `docs/README.md` (tashqi manba hujjati haqida).
+      QOLGANI: `aktor_majburiy` (№3 — xaritadan keyin, operator) va
+      30 ta eski qaror (№7 — ular ERP'da qo'lda ochiladi).
+
+---
+
 ## Meros muammolar (tender-ai tomonida)  ✅ BAJARILDI
 
 - [x] **M1. `_tests/compliance_test.py` — 6 xato.** Ikki sabab edi:
@@ -419,6 +592,191 @@ kodga tegishli.
 **Tuzatilmagan (bizga bog'liq emas):** `_tests/etl_coverage_test.py` —
 manba API'siga (`api.xt-xarid.uz`) real so'rov yuboradi va u 400/timeout
 qaytaryapti. Kod muammosi emas.
+
+---
+
+## 6-ish — SABAB HUJJATI va "ULGURMADIK" holati  ✅ BAJARILDI
+
+Grill sessiyasi (2026-09-04) natijasi. To'liq qaror ro'yxati:
+`docs/erp_sabab_fayl.md`.
+
+- [x] **6.1. `schema_patch_erp_24.sql`** — `ulgurmadik` statusi (CHECK,
+      `v_tender_status` CASE), `erp.opportunity_file` (`bytea`, 10 MB
+      chegara bazada, `UNIQUE (opportunity_id, sha256)`), mavjud
+      `doc_audit` triggeriga oltinchi tarmoq (baytlar jurnalga
+      TUSHMAYDI: `to_jsonb(...) - 'baytlar'`).
+- [x] **6.2. O'tish sharti** — `KIRISH_SHARTI`: `submitted` faqat
+      `preparing` dan, `won` faqat `submitted` dan; ruxsatsiz o'tish
+      `409` + sabab. To'liq matritsa ATAYLAB emas (mijozsiz kartada
+      `sent_to_client`/`confirmed` o'tkazib yuboriladi).
+- [x] **6.3. Yakuniy statuslar ro'yxati BITTA joyda** — `closed_at`
+      SQL ida `('won','lost','rejected')` qo'lda yozilgan edi (uchinchi
+      nusxa) va `ulgurmadik` undan tashqarida qolardi: karta yakuniy,
+      `closed_at` NULL. Endi `FINAL` parametr sifatida uzatiladi;
+      `SABAB_HOLATLARI = FINAL - {won}` ni `fayl.py` import qiladi.
+- [x] **6.4. Yetim taklif tuzatildi** — `submission.create()` avval
+      taklifni yozib keyin `set_status` chaqirardi; 409 taklif
+      yozilgandan KEYIN chiqib, u yetim qolardi (taklif muzlatilgan,
+      o'chirilmaydi). Tekshiruv yozishdan oldinga ko'chirildi.
+- [x] **6.5. `api/erp/fayl.py` + 4 endpoint** — ro'yxat (baytlarsiz),
+      biriktirish, yuklab olish, o'chirish, `qamrov()`. Fayl
+      IXTIYORIY; `karta.fayl` amali `perm.py` da; egalik
+      `opportunity_file` orqali.
+- [x] **6.6. `SababFayl.tsx`** — yo'qligi OCHIQ yoziladi, ochiq
+      kartada sabab ko'rsatiladi, patch yo'q bo'lsa blok umuman
+      chiqmaydi. Turlar/hajm/holatlar SERVERDAN (`/erp/meta`).
+- [x] **6.7. Sinov** — `_tests/erp19_test.py` (61 tekshiruv) va ekran
+      sinovida 6 ta yangi qoida. `fixture.yol()` — status yo'li bitta
+      joyda. Jami: **1 186 backend + 35 ekran**.
+
+- [x] **6.8. Eskalatsiya** — `remind.py` kunlik eslatmasida "MUDDATI
+      O'TGAN, YOPILMAGAN" bo'limi; bildirishnoma karta boshiga emas,
+      BITTA yig'ma (ro'yxat har kuni qaytadi — har kartaga xabar
+      yuborilsa quti to'lardi). Birinchi yurishda 7 ta karta topildi.
+- [x] **6.9. Voronka ajratildi** — `ongoing_n` = `faol_n` +
+      `kechikkan_n`; jadvalda ikki ustun. "9 ta ishlanmoqda" degan
+      raqam aslida 2 ta ekan.
+- [x] **6.10. Sabab majburiy** — `lost`/`rejected`/`ulgurmadik` da,
+      SERVERDA (`set_status`) va ekranda. `topshiriq.py` dagi
+      avtomatik `rejected` `other` sababi bilan yopiladi.
+- [x] **6.11. Ro'yxatning 11 ta takror nusxasi olib tashlandi** —
+      `('won','lost','rejected')` kodda sakkiz faylda qo'lda yozilgan
+      edi va `ulgurmadik` ni JIMGINA "ochiq" deb sanardi (ochiq
+      kartalar soni, summa, eslatma, voronka, mijoz sahifasi). Endi
+      hammasi `FINAL` dan parametr sifatida keladi.
+
+Jami: **1 214 backend + 40 ekran** tekshiruvi.
+
+---
+
+## 7-ish — ICHKI CHAT (hodimlar muloqoti)  ✅ BAJARILDI
+
+Talab: `erp_chat.md` (loyiha egasi). Qurilish hisoboti va chetga
+chiqishlar: `docs/erp_chat_qurilish.md`.
+
+- [x] **7.1. `schema_patch_erp_25.sql`** — `erp.chat` (ikki tur:
+      `umumiy` va `opportunity`), `chat_member` (yumshoq chiqarish),
+      `chat_message` (yumshoq o'chirish), `chat_message_history`
+      (faqat qo'shiladi, `chat_history_guard` triggeri), `chat_read`.
+      MAVJUD 21 karta uchun chat ko'chirildi, yopilgan 12 tasi darhol
+      arxiv. Idempotent.
+- [x] **7.2. `api/erp/chat.py`** — ko'rish/yozish huquqi, lenta
+      (sahifalash `after_id`), tahrir, yumshoq o'chirish, a'zolar,
+      o'qilganlik, tizim xabarlari, `@ism` eslatish.
+- [x] **7.3. Huquqlar** — `perm.py` ga 7 ta amal. Admin yozishmada
+      QATNASHMAYDI (matritsada `None`), lekin `chat.tarix` ni ko'radi.
+      Yozish uchun a'zolik SHART — rahbar uchun ham.
+- [x] **7.4. 11 ta endpoint** — `/erp/chats/*` va
+      `/erp/opportunities/{id}/chat`.
+- [x] **7.5. Karta bilan bog'lanish** — `take()` chat ochadi;
+      `set_status` lentaga tizim xabari yozadi va yakuniy holatda
+      ARXIV qiladi; mas'ul almashsa yangisi chatga qo'shiladi;
+      Tender-AI bekor qilsa lentada yoziladi.
+- [x] **7.6. `Muloqot.tsx`** — chat ro'yxati + lenta; yon panelda
+      "Muloqot" bo'limi va karta oynasida tab. So'rov (polling) 5 s;
+      WebSocket ataylab yo'q.
+- [x] **7.7. Sinov** — `_tests/erp_chat_test.py` (73 tekshiruv) va
+      ekranda 5 ta yangi qoida (7.8-7.11 dan keyin: 1 304 va 52).
+
+- [x] **7.8. Talab hujjati repoda** — `docs/erp_chat.md`. Uch nusxa
+      cp1252 orqali buzilib kelgan edi (`—` -> `â`); tiklab yozildi va
+      `charset=utf-8` tekshirildi. `.gitattributes` ga `*.md text
+      eol=lf`; `erp_audit.md` va `erp_foyda.md` LF ga keltirildi.
+- [x] **7.9. `pg_notify('erp_chat', ...)`** — xabar yozilganda,
+      TAHRIRLANGANDA va O'CHIRILGANDA. Tinglovchi hozir yo'q va bu
+      ataylab; signal YOZILISHI esa hozir qilindi — keyin qo'shilsa
+      bir-ikki joyda unutilardi va WebSocket "ba'zan ishlaydi" bo'lib
+      qolardi. Sinov haqiqiy `LISTEN` bilan tekshiradi.
+- [x] **7.10. `@ism` eslatish ekrani** — taklif ro'yxati
+      `GET /erp/chats/{id}/members` dan (qo'shimcha endpoint yo'q),
+      faqat FAOL a'zolar. Matndan ism o'chirilsa id ham ketadi.
+      Server a'zolikni qayta tekshiradi va a'zo bo'lmagan id ni
+      JIMGINA tashlaydi (400 emas: foydalanuvchi tuzata olmaydi).
+      `schema_patch_erp_26.sql` — `chat_message.eslatilgan`: tahrirda
+      faqat YANGI id larga yuboriladi, takror emas.
+- [x] **7.11. `admin_faqat_koradi` himoyasi** — sozlamani yoqishga
+      urinish endi O'ZI tekshiradi: faol rahbar/menejer yo'q bo'lsa
+      **400** va sabab. Ilgari himoya faqat IZOHDA edi, ya'ni odam
+      o'qishiga tayanardi (`UPDATED.md` §16 sinfi: "izoh bilan
+      himoyalangan qoida"). O'chirish har doim mumkin.
+
+- [x] **7.12. `check_setup.py` — yolg'on OK lar tuzatildi.** Butun
+      patch ro'yxati ko'rib chiqildi ("har patch uchun: u yaratadigan
+      obyekt tekshirilyaptimi"). Ikkita HAQIQIY nuqson topildi:
+      * **2-patch** `client_company` ga qarardi — u 1-patchda
+        yaratilgan, ya'ni 2-patch qo'llanmasa ham "OK". Endi
+        `client_document` (`api/erp/clients.py` ning O'ZI ham shunga
+        qaraydi — ikki manba ajralib ketgan edi).
+      * **20-patch** UMUMAN tekshirilmasdi. U `erp.v_tai_actor` ni
+        tashlab BOSHQA SHAKLDA qayta yaratadi; qo'llanmasa view eski
+        shaklda qoladi va Tender-AI undan hech narsa topolmaydi —
+        patchning o'zi buni "eng yomon holat: ikkala tomon ham
+        ulandik deb o'ylaydi" deb yozgan. Endi `v_tai_actor.
+        token_hash` tekshiriladi (ikki shaklni ajratadigan ustun).
+- [x] **7.13. Tuzilishdagi bo'shliq yopildi** — `_tests/patch_test.py`
+      (32 tekshiruv). Har `check_setup` qatori uchun: obyekt AYNAN
+      shu patchda yaratilganmi; ro'yxatga tushmagan patch qo'lda
+      tekshirilganmi. Bazaga tegmaydi (`.sql` fayllarini o'qiydi).
+      Sinovning o'zi ham tekshiriladi: eski nuqsonli holat
+      qaytarilganda 2 ta XATO berishi tasdiqlangan.
+
+**Qilinmadi (ochiq), tartib bilan:**
+1. **Rahbar hisobi** — EGASINING ishi. Oqim uchidan-uchiga sinaldi
+   (2026-09-04) va TO'LIQ ISHLAYDI: hodim -> hisob (rol bilan) ->
+   rolni o'zgartirish -> faollashtirish -> parol -> kirish; kirgan
+   rahbarda 40 ta huquq. Ekranda ham hammasi bor (`StaffPage.tsx`),
+   buyruq satri kerak emas.
+
+   TUZATISH: avvalgi "ish jarayonini to'sib turibdi" degan bahom
+   NOTO'G'RI edi. `admin_faqat_koradi` o'chiq turganda admin hamma
+   narsani qila oladi, ya'ni tizim ishlaydi. To'silgani —
+   JAVOBGARLIK AJRATILISHI: 18 ta amal rahbar/menejerga tegishli va
+   hozir ularni admin bajaradi, ya'ni tizim sozlovchi va biznes qaror
+   qabul qiluvchi bitta odam.
+
+   DASTURCHI TOMONIDAN QILINDI: bu holat hech qayerda ko'rinmasdi —
+   `check_setup.py` "hisoblar bor" deb "joyida" yozardi (yana o'sha
+   sinf: tekshiruv bor, boshqa narsani o'lchaydi). Endi 3-bo'lim
+   ogohlantiradi va 9-bo'limdagi 2-qadam rahbar/menejerni ham talab
+   qiladi. Sabab `docs/erp_ishga_tushirish.md` "Nega RAHBAR hisobi
+   kerak" da yozildi.
+2. **Chat ichida qidiruv** — server tomoni (`?q=`) tayyor, ekran
+   kichik.
+3. **WebSocket/SSE** — oxirida. `pg_notify` tayyor; tinglovchi
+   joylashtirishga (Caddy, systemd) talab qo'yadi.
+
+**Bajarildi (2026-09-04):**
+
+- [x] **Rahbar hisobi OCHILDI** (`rahbar`, egasi ruxsati bilan). Ism
+      ATAYLAB o'rin egallovchi — haqiqiy odam nomini dasturchi o'ylab
+      topmaydi. `check_setup` 3-bo'limi yashilga o'tdi va
+      `admin_faqat_koradi` qulfi ochilishi tekshirildi (sozlama
+      O'CHIQ qoldirildi — bu egasining qarori).
+- [x] **`olchov.py`** — inson halqasi hisoblagichlari. Faqat o'qiydi;
+      JAMI va ODAM alohida ustunda; o'lchanmagan narsa `—`, nol emas;
+      oldingi yurish bilan farq (`_olchov/YYYY-MM-DD.json`).
+      `check_setup` rahbar sonini shundan oladi — manba bitta.
+      Sinov: `_tests/olchov_test.py` (38 tekshiruv), ikkala nuqson
+      ataylab kiritilib yiqilishi ko'rsatildi.
+- [x] **`erp14_test.py` BEGONA yozuvni tiklamasdi** — u shartni sinash
+      uchun BARCHA rahbar/menejer hisoblarini faolsizlantirardi va
+      qaytarmasdi. Ya'ni sinov to'plamini yurgizish kompaniyaning
+      rahbar hisobini o'chirib qo'yardi (yangi ochilgan `rahbar` bilan
+      aynan shunday bo'ldi). Endi id lar yozib olinadi va tiklanadi.
+
+**Ochiq qarz — IKKI TOMONLI (bu repoda yopib bo'lmaydi):**
+
+`ERP_SERVICE_KEY` tekshiruvi (`check_setup.py` 5-bo'lim) hozir
+MAVJUDLIKNI o'lchaydi, TO'G'RILIGINI emas: kalit sozlangan va
+tender-ai javob berdi — lekin kalit QABUL QILINGANI isbotlanmagan.
+Agar u yerdagi endpoint ochiq bo'lsa, noto'g'ri kalit bilan ham javob
+keladi va "hammasi joyida" ko'rinadi.
+
+Bu `docs/erp_texnik.md` §6.1 dagi qoidaning yangi misoli, lekin uni
+BIR TOMONLAMA yopib bo'lmaydi: yopilishi uchun tender-ai noto'g'ri
+kalitga **401** qaytarishi va `api/tenderai.py` uni "javob bermadi"
+dan AJRATIB ko'rsatishi kerak. Shu bo'lgunicha tekshiruv izoh bilan
+qoldirildi — "tuzatildi" deb belgilash yomonroq bo'lardi.
 
 ---
 

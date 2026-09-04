@@ -83,8 +83,7 @@ export default function OpportunityStats({ onOpen }: { onOpen: (id: number) => v
       {d.mixed_currency && (
         <p className="text-caption text-muted-foreground">
           Kartalar {d.currencies.join(', ')} valyutalarida — pul
-          yig'indilari ko'rsatilmaydi. Kurs bo'yicha qo'shish qaysi kungi
-          kurs ekaniga bog'liq bo'lardi; sanoq esa to'g'ri qoladi.
+          yig'indilari ko'rsatilmaydi, sanoq esa to'g'ri qoladi.
         </p>
       )}
 
@@ -201,8 +200,7 @@ export default function OpportunityStats({ onOpen }: { onOpen: (id: number) => v
             Bosqichda o'tgan vaqt
           </h3>
           <p className="mb-3 text-micro text-muted-foreground">
-            O'rtacha faqat TUGAGAN turishlardan hisoblanadi; hozir shu
-            bosqichda turganlar alohida ustunda — ularning vaqti hali tugamagan.
+            O'rtacha — faqat tugagan turishlar bo'yicha.
           </p>
           <table className="w-full text-body">
             <thead>
@@ -211,7 +209,12 @@ export default function OpportunityStats({ onOpen }: { onOpen: (id: number) => v
                 <th className="text-right font-medium">O'rtacha</th>
                 <th className="text-right font-medium">Mediana</th>
                 <th className="text-right font-medium">Eng uzun</th>
-                <th className="text-right font-medium">Hozir turibdi</th>
+                {/* "Hozir turibdi" ikkiga bo'linadi: muddati o'tgan karta
+                    ishlanmayapti, u YOPILISHI kerak. Bitta songa yig'ilsa
+                    voronka "9 ta ishlanmoqda" deb yolg'on gapirardi —
+                    haqiqatda 2 tasi ishlanadi, 7 tasi osilib qolgan. */}
+                <th className="text-right font-medium">Faol</th>
+                <th className="text-right font-medium">Muddati o'tgan</th>
               </tr>
             </thead>
             <tbody>
@@ -228,12 +231,16 @@ export default function OpportunityStats({ onOpen }: { onOpen: (id: number) => v
                     {x.max_days == null ? '—' : x.max_days}
                   </td>
                   <td className="tabular py-1 text-right">
-                    {x.ongoing_n || '—'}
-                    {x.oldest_days != null && x.ongoing_n > 0 && (
+                    {x.faol_n || '—'}
+                    {x.oldest_days != null && x.faol_n > 0 && (
                       <span className="ml-1 text-micro text-muted-foreground">
                         ({x.oldest_days} kun)
                       </span>
                     )}
+                  </td>
+                  <td className={cn('tabular py-1 text-right',
+                    x.kechikkan_n > 0 && 'font-semibold text-urgent-strong')}>
+                    {x.kechikkan_n || '—'}
                   </td>
                 </tr>
               ))}
@@ -249,8 +256,8 @@ export default function OpportunityStats({ onOpen }: { onOpen: (id: number) => v
             Voronka
           </h3>
           <p className="mb-3 text-micro text-muted-foreground">
-            "Necha karta shu bosqichga yetib borgan" — hozirgi holati emas,
-            TARIXI. Foiz ishga olinganlardan hisoblanadi.
+            Necha karta shu bosqichga yetib borgan (hozirgi holati emas). Foiz —
+            ishga olinganlardan.
           </p>
           <div className="space-y-1.5">
             {an.funnel.filter((x) => x.reached > 0).map((x) => (
@@ -319,8 +326,7 @@ export default function OpportunityStats({ onOpen }: { onOpen: (id: number) => v
               Ishga olishdan topshirishgacha
             </h3>
             <p className="mb-3 text-micro text-muted-foreground">
-              Bu brokerni emas, JARAYONni o'lchaydi: qayerda sekinlashuv borligini
-              ko'rsatadi.
+              Jarayonni o'lchaydi: qayerda sekinlashuv borligini ko'rsatadi.
             </p>
             <table className="w-full text-body">
               <thead>

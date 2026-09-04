@@ -18,6 +18,19 @@ kirish: nima qayerda va qaysi savolga javob qayerdan topiladi.
 
 ---
 
+## TASHQI MANBA HUJJATI
+
+`erp_rollar.md` (v2, 2026-09-01) — **bu papkada yo'q**: u loyiha
+egasining hujjati va rollar/huquqlar/yo'naltirish bo'yicha
+TOPSHIRIQ bo'lib keldi. Kod va sinovlardagi `erp_rollar.md §N`
+havolalari o'sha hujjatga tegishli.
+
+Undan kelib chiqqan ishlar shu papkada yozilgan:
+`erp_huquqlar.md` (§2–§3), `erp_integratsiya_6.md` (§7, §9),
+`erp_integratsiya_7.md` (§5–§6), `erp_xabar.md` (§8).
+
+---
+
 ## Hujjatlar
 
 ### Poydevor
@@ -35,6 +48,8 @@ kirish: nima qayerda va qaysi savolga javob qayerdan topiladi.
 | Fayl | Nima haqida |
 |---|---|
 | `erp_integratsiya.md` … `_5.md` | Tender-AI bilan bog'lanishning bosqichma-bosqich tarixi: cheklist, hujjat shabloni, vazifalar, xabar yuborish, kompaniya profili |
+| `erp_integratsiya_6.md` | **Shartnoma-view'lar**: ERP dan Tender-AI ga ochilgan to'rt view, maxfiylik chegarasi, shaklni qulflash |
+| `erp_integratsiya_7.md` | **Yo'naltirish oqimi**: "Olindi" qarori ish kartasiga aylanadi (HTTP'siz, `pg_notify` + view), operator xaritasi, tahlil snapshoti |
 | `../INTEGRATSIYA.md` | Tender-AI tomonida **nima o'zgargani** — o'sha loyihaga o'tkaziladigan ro'yxat |
 
 ### Modullar
@@ -42,12 +57,18 @@ kirish: nima qayerda va qaysi savolga javob qayerdan topiladi.
 | Fayl | Nima haqida |
 |---|---|
 | `erp_auth.md` | Kimlik: kim qayerda (hodim ERP da, kompaniya tender-ai da), rollar, cookie/CSRF, service kaliti, **parol tanlashdan himoya** |
+| `erp_xabar.md` | **Bildirishnoma**: hodimga qaratilgan xabar, `localhost` havola qoidasi, o'ziniki-faqat-o'ziniki |
+| `erp_huquqlar.md` | **Huquqlar matritsasi**: kim nima qila oladi, `perm.py`, darajalar (`full`/`own`/`read`), egalik zanjiri (`egalik.py`), kompaniya sozlamalari (`sozlama.py`) |
 | `erp_ombor.md` | Ombor: harakatlar jurnali, qoldiq, **rezerv**, tender pozitsiyalaridan taklif |
 | `erp_faktura.md` | Hisob-faktura, to'lovlar, **dalolatnoma (akt)**, shartnoma ilovasi, bosma shakl |
 | `erp_foyda.md` | Foyda: daromad (QQS siz), **muzlatilgan tannarx**, to'liq bo'lmagan hisob |
 | `erp_audit.md` | O'zgarishlar jurnali: **trigger** yozadi, "chiqarilgandan keyin tegilganmi" |
 | `eksport_savollari.md` | Faktura eksporti uchun buxgalterga **yuboriladigan savollar** (tayyor matn) |
 | `erp_ishga_tushirish.md` | Bo'sh bazadan real ishgacha: patchlar, hisoblar, tayyorlik tekshiruvi, demo tozalash, **zaxira** |
+| `erp_sabab_fayl.md` | **Sabab hujjati** (kartaga fayl) va `ulgurmadik` holati; o'tish sharti va nega to'liq matritsa emasligi |
+| `erp_chat.md` | **Ichki chat** talabi: turlar, huquqlar matritsasi, sxema, API, sinov ro'yxati va ochiq savollar |
+| `erp_chat_qurilish.md` | **Ichki chat**: qurilish hisoboti — talabdan chetga chiqilgan joylar, qo'shimchalar va sabablari |
+| `../DESIGN.md` | **Interfeys shartnomasi**: rang, tipografika, shakl, chuqurlik, tegish nishoni. Manbasi — `awesome-design-md` dagi Linear fayli; undan nima olingani va nima OLINMAGANI yozilgan |
 
 ---
 
@@ -132,6 +153,18 @@ Eng ko'p beriladigan savollar va javob qayerda yozilgani.
 | Foydani kim ko'radi? | Umumiy hisobotni rahbar; o'z kartasinikini har kim | `erp_foyda.md` 7 |
 | Turli valyutadagi summalar qo'shiladimi? | **Yo'q** — har valyuta alohida qator, umumiy yig'indi yo'q | `erp_foyda.md` 9 |
 | Nega kurs bo'yicha konvertatsiya yo'q? | "Qaysi kungi kurs?" degan savolga javob yo'q — hisobot har kuni o'zgarardi | `erp_foyda.md` 9.2 |
+
+### Interfeys
+
+| Savol | Javob | Qayerda |
+|---|---|---|
+| Dizayn qoidalari qayerda yozilgan? | `DESIGN.md` — ranglar `index.css` da, ULARNI QANDAY ISHLATISH shu yerda | `../DESIGN.md` |
+| Nega Linear namuna qilib olindi? | `awesome-design-md` ro'yxatidagi yagona **zich ish quroli**; qolganlari marketing sahifalari | `../DESIGN.md` "Bu fayl nima" |
+| Linear ranglari ko'chirildimi? | **Yo'q.** Uning fayli marketing saytini yozadi (faqat qorong'i, lavanda aksent). Loyiha palitrasi OKLCH da o'lchangan va yorug' mavzu teng huquqli | `../DESIGN.md` "OLINMADI" |
+| Nega uchta holat rangi (ok/soon/urgent)? | Linear bitta semantik rang bilan kifoyalanadi, ERP da esa muddat holati SHART | `../DESIGN.md` "OLINMADI" |
+| Tugma nega 34px, 44px emas? | Sichqon uchun 34px real; **barmoq** uchun `max-sm` da 40px, maydon 44px | `../DESIGN.md` "Tegish va fokus" |
+| Radius nega o'zgardi? | Tugma 6px va karta 8px orasidagi 2px farq ko'rinmasdi — shakl iyerarxiyani ko'rsatmasdi | `index.css` "RADIUS POG'ONASI" |
+| Ichki panel nega quyuqroq? | Yorug' mavzuda oq kartadan yuqoriga qadam yo'q — shuning uchun ichki blok ikkala mavzuda ham CHO'KADI | `../DESIGN.md` "Sirt pog'onasi" |
 
 ---
 

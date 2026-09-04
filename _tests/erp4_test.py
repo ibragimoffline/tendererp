@@ -56,7 +56,6 @@ TEST_USER = {"id": 0, "username": "zztest", "full_name": "ZZTEST Sinov",
 def _auth_override(app):
     from api import main as _main
     app.dependency_overrides[_main.me] = lambda: TEST_USER
-    app.dependency_overrides[_main.manager] = lambda: TEST_USER
 
 _fail = 0
 _pass = 0
@@ -190,6 +189,18 @@ def test_db():
 
             # --- topshirish -------------------------------------------------
             head("3. Topshirish")
+
+            # 24-patch: topshirishdan OLDIN karta 'preparing' da bo'lishi
+            # kerak. Tekshiruv `submission.create` da, taklif YOZILISHIDAN
+            # oldin: aks holda 409 yetim taklif qoldirardi (taklif
+            # muzlatilgan, o'chirilmaydi).
+            r = c.post(f"/erp/opportunities/{oid}/submission",
+                       json={"price": 1000, "confirmed": True})
+            eq("tayyorlanmagan kartani topshirish -> 409", r.status_code, 409)
+            eq("yetim taklif YOZILMADI",
+               len(c.get(f"/erp/opportunities/{oid}/submissions").json()), 0)
+            c.patch(f"/erp/opportunities/{oid}/status",
+                    json={"status": "preparing"})
             if tender_ai_ok and pkg["blocking"] > 0:
                 r = c.post(f"/erp/opportunities/{oid}/submission",
                            json={"price": 1000, "confirmed": False})

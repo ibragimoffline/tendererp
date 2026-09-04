@@ -103,3 +103,22 @@ def cleanup() -> int:
             db.execute_returning(sql, p)
         n += c
     return n
+
+
+# ---------------------------------------------------------------------------
+# Status yo'li — 24-patchdagi `KIRISH_SHARTI`
+# ---------------------------------------------------------------------------
+# `submitted` va `won` ga SAKRAB bo'lmaydi (`api/erp/opportunity.py`):
+#   `won` — `stock.on_status_change` bu yerda rezervni SARFLAYDI, ya'ni
+#           sakrash rezerv qilinmagan tovarni sarflangan qilib ko'rsatardi.
+#
+# Sinovlar ilgari kartani to'g'ridan-to'g'ri `won` ga qo'yardi — bu
+# SINOVNING QISQA YO'LI edi, mahsulot xatti-harakati emas. Yo'l endi
+# BITTA joyda: qoida yana o'zgarsa oltita sinov emas, shu funksiya
+# yangilanadi.
+def yol(status: str) -> tuple:
+    """Shu statusga yetish uchun bosib o'tiladigan statuslar (o'zi bilan)."""
+    return {
+        "submitted": ("preparing", "submitted"),
+        "won":       ("preparing", "submitted", "won"),
+    }.get(status, (status,))

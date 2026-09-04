@@ -227,8 +227,105 @@ manbada yo'q" deb ko'rsatadi, snapshot esa o'z joyida qoladi.
   bazasiz ham sinaladi — bitta sinov fayli ikkala turni ham o'z ichiga oladi.
 - **Chegara sinovi majburiy:** `public.*` asosiy jadvallarining qator soni
   va `max(updated_at)` sinovdan oldin va keyin bir xil.
+- **BEGONA yozuvni o'zgartirsa — TIKLASIN.** `ZZTEST` prefiksi sinov
+  YARATGAN yozuvni himoya qiladi, lekin sinov MAVJUD qatorni ham
+  o'zgartirishi mumkin. Xavfli shakl — `WHERE` da toifa (`role IN
+  (...)`, `WHERE active`), xavfsizi — sinovning O'Z id si.
+  Toifa bo'yicha o'zgartirish kerak bo'lsa: id larni yozib oling,
+  `finally` da tiklang va tiklanganini OCHIQ ayting.
+
+  Bir marta buzilgan: `erp14_test.py` shartni sinash uchun BARCHA
+  rahbar/menejer hisoblarini faolsizlantirardi va qaytarmasdi — ya'ni
+  sinov to'plamini yurgizish kompaniyaning rahbar hisobini o'chirib
+  qo'yardi, JIMGINA. Oqibati faqat keyingi `check_setup` javobida
+  ko'rinardi. Butun `_tests/` ko'rib chiqildi (2026-09-04): boshqa
+  hech qayerda bu shakl yo'q — qolgan `UPDATE`/`DELETE` lar o'z id si
+  yoki `ZZ` belgisi bo'yicha tanlaydi.
 - Bazadagi haqiqiy tender kerak (`take` uchun): `SELECT id FROM tender LIMIT 1`;
   baza bo'sh bo'lsa sinov shu qismini `SKIP` deb belgilaydi, yiqilmaydi.
+
+### 6.1 Ikki qoida — uch marta takrorlangan xatodan keyin
+
+Quyidagi ikki qoida 2026-09-04 da qo'shildi. Sabab: bitta xato sinfi
+**uch marta** takrorlandi va uchinchisidan keyin bu tasodif emas,
+arxitektura bo'shlig'i deb qabul qilindi.
+
+**1. Tekshiruv MAVJUDLIKNI emas, YAROQLILIKNI o'lchasin.**
+
+Uchala holat ham bir shaklda edi: obyekt bor -> "OK", lekin u to'g'ri
+shaklda / to'g'ri rolda / to'g'ri patchdan ekani so'ralmasdi.
+
+| Qayerda | Nimani o'lchardi | Nimani o'lchashi kerak edi |
+|---|---|---|
+| `check_setup` 26-patch | `chat_message` jadvali bor | `eslatilgan` USTUNI bor |
+| `check_setup` 2-patch | `client_company` bor | `client_document` bor (2-patch qo'shadigani) |
+| `check_setup` 20-patch | umuman tekshirilmasdi | `v_tai_actor.token_hash` (ikki SHAKLNI ajratadi) |
+| `check_setup` hisoblar | 3 ta hisob bor | kamida bittasi RAHBAR/MENEJER |
+| `check_setup` rekvizit | maydon bo'sh emas | INN 9 / MFO 5 / hisob 20 RAQAM |
+| `check_setup` demo | 3 jadvalda 23 ta | 8 jadvalda 67 ta |
+| `check_setup` service key | tender-ai javob berdi | kalit QABUL QILINDI — **hali yopilmagan**, pastga qarang |
+
+Yangi tekshiruv yozganda savol bitta: **u nimani isbotlaydi va nimani
+isbotlamaydi.**
+
+Ikkinchisiga javob IZOH sifatida yoziladi — va agar tuzatib bo'lmasa,
+IZOHDA QOLADI. Jadvaldagi oxirgi qator shunday: `ERP_SERVICE_KEY`
+tekshiruvini bir tomonlama yopib bo'lmaydi, chunki kalit QABUL
+QILINGANINI faqat tender-ai tomonidan 401 qaytishi isbotlaydi.
+"Tuzatildi" deb belgilash yomonroq bo'lardi — o'sha paytdan boshlab
+hech kim uni qayta ko'rmasdi. Ochiq qarz sifatida `REJA.md` da.
+
+**2. Tekshiruv YIQILISHINI ko'rsatmasdan qabul qilinmaydi.**
+
+Yashil rang tekshiruv ishlayotganini isbotlamaydi — u faqat "hozir
+xato yo'q" deydi. Har yangi tekshiruv uchun uning YIQILGAN holati ham
+ko'rsatilishi kerak: shartni vaqtincha buzib, xato berishini
+tasdiqlash.
+
+Amalda qo'llanilgani:
+
+- `_tests/patch_test.py` — eski nuqsonli qatorlar qaytarilganda 2 ta
+  XATO berishi tekshirildi;
+- `check_setup` 26-patch — ustun vaqtincha o'chirilib, "qo'llanmagan"
+  deb topishi tasdiqlandi;
+- rekvizit shakli — `-` / `keyin` / `123` qo'yilib, ogohlantirish
+  chiqishi ko'rildi;
+- `run_erp.ps1` xavfsizlik qulfi — to'rtala holat (tarmoq+ochiq,
+  localhost+ochiq, ongli chetlab o'tish, HTTPS) alohida yurgizildi.
+
+Bu qoida sinovlarga ham tegishli: `patch_test.py` da izohlardagi
+`CREATE TABLE` obyekt deb sanalmasligi ALOHIDA tekshiriladi — aks
+holda tekshiruvni tekshiruvchining o'zi yolg'on "OK" bergan bo'lardi.
+
+### 6.2 O'lchov — `olchov.py`
+
+```
+.venv/Scripts/python.exe olchov.py
+.venv/Scripts/python.exe olchov.py --saqlamasdan
+```
+
+Loyihaning qoidasi — "yangi qatlam qo'shishdan OLDIN hisoblagichlarni
+ko'ring" — bajarib bo'lmaydigan holatda edi: ko'radigan buyruq yo'q,
+raqamlar har safar qo'lda so'rov yozib olinardi. Bu asbob o'sha
+bo'shliqni yopadi. **Yangi qatlam emas — qoidani bajarish uchun
+kerak bo'lgan o'lchagich.**
+
+Uchta va'da (`_tests/olchov_test.py` qo'riqlaydi):
+
+1. **Faqat o'qiydi.** Bazaga hech narsa yozmaydi; yagona yozuvi —
+   o'z natijasi (`_olchov/YYYY-MM-DD.json`, `.gitignore` da).
+2. **JAMI va ODAM alohida.** Yig'ma raqam yolg'on tasalli beradi:
+   karta tarixi 77 ta ko'rinadi, odam yozgani 9 ta.
+3. **O'lchanmagan narsa NOL EMAS.** Jadval yo'q bo'lsa `—`, `0`
+   emas. Nol — o'lchandi va hech narsa topilmadi degani.
+
+Chiqishda oxirgi oldingi yurish bilan farq ham bor (`+2`, `0`), ya'ni
+"ikki hafta ishlangandan keyin o'zgardimi" degan savolga javob o'zi
+keladi. Jadval ham, jurnal ham kerak emas.
+
+**Manba bitta:** `check_setup.py` faol rahbar/menejer sonini
+`olchov.boshliq_soni()` dan oladi va o'z SQL so'rovini yozmaydi.
+Sinov buni tekshiradi (`check_setup` da qo'lda rol so'rovi qolmagan).
 
 ---
 
@@ -272,11 +369,22 @@ cd frontend && npm run dev        # http://localhost:5173
 
 ## 9. Xavfsizlik va ma'lumot (hozirgi holatga mos)
 
-- Tizimda auth yo'q (`notify_telegram.md`). ERP bu holatni **o'zgartirmaydi**
-  va **yashirmaydi**: `created_by`/`changed_by` — tanlangan broker nomi,
-  tarixda "kim" degan savolga shartli javob. Login kelganda ustunlar
-  `user_id` ga o'tadi, matn ustunlari saqlanib qoladi.
-- Sir (token/parol) saqlanmaydi — ERP'ga hozircha kerak emas.
+- ~~Tizimda auth yo'q~~ — **ESKIRGAN (2026-09-02)**. Endi ikkala
+  tomonda ham kimlik bor va ular **mustaqil**:
+  * **ERP** — HODIM kiradi (`erp.app_user`, `docs/erp_auth.md`):
+    login/parol, sessiya cookie, CSRF, to'rt rol va huquqlar
+    matritsasi (`docs/erp_huquqlar.md`).
+  * **Tender-AI** — KOMPANIYA kiradi (`company_account`), odam esa
+    "aktor" sifatida e'lon qilinadi. ERP sessiyasi
+    `erp.v_tai_actor` orqali ISBOTLANISHI mumkin — o'shanda ishonch
+    darajasi `erp_sessiya` bo'ladi.
+  * **SSO YO'Q va rejalashtirilmagan**: ikki tizim, ikki auditoriya.
+  `created_by`/`changed_by` endi SESSIYADAN oladi (mijoz yuborgan
+  ism e'tiborga olinmaydi), matn ustunlari esa saqlanib qoldi —
+  tarixdagi eski yozuvlar yo'qolmasin.
+- Sir saqlanadi: parol `pbkdf2_sha256` xeshi, sessiya tokeni esa
+  faqat `sha256` xeshi ko'rinishida (`erp.app_session`). Xom token
+  bazada YO'Q.
 - Opportunity o'chirilmaydi — tarix rahbar uchun ma'lumot; noto'g'ri karta
   `rejected` + izoh.
 - Mijoz ma'lumotlari (2-bosqich: INN, bank rekvizitlari) — baza dumpi
