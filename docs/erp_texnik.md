@@ -230,6 +230,53 @@ manbada yo'q" deb ko'rsatadi, snapshot esa o'z joyida qoladi.
 - Bazadagi haqiqiy tender kerak (`take` uchun): `SELECT id FROM tender LIMIT 1`;
   baza bo'sh bo'lsa sinov shu qismini `SKIP` deb belgilaydi, yiqilmaydi.
 
+### 6.1 Ikki qoida — uch marta takrorlangan xatodan keyin
+
+Quyidagi ikki qoida 2026-09-04 da qo'shildi. Sabab: bitta xato sinfi
+**uch marta** takrorlandi va uchinchisidan keyin bu tasodif emas,
+arxitektura bo'shlig'i deb qabul qilindi.
+
+**1. Tekshiruv MAVJUDLIKNI emas, YAROQLILIKNI o'lchasin.**
+
+Uchala holat ham bir shaklda edi: obyekt bor -> "OK", lekin u to'g'ri
+shaklda / to'g'ri rolda / to'g'ri patchdan ekani so'ralmasdi.
+
+| Qayerda | Nimani o'lchardi | Nimani o'lchashi kerak edi |
+|---|---|---|
+| `check_setup` 26-patch | `chat_message` jadvali bor | `eslatilgan` USTUNI bor |
+| `check_setup` 2-patch | `client_company` bor | `client_document` bor (2-patch qo'shadigani) |
+| `check_setup` 20-patch | umuman tekshirilmasdi | `v_tai_actor.token_hash` (ikki SHAKLNI ajratadi) |
+| `check_setup` hisoblar | 3 ta hisob bor | kamida bittasi RAHBAR/MENEJER |
+| `check_setup` rekvizit | maydon bo'sh emas | INN 9 / MFO 5 / hisob 20 RAQAM |
+| `check_setup` demo | 3 jadvalda 23 ta | 8 jadvalda 67 ta |
+
+Yangi tekshiruv yozganda savol bitta: **u nimani isbotlaydi va nimani
+isbotlamaydi.** Ikkinchisiga javob izoh sifatida yoziladi (masalan
+"tender-ai javob berdi" `ERP_SERVICE_KEY` ning to'g'riligini
+ISBOTLAMAYDI).
+
+**2. Tekshiruv YIQILISHINI ko'rsatmasdan qabul qilinmaydi.**
+
+Yashil rang tekshiruv ishlayotganini isbotlamaydi — u faqat "hozir
+xato yo'q" deydi. Har yangi tekshiruv uchun uning YIQILGAN holati ham
+ko'rsatilishi kerak: shartni vaqtincha buzib, xato berishini
+tasdiqlash.
+
+Amalda qo'llanilgani:
+
+- `_tests/patch_test.py` — eski nuqsonli qatorlar qaytarilganda 2 ta
+  XATO berishi tekshirildi;
+- `check_setup` 26-patch — ustun vaqtincha o'chirilib, "qo'llanmagan"
+  deb topishi tasdiqlandi;
+- rekvizit shakli — `-` / `keyin` / `123` qo'yilib, ogohlantirish
+  chiqishi ko'rildi;
+- `run_erp.ps1` xavfsizlik qulfi — to'rtala holat (tarmoq+ochiq,
+  localhost+ochiq, ongli chetlab o'tish, HTTPS) alohida yurgizildi.
+
+Bu qoida sinovlarga ham tegishli: `patch_test.py` da izohlardagi
+`CREATE TABLE` obyekt deb sanalmasligi ALOHIDA tekshiriladi — aks
+holda tekshiruvni tekshiruvchining o'zi yolg'on "OK" bergan bo'lardi.
+
 ---
 
 ## 7. Yurgizish va muhit

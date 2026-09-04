@@ -343,7 +343,28 @@ def main() -> int:
                 say(WARN, f"passportda yetishmayapti: {', '.join(miss)}",
                     "faktura shu rekvizitlar bilan chiqadi")
             else:
-                say(OK, f"passport to'liq — {own['name']}")
+                # TO'LDIRILGAN != YAROQLI. Ilgari tekshiruv faqat maydon
+                # BO'SH EMASLIGINI ko'rardi: "-" yoki "keyin to'ldiraman"
+                # ham "to'liq" bo'lib o'tardi va faktura shu bilan
+                # chiqardi. Uzunlik — eng arzon yaroqlilik belgisi
+                # (INN 9, MFO 5, hisob raqami 20 raqam).
+                shakl = {"inn": 9, "bank_mfo": 5, "bank_account": 20}
+                nom = {"inn": "INN", "bank_mfo": "MFO",
+                       "bank_account": "hisob raqami"}
+                xato = []
+                for k, uzunlik in shakl.items():
+                    v = "".join(ch for ch in str(own.get(k) or "")
+                                if ch.isdigit())
+                    if len(v) != uzunlik:
+                        xato.append(f"{nom[k]} {len(v)} raqam "
+                                    f"({uzunlik} kutilgan)")
+                if xato:
+                    say(WARN, "passport to'ldirilgan, lekin SHAKLI shubhali: "
+                              + "; ".join(xato),
+                        "faktura va shartnoma shu raqamlar bilan chiqadi — "
+                        "buxgalter qaytarib yuboradi")
+                else:
+                    say(OK, f"passport to'liq va shakli to'g'ri — {own['name']}")
 
         # --- 5. Tender-AI bilan bog'lanish ---
         head("5. Tender-AI bilan bog'lanish")
@@ -360,6 +381,11 @@ def main() -> int:
         from api import tenderai
         try:
             tenderai.document_types()
+            # NIMANI ISBOTLAYDI: tender-ai ko'tarilgan va so'rov o'tdi.
+            # NIMANI ISBOTLAMAYDI: `ERP_SERVICE_KEY` ning to'g'riligini —
+            # agar u yerda endpoint ochiq bo'lsa, noto'g'ri kalit bilan
+            # ham javob keladi. Kalitni tekshiradigan yagona ishonchli
+            # yo'l — tender-ai tomonidan 401 qaytishi.
             say(OK, f"tender-ai javob berdi ({tenderai.API})")
         except Exception as e:                  # noqa: BLE001
             # Bu OGOHLANTIRISH, xato emas: ERP tender-ai siz ham ishlaydi,
@@ -378,17 +404,41 @@ def main() -> int:
 
         # --- 7. Demo ma'lumot ---
         head("7. Demo va sinov ma'lumotlari")
-        pats = ["%DEMO%", "%ZZTEST%", "%ZZSMOKE%"]
+        # QAMROV. Ilgari UCHTA jadval sanalardi (karta, mijoz, hodim) va
+        # natija "23 ta" chiqardi — haqiqiy son esa uch barobar ko'p edi
+        # (hisoblar 11, bildirishnoma 9, vazifa 24). Ya'ni tekshiruv
+        # BOR edi, lekin QISMNI o'lchardi va egasi tozalash hajmini
+        # kam baholardi.
+        #
+        # `ZZFIX` ham qo'shildi: `_tests/fixture.py` shu belgini
+        # ishlatadi va u ro'yxatda umuman yo'q edi.
+        pats = ["%DEMO%", "%ZZTEST%", "%ZZSMOKE%", "%ZZFIX%", "%ZZOQIM%"]
+        JADVALLAR = [
+            ("opportunity", "created_by", "karta"),
+            ("client_company", "name", "mijoz"),
+            ("broker", "full_name", "hodim"),
+            ("app_user", "username", "hisob"),
+            ("opportunity_task", "title", "vazifa"),
+            ("notification", "matn", "bildirishnoma"),
+            ("opportunity_file", "created_by", "sabab hujjati"),
+            ("chat_message", "text", "chat xabari"),
+        ]
         demo = 0
-        for sql in ("SELECT count(*) FROM erp.opportunity "
-                    "WHERE created_by ILIKE ANY(%(p)s)",
-                    "SELECT count(*) FROM erp.client_company "
-                    "WHERE name ILIKE ANY(%(p)s)",
-                    "SELECT count(*) FROM erp.broker "
-                    "WHERE full_name ILIKE ANY(%(p)s)"):
-            demo += db.scalar(sql, {"p": pats}) or 0
+        qismlar = []
+        for tbl, col, nom in JADVALLAR:
+            # Jadval hali yaratilmagan bo'lishi mumkin (patch qo'llanmagan)
+            # — bunda tekshiruv YIQILMASLIGI kerak.
+            if not table_exists("erp", tbl):
+                continue
+            n = db.scalar(f"SELECT count(*) FROM erp.{tbl} "
+                          f"WHERE {col}::text ILIKE ANY(%(p)s)",
+                          {"p": pats}) or 0
+            if n:
+                demo += n
+                qismlar.append(f"{nom} {n}")
         if demo:
-            say(WARN, f"{demo} ta demo/sinov yozuvi bor",
+            say(WARN, f"{demo} ta demo/sinov yozuvi bor: "
+                      + ", ".join(qismlar),
                 "cleanup_demo.py (avval belgisiz, keyin --yes bilan)")
         else:
             say(OK, "demo/sinov yozuvi yo'q")
