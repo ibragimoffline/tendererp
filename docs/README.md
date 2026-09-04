@@ -1,6 +1,6 @@
 # HUJJATLAR XARITASI
 
-Bu papkada 18 ta hujjat bosqichma-bosqich yozilgan: har biri o'z paytida qabul
+Bu papkada 19 ta hujjat bosqichma-bosqich yozilgan: har biri o'z paytida qabul
 qilingan qarorni va **nega shunday qilingani** saqlaydi. Bu fayl — ularga
 kirish: nima qayerda va qaysi savolga javob qayerdan topiladi.
 
@@ -36,6 +36,13 @@ kirish: nima qayerda va qaysi savolga javob qayerdan topiladi.
 |---|---|
 | `erp_integratsiya.md` … `_5.md` | Tender-AI bilan bog'lanishning bosqichma-bosqich tarixi: cheklist, hujjat shabloni, vazifalar, xabar yuborish, kompaniya profili |
 | `../INTEGRATSIYA.md` | Tender-AI tomonida **nima o'zgargani** — o'sha loyihaga o'tkaziladigan ro'yxat |
+
+### Ishga tushirish
+
+| Fayl | Nima haqida |
+|---|---|
+| `erp_ishga_tushirish.md` | Bo'sh bazadan real ishgacha — ishlab chiqish mashinasida (Windows) |
+| `deploy_linux.md` | **SERVER**: systemd, reliz kataloglari, staging darvozasi, orqaga qaytish |
 
 ### Modullar
 

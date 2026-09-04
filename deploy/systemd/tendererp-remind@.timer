@@ -1,0 +1,26 @@
+# =============================================================================
+# Tender ERP — eslatma jadvali
+# =============================================================================
+#     systemctl enable --now tendererp-remind@production.timer
+#
+# NEGA 08:30: eslatma ish kuni BOSHIDA kelsin. Kechqurun kelgan
+# "ertaga muddat tugaydi" xabari amalda kech.
+#
+# `Persistent=true` — server o'chib qolgan bo'lsa, yoqilgach
+# o'tkazib yuborilgan yurish BAJARILADI. Muddat eslatmasi uchun
+# bu muhim: o'tkazib yuborilgani jimgina yo'qolmasin.
+#
+# `RandomizedDelaySec` — tender-ai ning ETL timeri bilan bir vaqtda
+# urilmasin; ikkalasi ham bitta bazaga boradi.
+# =============================================================================
+[Unit]
+Description=Tender ERP eslatmalari — kuniga bir marta (%i)
+
+[Timer]
+OnCalendar=*-*-* 08:30:00
+Persistent=true
+RandomizedDelaySec=300
+Unit=tendererp-remind@%i.service
+
+[Install]
+WantedBy=timers.target

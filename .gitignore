@@ -13,3 +13,6 @@ logs/
 
 # TypeScript build keshi - qurilish natijasi, kod emas
 *.tsbuildinfo
+
+# Muhit fayllari — SIR. Faqat namuna kuzatiladi.
+deploy/env/*.env

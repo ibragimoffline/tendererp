@@ -1,0 +1,40 @@
+# =============================================================================
+# Tender ERP — muddat va vazifa ESLATMALARI (kuniga bir marta)
+# =============================================================================
+# Windows da buni `register_erp_task.ps1` Task Scheduler ga qo'yardi.
+# Linux da — timer (`tendererp-remind@.timer`).
+#
+# XABARNI ERP YUBORMAYDI: u tender-ai ning `POST /notify/send` iga
+# uzatadi (`api/erp/remind.py` dagi qaror). Ya'ni SMTP va Telegram
+# sirlari faqat tender-ai o'rnatmasida qoladi va bu yerga
+# KO'CHIRILMAYDI. Shu sababli bu birlikda hech qanday sir yo'q.
+# =============================================================================
+[Unit]
+Description=Tender ERP eslatmalari (%i)
+After=network-online.target tendererp-api@%i.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=tendererp
+Group=tendererp
+WorkingDirectory=/opt/tendererp/%i/current
+EnvironmentFile=/etc/tendererp/%i.env
+
+ExecStart=/opt/tendererp/%i/current/.venv/bin/python -m api.erp.remind
+
+# Eslatma yuborilmasa ish TO'XTAMAYDI: `remind.py` yuborilmagan
+# yozuvni belgilamaydi va ertaga qayta uriniladi. Shuning uchun
+# `Restart=` yo'q — timer o'zi qaytadi.
+TimeoutStartSec=300
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tendererp-remind-%i
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/tendererp/%i/var
+Environment=XDG_CACHE_HOME=/opt/tendererp/%i/var/cache

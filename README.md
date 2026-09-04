@@ -91,6 +91,14 @@ tender erp/
 ├── register_erp_task.ps1        # eslatmani jadvalga qo'yadi
 ├── backup_erp.ps1               # ZAXIRA: faqat erp sxemasi (pg_dump -Fc)
 ├── register_backup_task.ps1     # zaxirani jadvalga qo'yadi (02:00)
+├── deploy/                      # SERVER (Linux) — docs/deploy_linux.md
+│   ├── bin/bootstrap.sh         # serverni bir marta tayyorlash
+│   ├── bin/deploy.sh            # reliz + atomar almashtirish (staging birinchi)
+│   ├── bin/migratsiya.sh        # patchlarni RAQAM tartibida, cheksum bilan
+│   ├── bin/health-check.sh      # tiriklik / baza / sxema / interfeys
+│   ├── bin/rollback.sh          # bitta `ln -sfn` bilan orqaga
+│   ├── systemd/                 # tendererp-api@ , tendererp-remind@
+│   └── env/*.env.example        # muhit namunalari (SIR YO'Q)
 ├── api/
 │   ├── main.py                  # FastAPI ilovasi (56 marshrut)
 │   ├── db.py                    # pool va query yordamchilari

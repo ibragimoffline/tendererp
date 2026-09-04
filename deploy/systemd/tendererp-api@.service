@@ -1,0 +1,80 @@
+# =============================================================================
+# Tender ERP — FastAPI xizmati (SHABLON birlik)
+# =============================================================================
+# BITTA FAYL, IKKI MUHIT. `@` shablon: `%i` — nusxa nomi.
+#     systemctl enable --now tendererp-api@staging
+#     systemctl enable --now tendererp-api@production
+#
+# TENDER-AI DAGI `tenderai-api@.service` BILAN BIR XIL SHAKLDA. Sabab
+# oddiy: bitta serverda ikki xil uslub bo'lsa, operator ikkalasini ham
+# yarim biladi. Farqlar faqat MAJBURIY joylarda va har biri izohlangan.
+#
+# O'RNATISH:
+#     sudo cp tendererp-api@.service /etc/systemd/system/
+#     sudo systemctl daemon-reload
+# =============================================================================
+[Unit]
+Description=Tender ERP API (%i)
+Documentation=file:///opt/tendererp/%i/current/docs/deploy_linux.md
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=tendererp
+Group=tendererp
+
+WorkingDirectory=/opt/tendererp/%i/current
+EnvironmentFile=/etc/tendererp/%i.env
+
+# NEGA BITTA PORT, tender-ai dagidek "API + statik" ikkitasi EMAS:
+# `api/main.py` qurilgan `frontend/dist` ni O'ZI uzatadi va `/api`
+# prefiksini o'zi kesadi (`strip_api_prefix`). Bu loyihaning ONGLI
+# qarori (main.py dagi izoh) — teskari proksi ERP uchun shart emas.
+ExecStart=/opt/tendererp/%i/current/.venv/bin/uvicorn api.main:app \
+    --host 127.0.0.1 \
+    --port ${API_PORT} \
+    --workers ${API_WORKERS} \
+    --proxy-headers \
+    --forwarded-allow-ips 127.0.0.1
+
+# `--no-access-log` YO'Q, tender-ai dan farqli: ERP kirish jurnalini
+# O'ZI yozmaydi, u uvicorn nikiga tayanadi (`_setup_logging` uvicorn
+# jurnalchilarini faylga ulaydi). O'chirsak kirish izi umuman qolmasdi.
+
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tendererp-api-%i
+
+# --- QATTIQLASHTIRISH ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# YOZISH MUMKIN BO'LGAN YAGONA JOY. Reliz katalogining O'ZI o'qish
+# uchun qoladi — xizmat o'z kodini qayta yoza olmasin.
+#
+# ERP jurnalni `<reliz>/logs/erp.log` ga yozadi va yo'l KODDA
+# QOTIRILGAN (`api/main.py`: LOG_DIR). Shuning uchun `deploy.sh`
+# `<reliz>/logs` ni `var/logs` ga simvolik havola qilib qo'yadi —
+# yozuv aslida shu yerga tushadi va cheklov buzilmaydi.
+ReadWritePaths=/opt/tendererp/%i/var
+Environment=XDG_CACHE_HOME=/opt/tendererp/%i/var/cache
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
