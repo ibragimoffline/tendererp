@@ -19,6 +19,22 @@ Documentation=file:///opt/tendererp/%i/current/docs/deploy_linux.md
 After=network-online.target postgresql.service
 Wants=network-online.target
 
+# QAYTA URINISH CHEGARASI — `[Unit]` DA, `[Service]` DA EMAS.
+# systemd bu ikki kalitni faqat shu bo'limda o'qiydi; `[Service]` da
+# turganda ularni tashlab yuboradi:
+#
+#     Unknown key 'StartLimitIntervalSec' in section [Service], ignoring.
+#
+# Ya'ni chegara umuman bo'lmasdi va `Restart=always` cheksiz sikl
+# berardi. Bu tender-ai da O'LCHANGAN nuqson (o'sha repozitoriyda ham
+# tuzatildi): ishga tushmaydigan sozlama bilan hisoblagich 53 ga
+# yetdi va `journalctl -n 60` faqat siklning o'zini ko'rsatdi — asl
+# xato undan besh daqiqa oldin edi va ko'rinmasdi.
+#
+# 5 daqiqada 5 martadan ko'p yiqilsa TO'XTAYDI.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
 [Service]
 Type=exec
 User=tendererp
@@ -44,8 +60,8 @@ ExecStart=/opt/tendererp/%i/current/.venv/bin/uvicorn api.main:app \
 
 Restart=always
 RestartSec=5
-StartLimitIntervalSec=300
-StartLimitBurst=5
+# Chegara `[Unit]` da (yuqorida) — bu ikki kalit SHU BO'LIMGA
+# TEGISHLI EMAS.
 
 KillSignal=SIGINT
 TimeoutStopSec=30
