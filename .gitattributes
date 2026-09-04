@@ -1,14 +1,24 @@
-# QATOR OXIRLARI — loyihaning kelishuviga MOSLASHTIRILGAN.
+# QATOR OXIRLARI — AMALDAGI holatga moslashtirilgan.
 #
-# Bu yerda "hammasi LF" degan odatiy qoida ISHLAMAYDI: loyihada ataylab
-# ikki xil uslub bor va u tekshirib turiladi —
-#   api/*.py, *.ps1  -> CRLF (PowerShell 5.1 BOM'siz .ps1 ni ANSI deb
-#                       o'qiydi; Windows'da yozilgan backend shu uslubda)
-#   _tests, frontend, docs, *.sql -> LF
+# "Hammasi LF" degan odatiy qoida bu yerda ishlamaydi: loyihada ataylab
+# ikki xil uslub bor. AMALDAGI taqsimot (tekshirilgan, 2026-09-04):
 #
-# `text=auto` bo'lsa git ularni o'zi normallashtirib, kelishuvni buzardi
-# va har commitda "butun fayl o'zgardi" degan farq chiqardi. Shuning
-# uchun matn fayllari `-text`: git qanday bo'lsa shunday saqlaydi.
+#   *.py                     -> CRLF   (32 fayl: api/ va ildizdagi
+#                                       yordamchi skriptlar. Windows'da
+#                                       yozilgan backend)
+#   qolgan hamma matn fayli  -> LF     (.md 29, .sql 26, .ps1 4,
+#                                       frontend 61, _tests 22)
+#
+# ILGARI BU IZOH `api/*.py, *.ps1 -> CRLF` derdi va u IKKI joyda
+# noto'g'ri edi: `.ps1` fayllari omborda LF (to'rttasi ham), ildizdagi
+# `check_setup.py` kabi skriptlar esa `api/` da emas, lekin CRLF.
+# Izoh haqiqatga moslashtirildi — teskarisi (fayllarni izohga
+# moslashtirish) 32 faylni qayta yozardi va har commitda "butun fayl
+# o'zgardi" degan shovqin berardi.
+#
+# `text=auto` bo'lsa git hammasini normallashtirib, kelishuvni buzardi.
+# Shuning uchun matn fayllari `-text`: git qanday bo'lsa shunday
+# saqlaydi. Ostidagi ikki qator esa DRIFTNI to'sadi — pastga qarang.
 * -text
 
 # HUJJATLAR — LF, git normallashtiradi.
@@ -21,8 +31,17 @@
 # (`erp_audit.md`, `erp_foyda.md`).
 #
 # `text eol=lf` — omborda ham, ish nusxasida ham LF. Bu yuqoridagi
-# kelishuvni BUZMAYDI: hujjatlar allaqachon LF bo'lishi kerak edi.
-*.md text eol=lf
+# kelishuvni BUZMAYDI: ikkala tur ham allaqachon LF.
+#
+# `.ps1` ham shu yerda va bu ONGLI qaror (2026-09-04). Yuqoridagi izoh
+# ilgari ular CRLF bo'lishi kerak deb yozgan edi, amalda esa to'rttasi
+# ham LF. `run_erp.ps1` bir marta CRLF ga o'tkazilganda 71 qatorlik
+# o'zgarish 339 qatorlik diffga aylandi va asl o'zgarish KO'MILIB
+# ketdi. PowerShell 5.1 LF bilan muammosiz ishlaydi (qulf shu holatda
+# tekshirildi) — ya'ni CRLF talabi eski kelishuv edi, texnik
+# zaruriyat emas.
+*.md  text eol=lf
+*.ps1 text eol=lf
 
 # Ikkilik fayllar — aniq belgilanadi.
 *.png binary

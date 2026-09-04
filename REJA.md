@@ -745,6 +745,20 @@ chiqishlar: `docs/erp_chat_qurilish.md`.
 3. **WebSocket/SSE** — oxirida. `pg_notify` tayyor; tinglovchi
    joylashtirishga (Caddy, systemd) talab qo'yadi.
 
+**Ochiq qarz — IKKI TOMONLI (bu repoda yopib bo'lmaydi):**
+
+`ERP_SERVICE_KEY` tekshiruvi (`check_setup.py` 5-bo'lim) hozir
+MAVJUDLIKNI o'lchaydi, TO'G'RILIGINI emas: kalit sozlangan va
+tender-ai javob berdi — lekin kalit QABUL QILINGANI isbotlanmagan.
+Agar u yerdagi endpoint ochiq bo'lsa, noto'g'ri kalit bilan ham javob
+keladi va "hammasi joyida" ko'rinadi.
+
+Bu `docs/erp_texnik.md` §6.1 dagi qoidaning yangi misoli, lekin uni
+BIR TOMONLAMA yopib bo'lmaydi: yopilishi uchun tender-ai noto'g'ri
+kalitga **401** qaytarishi va `api/tenderai.py` uni "javob bermadi"
+dan AJRATIB ko'rsatishi kerak. Shu bo'lgunicha tekshiruv izoh bilan
+qoldirildi — "tuzatildi" deb belgilash yomonroq bo'lardi.
+
 ---
 
 ## Ish tartibi (tavsiya)

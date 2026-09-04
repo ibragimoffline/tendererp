@@ -249,11 +249,17 @@ shaklda / to'g'ri rolda / to'g'ri patchdan ekani so'ralmasdi.
 | `check_setup` hisoblar | 3 ta hisob bor | kamida bittasi RAHBAR/MENEJER |
 | `check_setup` rekvizit | maydon bo'sh emas | INN 9 / MFO 5 / hisob 20 RAQAM |
 | `check_setup` demo | 3 jadvalda 23 ta | 8 jadvalda 67 ta |
+| `check_setup` service key | tender-ai javob berdi | kalit QABUL QILINDI — **hali yopilmagan**, pastga qarang |
 
 Yangi tekshiruv yozganda savol bitta: **u nimani isbotlaydi va nimani
-isbotlamaydi.** Ikkinchisiga javob izoh sifatida yoziladi (masalan
-"tender-ai javob berdi" `ERP_SERVICE_KEY` ning to'g'riligini
-ISBOTLAMAYDI).
+isbotlamaydi.**
+
+Ikkinchisiga javob IZOH sifatida yoziladi — va agar tuzatib bo'lmasa,
+IZOHDA QOLADI. Jadvaldagi oxirgi qator shunday: `ERP_SERVICE_KEY`
+tekshiruvini bir tomonlama yopib bo'lmaydi, chunki kalit QABUL
+QILINGANINI faqat tender-ai tomonidan 401 qaytishi isbotlaydi.
+"Tuzatildi" deb belgilash yomonroq bo'lardi — o'sha paytdan boshlab
+hech kim uni qayta ko'rmasdi. Ochiq qarz sifatida `REJA.md` da.
 
 **2. Tekshiruv YIQILISHINI ko'rsatmasdan qabul qilinmaydi.**
 
