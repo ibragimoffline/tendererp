@@ -24,6 +24,7 @@ import SubmissionPanel from './SubmissionPanel'
 import SababFayl from './SababFayl'
 import Muloqot from './Muloqot'
 import TaskList from './TaskList'
+import JamoaPanel from './JamoaPanel'
 import ReservePanel from './ReservePanel'
 import InvoiceLinks from './InvoiceLinks'
 import ProfitLine from './ProfitLine'
@@ -447,6 +448,20 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                   )}
                 </section>
               </div>
+
+              {/* --- JAMOA (28-patch) ---
+                  Vazifalardan OLDIN: "kim ishlayapti" degan savolga
+                  javob "kim nima qiladi" dan oldin kerak. Jamoa
+                  a'zosi kartani, chatini va vazifalarini ko'radi —
+                  ya'ni bu ro'yxat huquqning O'ZI, bezak emas. */}
+              <section className="mt-5">
+                <h3 className="mb-1.5 text-caption font-semibold text-muted-foreground">
+                  Jamoa
+                </h3>
+                <JamoaPanel oppId={o.id} brokers={brokers}
+                  onChanged={() => api.opportunity(o.id).then(apply)
+                    .catch(() => {})} />
+              </section>
 
               <TaskList oppId={o.id} brokers={brokers}
                 createdBy={o.broker?.name ?? null} />

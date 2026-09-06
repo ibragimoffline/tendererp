@@ -192,12 +192,18 @@ export default function Dashboard({ user, onOpenOpportunity, onGo }: Props) {
             <ul className="divide-y">
               {[...tasks.overdue, ...tasks.today].slice(0, 6).map((t) => (
                 <li key={t.id}>
-                  <button type="button"
-                    onClick={() => onOpenOpportunity(t.opportunity_id)}
-                    className="flex w-full items-baseline gap-2 py-1.5 text-left text-body hover:bg-muted">
+                  {/* UMUMIY vazifada karta YO'Q: bosilganda hech
+                      qayerga o'tmaydi va "tenderga tegishli emas"
+                      deb yoziladi. Ilgari `t.opportunity` har doim
+                      bor deb hisoblanardi. */}
+                  <button type="button" disabled={!t.opportunity_id}
+                    onClick={() => t.opportunity_id
+                      && onOpenOpportunity(t.opportunity_id)}
+                    className="flex w-full items-baseline gap-2 py-1.5 text-left text-body hover:bg-muted disabled:hover:bg-transparent">
                     <span className="min-w-0 flex-1 truncate">{t.title}</span>
                     <span className="truncate text-caption text-muted-foreground">
-                      {t.opportunity.title || `#${t.opportunity_id}`}
+                      {t.opportunity?.title || (t.opportunity_id
+                        ? `#${t.opportunity_id}` : 'umumiy')}
                     </span>
                     {t.due_at && (
                       <span className={cn('shrink-0 rounded px-1.5 py-px text-micro font-semibold',
@@ -423,9 +429,10 @@ function MineView({ user, tasks, mine, onOpenOpportunity, onGo }: {
               {[...(tasks?.overdue || []), ...(tasks?.today || [])]
                 .slice(0, 8).map((t) => (
                   <li key={t.id}>
-                    <button type="button"
-                      onClick={() => onOpenOpportunity(t.opportunity_id)}
-                      className="flex w-full items-baseline gap-2 py-1.5 text-left text-body hover:bg-muted">
+                    <button type="button" disabled={!t.opportunity_id}
+                      onClick={() => t.opportunity_id
+                        && onOpenOpportunity(t.opportunity_id)}
+                      className="flex w-full items-baseline gap-2 py-1.5 text-left text-body hover:bg-muted disabled:hover:bg-transparent">
                       <span className="min-w-0 flex-1 truncate">{t.title}</span>
                       {t.due_at && (
                         <span className={cn('shrink-0 rounded px-1.5 py-px text-micro font-semibold',

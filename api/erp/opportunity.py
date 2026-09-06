@@ -177,7 +177,12 @@ o.broker_id, b.full_name AS broker_name,
 o.client_id, c.name AS client_name,
 o.priority, o.win_probability, o.note, o.next_task, o.next_task_at,
 o.status, o.status_changed_at, o.closed_at, o.lost_reason,
-o.created_by, o.created_at, o.updated_at
+o.created_by, o.created_at, o.updated_at,
+-- JAMOA SONI (28-patch) — asosiy mas'uldan TASHQARI. Kanban
+-- kartasida "Karimov +2" bo'lib ko'rinadi: kartani ochmasdan
+-- turib "bu tenderda yolg'iz ishlanyaptimi?" degan savolga javob.
+(SELECT count(*) FROM erp.opportunity_assignee a
+  WHERE a.opportunity_id = o.id AND a.removed_at IS NULL) AS jamoa_soni
 """
 _OPP_FROM = """
 FROM erp.opportunity o
@@ -190,7 +195,15 @@ LEFT JOIN erp.client_company c ON c.id = o.client_id
 OPP_LIST_SQL = f"""
 SELECT {_OPP_COLS} {_OPP_FROM}
 WHERE (%(status)s::text IS NULL OR o.status = %(status)s)
-  AND (%(broker_id)s::int IS NULL OR o.broker_id = %(broker_id)s)
+  -- Hodim bo'yicha filtr: ASOSIY mas'ul YOKI JAMOA a'zosi (28-patch).
+  -- Faqat `broker_id` qolsa, jamoaga qo'shilgan hodim o'z ro'yxatida
+  -- kartani KO'RMASDI — u kartani ochishi mumkin bo'lardi-yu, unga
+  -- yo'l topa olmasdi.
+  AND (%(broker_id)s::int IS NULL OR o.broker_id = %(broker_id)s
+       OR EXISTS (SELECT 1 FROM erp.opportunity_assignee a
+                   WHERE a.opportunity_id = o.id
+                     AND a.broker_id = %(broker_id)s
+                     AND a.removed_at IS NULL))
   -- "TAQSIMLANMAGAN": Tender-AI yo'naltirishi hodimni topa olmasa
   -- karta baribir ochiladi (`api/erp/topshiriq.py`) va u YO'QOLMASLIGI
   -- kerak. Menejer aynan shu ro'yxatni ochadi.
@@ -310,6 +323,9 @@ def shape(r: dict) -> dict:
             "source_url": r["source_url"],
         },
         "broker": ({"id": r["broker_id"], "name": r["broker_name"]} if r["broker_id"] else None),
+        # Asosiy mas'uldan TASHQARI a'zolar soni. `0` — yolg'iz
+        # ishlanyapti; bu ham ma'lumot, shuning uchun yashirilmaydi.
+        "jamoa_soni": int(r.get("jamoa_soni") or 0),
         "client": ({"id": r["client_id"], "name": r["client_name"]} if r["client_id"] else None),
         "priority": r["priority"], "priority_label": PRIORITIES.get(r["priority"]),
         "win_probability": r["win_probability"],

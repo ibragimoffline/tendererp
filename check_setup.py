@@ -89,6 +89,11 @@ PATCHES = [
     # (`_tests/patch_test.py` topgan nuqson sinfi).
     ("schema_patch_erp_27.sql", "erp", "notification_delivery",
      "bildirishnoma yetkazish navbati (retry, kuzatuv)"),
+    # 28-patch YANGI JADVAL qo'shadi (`opportunity_assignee`).
+    # `opportunity_task` ga QARALMAYDI: u 3-patchda yaratilgan va
+    # tekshiruv YOLG'ON "OK" berardi (`_tests/patch_test.py`).
+    ("schema_patch_erp_28.sql", "erp", "opportunity_assignee",
+     "karta jamoasi (bir tenderda bir nechta hodim)"),
 ]
 
 #: 23-patch JADVAL qo'shmaydi — u HUQUQ beradi, shuning uchun
@@ -599,6 +604,60 @@ def main() -> int:
                     say(OK, "bildirishnoma navbati bo'sh")
         except Exception as _e:                     # noqa: BLE001
             say(WARN, f"navbat holatini o'qib bo'lmadi: {_e}")
+
+        # 1c) 28-PATCH INVARIANTLARI — faqat O'QIYDI.
+        #
+        # NEGA KERAK: patch qo'llangani (yuqorida) obyekt BORLIGINI
+        # aytadi, ishlayotganini emas. Eng qimmat holat — ko'zgu
+        # trigger tushib qolishi: u yo'q bo'lsa `done` va `status`
+        # JIMGINA ajralib ketadi va bajarilgan vazifa ro'yxatda
+        # ochiq bo'lib qolaveradi. Xato chiqmaydi.
+        try:
+            if db.query_one("SELECT 1 AS x FROM information_schema.tables "
+                            "WHERE table_schema='erp' "
+                            "AND table_name='opportunity_assignee'"):
+                if db.query_one(
+                        "SELECT 1 AS x FROM pg_trigger t "
+                        "JOIN pg_class c ON c.oid = t.tgrelid "
+                        "WHERE c.relname = 'opportunity_task' "
+                        "AND t.tgname = 'task_done_mirror_trg'"):
+                    say(OK, "vazifa `done` ko'zgu triggeri ulangan")
+                else:
+                    say(ERR, "`done` ko'zgu triggeri YO'Q",
+                        "bajarilgan vazifa ochiq bo'lib qolaveradi: "
+                        "psql ... -f schema_patch_erp_28.sql")
+                _nomos = db.scalar(
+                    "SELECT count(*) FROM erp.opportunity_task "
+                    "WHERE done IS DISTINCT FROM "
+                    "      (status IN ('bajarildi', 'bekor'))") or 0
+                if _nomos:
+                    say(ERR, f"{_nomos} ta vazifada `done` va `status` "
+                        "mos kelmaydi", "trigger tushib qolgan edi: "
+                        "schema_patch_erp_28.sql qayta qo'llang")
+                else:
+                    say(OK, "vazifa holati va `done` ustuni mos")
+                # ASOSIY MAS'UL BITTA: u `opportunity.broker_id` da,
+                # ya'ni ikkitasi TUZILMA darajasida bo'lishi mumkin
+                # emas. Tekshiriladigan narsa boshqa: o'sha odam
+                # jamoa jadvalida IKKINCHI marta turibdimi.
+                _ikki = db.scalar(
+                    "SELECT count(*) FROM erp.opportunity_assignee a "
+                    "JOIN erp.opportunity o ON o.id = a.opportunity_id "
+                    "WHERE a.removed_at IS NULL "
+                    "  AND a.broker_id = o.broker_id") or 0
+                if _ikki:
+                    say(WARN, f"{_ikki} ta kartada asosiy mas'ul jamoa "
+                        "jadvalida ham turibdi",
+                        "ekranda bir marta ko'rinadi (jamoa.royxat), "
+                        "lekin qator ortiqcha")
+                else:
+                    say(OK, "asosiy mas'ul jamoa jadvalida takrorlanmagan")
+                _umumiy = db.scalar(
+                    "SELECT count(*) FROM erp.opportunity_task "
+                    "WHERE opportunity_id IS NULL") or 0
+                say(OK, f"umumiy vazifalar: {_umumiy} ta")
+        except Exception as _e:                     # noqa: BLE001
+            say(WARN, f"28-patch invariantlari o'qilmadi: {_e}")
 
         # 2) Qurilgan interfeys.
         import datetime as _dt

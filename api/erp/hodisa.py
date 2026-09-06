@@ -100,6 +100,9 @@ HODISALAR: Dict[str, Any] = {
     "hujjat_muddat":  ("Hujjat muddati tugayapti", KOMPANIYA),
     "qaror":          ("Qaror kerak", []),
     "tizim":          ("Tizim xatosi — aralashuv kerak", KOMPANIYA),
+    "jamoa_qoshildi": ("Tender jamoasiga qo'shildingiz", []),
+    "jamoa_chiqarildi": ("Tender jamoasidan chiqarildingiz", []),
+    "jamoa_rol":      ("Tenderdagi mas'uliyat o'zgardi", []),
     "chat_yangi":     ("Yangi xabar", []),
     "chat_mention":   ("Chatda eslatish", []),
     "chat_qoshildi":  ("Chatga qo'shildi", []),
@@ -358,7 +361,11 @@ def vazifa_biriktirildi(task_id: int, broker_id: Optional[int],
                         title: str, opp_id: Optional[int],
                         muddat: Optional[str] = None,
                         chiqaruvchi: Optional[int] = None) -> Dict[str, Any]:
-    """Vazifa hodimga biriktirildi."""
+    """Vazifa hodimga biriktirildi.
+
+    KONTEKST MATNDA ko'rinadi: umumiy vazifa bilan tender vazifasini
+    bildirishnomaning O'ZIDAN ajratib bo'lishi kerak, aks holda odam
+    uni ochmasdan turib nima haqida ekanini bilmasdi."""
     return chiqar("vazifa", f"Sizga vazifa: {title}"
                   + (f" — muddat {muddat}" if muddat else ""),
                   broker_id=broker_id, opportunity_id=opp_id,

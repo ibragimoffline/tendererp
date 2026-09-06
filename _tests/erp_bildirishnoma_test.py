@@ -665,6 +665,16 @@ def test_tozalash(before):
     eq("public.tender soni tegilmadi", after["t_n"], before["t_n"])
     eq("public.tender yangilanmadi", after["t_max"], before["t_max"])
 
+    # FIXTURE KARTASINING mas'uli QAYTARILADI: 9-bo'lim uni sinov
+    # hodimiga o'tkazgan va shu holda qoldirsak, keyingi yurishda
+    # boshqa sinov boshqa holatni ko'rardi — hamda sinov hodimini
+    # o'chirib bo'lmasdi (tashqi kalit).
+    fix_b = FIX.ensure_broker()
+    db.execute_returning(
+        "UPDATE erp.opportunity SET broker_id = %(b)s "
+        "WHERE broker_id IN (SELECT id FROM erp.broker "
+        "                     WHERE full_name LIKE %(p)s) RETURNING id",
+        {"b": fix_b["id"], "p": MARK + "%"})
     with db.get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT set_config('erp.audit_purge', 'on', false)")
@@ -691,13 +701,22 @@ def test_tozalash(before):
                 "DELETE FROM erp.chat_member WHERE app_user_id = ANY("
                 "  SELECT id FROM erp.app_user WHERE username LIKE %(p)s)",
                 {"p": PREFIX + "%"})
-            cur.execute("UPDATE erp.app_user SET active = FALSE "
-                        "WHERE username LIKE %(p)s", {"p": PREFIX + "%"})
+            cur.execute("UPDATE erp.app_user SET active = FALSE, "
+                        "broker_id = NULL WHERE username LIKE %(p)s",
+                        {"p": PREFIX + "%"})
+            # HODIMLAR ham tozalanadi: ular sinov yaratgan yozuvlar va
+            # qolib ketsa hodimlar ro'yxatida ko'rinardi. Hisob
+            # bog'lanishi yuqorida uzildi, aks holda FK to'sardi.
+            cur.execute("DELETE FROM erp.broker WHERE full_name LIKE %(p)s",
+                        {"p": MARK + "%"})
         conn.commit()
     eq("sinov bildirishnomalari tozalandi",
        db.scalar("SELECT count(*) FROM erp.notification WHERE matn LIKE %(p)s",
                  {"p": "%" + MARK + "%"}), 0)
     # YETIM QATOR QOLMADI: `ON DELETE CASCADE` haqiqatan ishlayaptimi.
+    eq("sinov hodimlari tozalandi",
+       db.scalar("SELECT count(*) FROM erp.broker WHERE full_name LIKE %(p)s",
+                 {"p": MARK + "%"}), 0)
     eq("navbatda yetim qator yo'q",
        db.scalar("SELECT count(*) FROM erp.notification_delivery d "
                  "LEFT JOIN erp.notification n ON n.id = d.notification_id "

@@ -125,6 +125,36 @@ AMALLAR: Dict[str, Any] = {
     "karta.foyda": ("Bitta kartaning foydasi", {
         "admin": KOR, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": OZ}),
 
+    # --- jamoa va vazifalar (28-patch) ---------------------------------
+    #
+    # JAMOANI BOSHLIQ BOSHQARADI. Broker o'z kartasiga hamkasb
+    # QO'SHA OLADI (chatga qo'shish bilan bir xil daraja: maslahat
+    # so'rash uning kundalik ishi), lekin CHIQARISH va ASOSIY
+    # MAS'ULNI almashtirish — nizoli amallar va ular boshliqda
+    # qoladi. Aks holda ish jimgina bir-biriga surilardi.
+    "karta.jamoa": ("Karta jamoasini ko'rish", {
+        "admin": KOR, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": OZ}),
+    "karta.jamoa_qosh": ("Kartaga hodim qo'shish (jamoa)", {
+        "admin": None, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": OZ}),
+    "karta.jamoa_chiqar": ("Jamoadan hodim chiqarish / rolini o'zgartirish", {
+        "admin": None, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": None}),
+
+    # UMUMIY VAZIFA — kartaga bog'liq EMAS, shuning uchun
+    # `karta.tahrirlash` unga yaramaydi (u karta egaligiga tayanadi).
+    #
+    # Broker uchun `OZ`: u O'ZIGA vazifa qo'ya oladi ("ertaga
+    # supplierga qo'ng'iroq"), lekin BOSHQAGA yo'q — ish taqsimlash
+    # menejerning ishi (`erp_rollar.md` §3.6). Bu farq modulda
+    # tekshiriladi: matritsa amalni biladi, obyektni bilmaydi.
+    "vazifa.korish": ("Vazifalarni ko'rish", {
+        "admin": KOR, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": OZ}),
+    "vazifa.yaratish": ("Umumiy vazifa yaratish", {
+        "admin": None, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": OZ}),
+    "vazifa.biriktirish": ("Vazifani BOSHQA hodimga biriktirish", {
+        "admin": None, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": None}),
+    "vazifa.yuklama": ("Hodimlar yuklamasi", {
+        "admin": KOR, "rahbar": TOLIQ, "menejer": TOLIQ, "broker": None}),
+
     # --- ichki chat (`docs/erp_chat.md` §2) -----------------------------
     #
     # ADMIN HAMMA YERDA `None`: u yozishmada QATNASHMAYDI — "biznes

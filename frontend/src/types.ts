@@ -99,6 +99,9 @@ export interface Opportunity {
   tender_id: number
   tender: OpportunitySnapshot
   broker: Nullable<OpportunityRef>
+  /** Asosiy mas'uldan TASHQARI jamoa a'zolari soni (28-patch).
+   *  Kanban kartasida "Karimov +2" bo'lib ko'rinadi. */
+  jamoa_soni: number
   client: Nullable<OpportunityRef>
   priority: string
   priority_label: Nullable<string>
@@ -526,18 +529,38 @@ export interface TaskAssignee {
   name: Nullable<string>
 }
 
+/** Vazifa holati (28-patch). KECHIKKAN bu yerda YO'Q va bu ongli
+ *  qaror: u `due_at` va holatdan HISOBLANADI (`overdue`). Ikkinchi
+ *  haqiqat manbai bo'lsa, uni har kecha yangilab turadigan skript
+ *  kerak bo'lardi va u bir kun yurmasa ekran yolg'on gapirardi. */
+export type TaskStatus = 'yangi' | 'bajarilmoqda' | 'bajarildi' | 'bekor'
+
+/** Vazifa konteksti: tenderga bog'langanmi yoki umumiymi. */
+export type TaskKontekst = 'umumiy' | 'karta'
+
 export interface OpportunityTask {
   id: number
-  opportunity_id: number
+  /** `null` — UMUMIY vazifa (tenderga bog'liq emas) */
+  opportunity_id: Nullable<number>
   title: string
   assignee: Nullable<TaskAssignee>
   due_at: Nullable<string>
+  /** `status` ning KO'ZGUSI (serverdagi trigger yuritadi) */
   done: boolean
   done_at: Nullable<string>
+  cancelled_at: Nullable<string>
   note: Nullable<string>
   reminded_at: Nullable<string>
   created_by: Nullable<string>
   created_at: Nullable<string>
+  updated_at: Nullable<string>
+  status: TaskStatus
+  status_label: Nullable<string>
+  priority: string
+  priority_label: Nullable<string>
+  kontekst: TaskKontekst
+  /** `yangi` yoki `bajarilmoqda` — diqqat talab qiladi */
+  ochiq: boolean
   /** kechikkanini SERVER hisoblaydi — brauzer soati noto'g'ri bo'lishi mumkin */
   overdue: boolean
 }
@@ -547,12 +570,69 @@ export interface TaskInput {
   assignee_broker_id?: Nullable<number>
   due_at?: Nullable<string>
   note?: Nullable<string>
+  priority?: Nullable<string>
+  /** Berilmasa — UMUMIY vazifa */
+  opportunity_id?: Nullable<number>
   created_by?: Nullable<string>
 }
 
-/** "Mening ishlarim" — vazifa + karta konteksti */
+/** Vazifa tarixi — MAVJUD jurnaldan (`erp.doc_audit`).
+ *  `actor: null` = "ERP dan tashqarida o'zgartirilgan". */
+export interface TaskHistoryRow {
+  id: number
+  action: string
+  field: Nullable<string>
+  old_value: Nullable<string>
+  new_value: Nullable<string>
+  actor: Nullable<string>
+  at: Nullable<string>
+}
+
+/** Hodim yuklamasi (§21). Bu BAHO EMAS: reyting yoki "samaradorlik"
+ *  hisoblanmaydi — bunday ko'rsatkich odamni ishni tez yopishga
+ *  undardi, sifatga emas. */
+export interface Yuklama {
+  broker_id: number
+  full_name: string
+  active: boolean
+  ochiq_vazifa: number
+  kechikkan: number
+  bajarilgan: number
+  ochiq_karta: number
+}
+
+/** Karta jamoasi a'zosi (28-patch).
+ *  `asosiy: true` — kartaning mas'uli; u `opportunity.broker_id` dan
+ *  keladi, jamoa jadvalidan emas. */
+export interface JamoaAzo {
+  broker_id: number
+  full_name: string
+  active: boolean
+  app_user_id: Nullable<number>
+  rol: string
+  rol_label: Nullable<string>
+  asosiy: boolean
+  izoh: Nullable<string>
+  added_at: Nullable<string>
+  added_by_name: Nullable<string>
+  removed_at: Nullable<string>
+}
+
+export interface Jamoa {
+  opportunity_id: number
+  asosiy_broker_id: Nullable<number>
+  azolar: JamoaAzo[]
+  /** faol a'zolar soni — kanban kartasi uchun ("Karimov +2") */
+  soni: number
+  rollar: { kod: string; label: string }[]
+}
+
+/** "Mening ishlarim" — vazifa + karta konteksti.
+ *  `opportunity: null` — UMUMIY vazifa. Bo'sh maydonlarga to'la
+ *  obyekt EMAS: ekran "tender ko'rsatilmagan" bilan "tenderga
+ *  tegishli emas" ni ajrata olishi kerak. */
 export interface MyTask extends OpportunityTask {
-  opportunity: {
+  opportunity: Nullable<{
     id: number
     title: Nullable<string>
     status: string
@@ -562,7 +642,7 @@ export interface MyTask extends OpportunityTask {
     deadline_at: Nullable<string>
     start_price: Nullable<number>
     currency: Nullable<string>
-  }
+  }>
 }
 
 export interface MyTasks {

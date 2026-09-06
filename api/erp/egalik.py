@@ -52,13 +52,33 @@ from api.erp.opportunity import ErpError
 #: ustunini qaytaradi. So'rovlar ATAYLAB `EXISTS` bilan: "topilmadi" va
 #: "meniki emas" farqi bu qatlamda kerak emas — ikkalasi ham "yo'q".
 TEGISHLI_SQL: Dict[str, str] = {
+    # KARTA "meniki" ikki holatda (28-patch): asosiy mas'ulman YOKI
+    # jamoadaman. Ikkinchisi qo'shilmasa, kartaga biriktirilgan
+    # narxchi uni OCHA OLMASDI — ya'ni ish qilish uchun mas'ulning
+    # hisobidan kirish kerak bo'lardi va audit ma'nosini yo'qotardi.
     "opportunity": """
         SELECT EXISTS (SELECT 1 FROM erp.opportunity o
-                        WHERE o.id = %(id)s AND o.broker_id = %(b)s) AS ok""",
+                        WHERE o.id = %(id)s AND o.broker_id = %(b)s)
+            OR EXISTS (SELECT 1 FROM erp.opportunity_assignee a
+                        WHERE a.opportunity_id = %(id)s
+                          AND a.broker_id = %(b)s
+                          AND a.removed_at IS NULL) AS ok""",
+    # VAZIFA uch holatda "meniki": menga biriktirilgan (kartasiz
+    # umumiy vazifa uchun YAGONA yo'l), kartasi meniki, yoki
+    # kartasining jamoasidaman.
     "task": """
-        SELECT EXISTS (SELECT 1 FROM erp.opportunity_task t
-                         JOIN erp.opportunity o ON o.id = t.opportunity_id
-                        WHERE t.id = %(id)s AND o.broker_id = %(b)s) AS ok""",
+        SELECT EXISTS (
+            SELECT 1 FROM erp.opportunity_task t
+             WHERE t.id = %(id)s
+               AND (t.assignee_broker_id = %(b)s
+                 OR EXISTS (SELECT 1 FROM erp.opportunity o
+                             WHERE o.id = t.opportunity_id
+                               AND o.broker_id = %(b)s)
+                 OR EXISTS (SELECT 1 FROM erp.opportunity_assignee a
+                             WHERE a.opportunity_id = t.opportunity_id
+                               AND a.broker_id = %(b)s
+                               AND a.removed_at IS NULL))
+        ) AS ok""",
     "contract": """
         SELECT EXISTS (SELECT 1 FROM erp.contract k
                          JOIN erp.opportunity o ON o.id = k.opportunity_id

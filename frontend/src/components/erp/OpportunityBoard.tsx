@@ -113,6 +113,16 @@ export default function OpportunityBoard(
                       <div className="mt-1.5 flex items-baseline justify-between gap-2">
                         <span className="line-clamp-1 text-micro text-muted-foreground">
                           {o.broker?.name || '—'}
+                          {/* JAMOA SONI (28-patch): "Karimov +2".
+                              Avatarlar EMAS — kartada joy kam va
+                              uchta doira nomni siqib chiqarardi
+                              (§14: kartani ortiqcha yuklamaslik). */}
+                          {!!o.jamoa_soni && (
+                            <span data-testid={`jamoa-soni-${o.id}`}
+                              className="ml-1 text-primary">
+                              +{o.jamoa_soni}
+                            </span>
+                          )}
                         </span>
                         <span className="tabular text-micro">
                           {f.shortMoney(o.tender.start_price, o.tender.currency)}

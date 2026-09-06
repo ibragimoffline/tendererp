@@ -41,6 +41,7 @@ from api.erp import (act as erp_act, analytics as erp_analytics,  # noqa: E402
                      sozlama as erp_sozlama,
                      topshiriq as erp_topshiriq, xabar as erp_xabar,
                      hodisa as erp_hodisa, navbat as erp_navbat,
+                     jamoa as erp_jamoa,
                      staff as erp_staff,
                      stats as erp_stats, stock as erp_stock_mod,
                      submission as erp_sub, tasks as erp_tasks)
@@ -250,11 +251,23 @@ class ChatReadIn(BaseModel):
 
 
 class TaskIn(BaseModel):
-    """Karta bo'yicha bitta ish. Mas'ul ko'rsatilmasa — kartaning brokeri."""
+    """Bitta ish.
+
+    `opportunity_id` — IXTIYORIY (28-patch): berilmasa UMUMIY vazifa
+    (tenderga bog'liq emas). Karta yo'lidan (`POST /erp/opportunities/
+    {id}/tasks`) kelganda u YO'LDAN olinadi va tanadagisi tashlanadi:
+    ikkita manba bo'lsa, ular ajralib ketardi.
+
+    `created_by` tanada QOLDIRILDI (eski mijozlar uchun), lekin server
+    uni SESSIYADAN yozadi — so'rovdagi qiymat e'tiborga olinmaydi.
+    Muallifni so'rovdan olish "kim yaratdi" degan javobni ishonchsiz
+    qilardi."""
     title: str
     assignee_broker_id: Optional[int] = None
     due_at: Optional[date] = None
     note: Optional[str] = None
+    priority: Optional[str] = None
+    opportunity_id: Optional[int] = None
     created_by: Optional[str] = None
 
 
@@ -1137,29 +1150,224 @@ def erp_tasks_list(opp_id: int, user: Dict[str, Any] = Depends(me)):
 
 @app.post("/erp/opportunities/{opp_id}/tasks", status_code=201)
 def erp_task_add(opp_id: int, body: TaskIn, user: Dict[str, Any] = Depends(me)):
+    """KARTA vazifasi. Umumiy vazifa uchun `POST /erp/tasks`."""
     _can_obj(user, "karta.tahrirlash", "opportunity", opp_id)
+    _vazifa_biriktirish_huquqi(user, body.assignee_broker_id)
+    data = body.model_dump()
+    data.pop("opportunity_id", None)
     return _erp(erp_tasks.add, opp_id,
-                {**body.model_dump(), "created_by": auth.actor(user)})
+                {**data, "created_by": auth.actor(user),
+                 "actor_user_id": auth.user_id(user)})
 
 
 @app.put("/erp/tasks/{task_id}")
 def erp_task_update(task_id: int, body: TaskIn, user: Dict[str, Any] = Depends(me)):
-    _can_obj(user, "karta.tahrirlash", "task", task_id)
-    return _erp(erp_tasks.update, task_id, body.model_dump())
+    _can_obj(user, "vazifa.korish", "task", task_id)
+    _vazifa_biriktirish_huquqi(user, body.assignee_broker_id)
+    data = body.model_dump()
+    data.pop("opportunity_id", None)
+    return _erp(erp_tasks.update, task_id,
+                {**data, "created_by": auth.actor(user),
+                 "actor_user_id": auth.user_id(user)})
 
 
 @app.patch("/erp/tasks/{task_id}/done")
 def erp_task_done(task_id: int, done: bool = Query(True),
                   user: Dict[str, Any] = Depends(me)):
-    _can_obj(user, "karta.tahrirlash", "task", task_id)
-    return _erp(erp_tasks.set_done, task_id, done)
+    """Eski yo'l — `PATCH /erp/tasks/{id}/status` ga o'tadi.
+
+    SAQLANDI: interfeysning bir qismi va sinovlar shu yo'ldan
+    yuradi. Ma'nosi aniq: belgilangan = "bajarildi"."""
+    _can_obj(user, "vazifa.korish", "task", task_id)
+    return _erp(erp_tasks.set_done, task_id, done, auth.actor(user),
+                auth.user_id(user))
 
 
 @app.delete("/erp/tasks/{task_id}")
 def erp_task_delete(task_id: int, user: Dict[str, Any] = Depends(me)):
-    """Vazifa O'CHIRILADI (kartadan farqli): u ish rejasi, tarix emas."""
+    """XATO yaratilgan vazifani o'chirish.
+
+    YAKUNLANGAN vazifa o'chirilmaydi (modulda): u ish tarixi va uni
+    yo'qotish "ish qilinganmi?" degan savolni javobsiz qoldirardi."""
     _can_obj(user, "karta.tahrirlash", "task", task_id)
-    return _erp(erp_tasks.delete, task_id)
+    return _erp(erp_tasks.delete, task_id, auth.actor(user))
+
+
+class TaskStatusIn(BaseModel):
+    """Vazifa holati: yangi | bajarilmoqda | bajarildi | bekor."""
+    status: str
+
+
+class TaskAssignIn(BaseModel):
+    """Qayta biriktirish. `broker_id=null` — mas'ulni olib tashlash."""
+    broker_id: Optional[int] = None
+
+
+class JamoaIn(BaseModel):
+    """Jamoaga qo'shish / rolni o'zgartirish."""
+    broker_id: int
+    rol: str = "kuzatuvchi"
+    izoh: Optional[str] = None
+
+
+def _vazifa_biriktirish_huquqi(user: Dict[str, Any],
+                               broker_id: Optional[int]) -> None:
+    """BOSHQAGA vazifa biriktirish — alohida huquq.
+
+    Broker O'ZIGA vazifa qo'ya oladi ("ertaga supplierga qo'ng'iroq"),
+    lekin boshqaga yo'q: ish taqsimlash menejerning ishi
+    (`erp_rollar.md` §3.6). Matritsa amalni biladi, OBYEKTNI
+    bilmaydi — shuning uchun "kimga" degan qism shu yerda.
+
+    Tekshiruv SERVERDA: ekranda ro'yxatni yashirish himoya emas."""
+    if broker_id is None:
+        return
+    if perm.can(user, "vazifa.biriktirish"):
+        return
+    if broker_id != user.get("broker_id"):
+        raise HTTPException(
+            status_code=403,
+            detail="Boshqa hodimga vazifa biriktirish huquqi yo'q — "
+                   "faqat o'zingizga qo'ya olasiz.")
+
+
+@app.get("/erp/tasks")
+def erp_task_list(broker_id: Optional[int] = None,
+                  status: Optional[str] = None,
+                  priority: Optional[str] = None,
+                  kontekst: Optional[str] = None,
+                  overdue: bool = False, ochiq: bool = False,
+                  opportunity_id: Optional[int] = None,
+                  q: Optional[str] = None,
+                  limit: int = Query(200, ge=1, le=500),
+                  user: Dict[str, Any] = Depends(me)):
+    """BARCHA vazifalar — filtrlar bilan (umumiy + karta).
+
+    EGALIK filtri SERVERDA: broker faqat o'ziga biriktirilgan yoki
+    o'zi ishlayotgan kartaning vazifalarini ko'radi. `broker_id`
+    so'rovdan kelsa ham, u filtrni KENGAYTIRA olmaydi."""
+    _can(user, "vazifa.korish")
+    return _erp(erp_tasks.royxat, broker_id, status, priority, kontekst,
+                overdue, ochiq, opportunity_id, q, limit,
+                _oz_filtr(user, "vazifa.korish"))
+
+
+@app.post("/erp/tasks", status_code=201)
+def erp_task_create(body: TaskIn, user: Dict[str, Any] = Depends(me)):
+    """UMUMIY vazifa (tenderga bog'liq emas) yoki kartaga bog'langan.
+
+    `opportunity_id` berilsa — karta vazifasi va u holda KARTA
+    huquqi tekshiriladi (begona kartaga vazifa qo'yib bo'lmasin)."""
+    _can(user, "vazifa.yaratish")
+    data = body.model_dump()
+    opp_id = data.pop("opportunity_id", None)
+    if opp_id:
+        _can_obj(user, "karta.tahrirlash", "opportunity", opp_id)
+    _vazifa_biriktirish_huquqi(user, data.get("assignee_broker_id"))
+    # MUALLIF SESSIYADAN: so'rovdan kelgan "kim yaratdi" ishonchsiz.
+    return _erp(erp_tasks.add, opp_id,
+                {**data, "created_by": auth.actor(user),
+                 "actor_user_id": auth.user_id(user)})
+
+
+@app.get("/erp/tasks/{task_id}")
+def erp_task_get(task_id: int, user: Dict[str, Any] = Depends(me)):
+    _can_obj(user, "vazifa.korish", "task", task_id)
+    return _erp(erp_tasks.bitta, task_id)
+
+
+@app.get("/erp/tasks/{task_id}/history")
+def erp_task_history(task_id: int, user: Dict[str, Any] = Depends(me)):
+    """Vazifa tarixi — MAVJUD jurnaldan (`erp.doc_audit`)."""
+    _can_obj(user, "vazifa.korish", "task", task_id)
+    return _erp(erp_tasks.tarix, task_id)
+
+
+@app.patch("/erp/tasks/{task_id}/status")
+def erp_task_status(task_id: int, body: TaskStatusIn,
+                    user: Dict[str, Any] = Depends(me)):
+    """Boshlash / bajarish / bekor qilish / qayta ochish.
+
+    BAJARUVCHI O'ZI ham o'zgartira oladi: `vazifa.korish` egalik
+    orqali unga o'z vazifasini beradi. Aks holda har "bajardim"
+    uchun menejerni kutish kerak bo'lardi."""
+    _can_obj(user, "vazifa.korish", "task", task_id)
+    return _erp(erp_tasks.holat, task_id, body.status, auth.actor(user),
+                auth.user_id(user))
+
+
+@app.patch("/erp/tasks/{task_id}/assign")
+def erp_task_assign(task_id: int, body: TaskAssignIn,
+                    user: Dict[str, Any] = Depends(me)):
+    """QAYTA BIRIKTIRISH — alohida amal va alohida huquq."""
+    _can_obj(user, "vazifa.korish", "task", task_id)
+    _vazifa_biriktirish_huquqi(user, body.broker_id)
+    return _erp(erp_tasks.biriktir, task_id, body.broker_id,
+                auth.actor(user), auth.user_id(user))
+
+
+@app.get("/erp/workload")
+def erp_workload(faqat_faol: bool = True,
+                 user: Dict[str, Any] = Depends(me)):
+    """HODIM YUKLAMASI: ochiq vazifa, kechikkan, ochiq karta.
+
+    "Kimga ish berish mumkin" degan savolga javob. Bu BAHO EMAS:
+    reyting yoki "samaradorlik" hisoblanmaydi (§21)."""
+    _can(user, "vazifa.yuklama")
+    return _erp(erp_tasks.yuklama, faqat_faol)
+
+
+# --- KARTA JAMOASI (28-patch) ----------------------------------------------
+# Asosiy mas'ul `opportunity.broker_id` da QOLADI; bu endpointlar
+# QOLGAN a'zolar bilan ishlaydi va ro'yxatni ikkalasidan yig'adi
+# (`api/erp/jamoa.py` sarlavhasiga qarang).
+@app.get("/erp/opportunities/{opp_id}/assignees")
+def erp_jamoa_list(opp_id: int, tarix: bool = False,
+                   user: Dict[str, Any] = Depends(me)):
+    """Karta jamoasi. `tarix=true` — chiqarilganlar ham."""
+    _can_obj(user, "karta.jamoa", "opportunity", opp_id)
+    return _erp(erp_jamoa.royxat, opp_id, tarix)
+
+
+@app.post("/erp/opportunities/{opp_id}/assignees", status_code=201)
+def erp_jamoa_add(opp_id: int, body: JamoaIn,
+                  user: Dict[str, Any] = Depends(me)):
+    _can_obj(user, "karta.jamoa_qosh", "opportunity", opp_id)
+    return _erp(erp_jamoa.qosh, opp_id, body.broker_id, body.rol,
+                auth.user_id(user), auth.actor(user), body.izoh)
+
+
+@app.patch("/erp/opportunities/{opp_id}/assignees/{broker_id}")
+def erp_jamoa_role(opp_id: int, broker_id: int, body: JamoaIn,
+                   user: Dict[str, Any] = Depends(me)):
+    """Mas'uliyatni almashtirish — nizoli amal, boshliqda."""
+    _can_obj(user, "karta.jamoa_chiqar", "opportunity", opp_id)
+    return _erp(erp_jamoa.rol_ozgart, opp_id, broker_id, body.rol,
+                auth.user_id(user), auth.actor(user), body.izoh)
+
+
+@app.delete("/erp/opportunities/{opp_id}/assignees/{broker_id}")
+def erp_jamoa_remove(opp_id: int, broker_id: int,
+                     user: Dict[str, Any] = Depends(me)):
+    """Jamoadan chiqarish — YUMSHOQ (qator qoladi, `removed_at`)."""
+    _can_obj(user, "karta.jamoa_chiqar", "opportunity", opp_id)
+    return _erp(erp_jamoa.chiqar, opp_id, broker_id,
+                auth.user_id(user), auth.actor(user))
+
+
+@app.put("/erp/opportunities/{opp_id}/primary-assignee")
+def erp_jamoa_primary(opp_id: int, body: TaskAssignIn,
+                      user: Dict[str, Any] = Depends(me)):
+    """ASOSIY MAS'ULNI almashtirish.
+
+    `karta.biriktirish` huquqi — bu kartani boshqa hodimga o'tkazish
+    bilan AYNAN bir xil amal va u brokerda yo'q."""
+    _can_obj(user, "karta.biriktirish", "opportunity", opp_id)
+    if not body.broker_id:
+        raise HTTPException(status_code=400,
+                            detail="Asosiy mas'ul ko'rsatilmagan.")
+    return _erp(erp_jamoa.asosiy_qil, opp_id, body.broker_id,
+                auth.user_id(user), auth.actor(user))
 
 
 @app.get("/erp/my-tasks")

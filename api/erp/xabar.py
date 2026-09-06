@@ -72,6 +72,10 @@ TURLAR = {
     "biriktirish_olib_tashlandi": "Karta sizdan olindi",
     "hujjat_muddat":  "Hujjat muddati tugayapti",
     "qaror":          "Qaror kerak",
+    # 28-patch: karta jamoasi.
+    "jamoa_qoshildi": "Tender jamoasiga qo'shildingiz",
+    "jamoa_chiqarildi": "Tender jamoasidan chiqarildingiz",
+    "jamoa_rol":      "Mas'uliyat o'zgardi",
     "tizim":          "Tizim xatosi — aralashuv kerak",
 }
 

@@ -19,6 +19,7 @@ import type {
   OpportunityFile, FaylQamrov,
   ErpChat, ErpChatLenta, ErpChatMembers, ErpChatHistory,
   ErpNotificationList, ErpUnread, ErpNavbatSogliq,
+  Jamoa, Yuklama, TaskHistoryRow, TaskStatus, MyTask,
   LoginAttempt,
   ProfitReport, ProfitRow,
   Setting, ErpTahlil, TopshiriqHolat,
@@ -560,6 +561,50 @@ export const api = {
   chatMemberRemove: (chatId: number, uid: number) =>
     request<ErpChatMembers>('DELETE', `/erp/chats/${chatId}/members/${uid}`),
   /** Chatni jimlash: bildirishnoma kelmaydi, hisoblagich ishlaydi. */
+  // --- vazifalar va jamoa (28-patch) ---
+  // Vazifa KARTAGA BOG'LIQ BO'LMASLIGI mumkin: `opportunity_id`
+  // berilmasa — umumiy vazifa. Ikkita alohida "vazifa tizimi"
+  // yaratilmadi: bitta model, kontekst bilan.
+  /** BARCHA vazifalar (umumiy + karta), filtrlar bilan.
+   *  `tasks(oppId)` — KARTANING vazifalari; nomlar ataylab boshqa:
+   *  ular boshqa savolga javob beradi. */
+  taskList: (params?: Params) =>
+    request<MyTask[]>('GET', '/erp/tasks', { params }),
+  taskCreate: (body: TaskInput) =>
+    request<MyTask[]>('POST', '/erp/tasks', { body }),
+  task: (id: number) => request<MyTask>('GET', `/erp/tasks/${id}`),
+  taskHistory: (id: number) =>
+    request<TaskHistoryRow[]>('GET', `/erp/tasks/${id}/history`),
+  taskStatus: (id: number, status: TaskStatus) =>
+    request<MyTask[]>('PATCH', `/erp/tasks/${id}/status`,
+                      { body: { status } }),
+  /** Qayta biriktirish — alohida amal va alohida huquq. */
+  taskAssign: (id: number, brokerId: Nullable<number>) =>
+    request<MyTask[]>('PATCH', `/erp/tasks/${id}/assign`,
+                      { body: { broker_id: brokerId } }),
+  workload: () => request<Yuklama[]>('GET', '/erp/workload'),
+
+  // Jamoa: asosiy mas'ul `opportunity.broker_id` da qoladi, bu
+  // endpointlar QOLGAN a'zolar bilan ishlaydi va ro'yxatni
+  // ikkalasidan yig'adi.
+  jamoa: (oppId: number, tarix = false) =>
+    request<Jamoa>('GET', `/erp/opportunities/${oppId}/assignees`,
+                   { params: { tarix } }),
+  jamoaAdd: (oppId: number, brokerId: number, rol: string,
+             izoh?: string) =>
+    request<Jamoa>('POST', `/erp/opportunities/${oppId}/assignees`,
+                   { body: { broker_id: brokerId, rol, izoh: izoh ?? null } }),
+  jamoaRole: (oppId: number, brokerId: number, rol: string) =>
+    request<Jamoa>('PATCH',
+                   `/erp/opportunities/${oppId}/assignees/${brokerId}`,
+                   { body: { broker_id: brokerId, rol } }),
+  jamoaRemove: (oppId: number, brokerId: number) =>
+    request<Jamoa>('DELETE',
+                   `/erp/opportunities/${oppId}/assignees/${brokerId}`),
+  jamoaPrimary: (oppId: number, brokerId: number) =>
+    request<Jamoa>('PUT', `/erp/opportunities/${oppId}/primary-assignee`,
+                   { body: { broker_id: brokerId } }),
+
   chatMute: (chatId: number, jim: boolean) =>
     request<{ chat_id: number; jim: boolean }>(
       'PUT', `/erp/chats/${chatId}/mute`, { params: { jim } }),
