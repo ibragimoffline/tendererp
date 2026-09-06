@@ -612,16 +612,51 @@ def main() -> int:
         # `ERP_MUHIT` shunchaki yorliq emas — `api/muhit.py` qulfi
         # shunga qaraydi va `prod` bo'lsa sinovlarni umuman ishga
         # tushirmaydi.
+        # QATTIQ TALAB (deploy darvozasi). Qoidalar:
+        #
+        #   .env va baza ZID       -> XATO. Bu deyarli har doim
+        #                             noto'g'ri `.env` bilan ishga
+        #                             tushirish, ya'ni ma'lumot
+        #                             xavf ostida.
+        #   .env `prod`, baza yo'q -> XATO. Ishlab chiqarish belgisiz
+        #                             bo'lsa, qulfning ikkinchi qavati
+        #                             ishlamaydi — aynan `.env`
+        #                             almashib ketgan holatda.
+        #   baza `prod`, .env yo'q -> XATO (yuqoridagi bilan bir sinf).
+        #   .env yo'q, baza yo'q   -> OGOH. Bu eski o'rnatma: uni
+        #                             XATO qilish bugungi hamma
+        #                             ishni bir zarbada to'xtatardi
+        #                             va birinchi qilinadigan ish
+        #                             tekshiruvni o'chirish bo'lardi.
+        #
+        # Ya'ni: `ERP_MUHIT=prod` yozilgach, u ARTGA qaytmaydi —
+        # belgisiz qolgan ishlab chiqarish darvozadan o'tmaydi.
         try:
             from api import muhit as _muhit
-            _nom = _muhit.nomi()
-            if _nom is None:
-                say(WARN, f"ERP_MUHIT qo'yilmagan (baza: "
-                    f"{_muhit.baza_nomi() or '—'})",
-                    "ishlab chiqarish qulfi ISHLAMAYDI: .env ga "
-                    "ERP_MUHIT=prod / staging / dev yozing")
-            else:
-                say(OK, f"muhit: {_muhit.tavsif()}")
+            _holat, _xabar = _muhit.moslik()
+            if _holat == "zid":
+                say(ERR, f"MUHIT ZID: {_xabar}",
+                    "noto'g'ri .env bilan ishga tushirilgan bo'lishi "
+                    "mumkin. Tekshiring: python -m api.muhit")
+            elif _holat == "ok":
+                say(OK, f"muhit: {_xabar}")
+            elif _holat == "baza_yoq":
+                if _muhit.prodmi():
+                    say(ERR, f"ISHLAB CHIQARISH bazasi BELGILANMAGAN "
+                        f"({_xabar})",
+                        "python -m api.muhit --belgila prod")
+                else:
+                    say(WARN, f"baza belgilanmagan ({_xabar})",
+                        f"python -m api.muhit --belgila {_muhit.nomi()}")
+            else:                                   # env_yoq
+                if _muhit.baza_muhiti() == _muhit.PROD:
+                    say(ERR, f"baza ISHLAB CHIQARISH deb belgilangan, "
+                        f".env da esa ERP_MUHIT yo'q ({_xabar})",
+                        ".env ga yozing: ERP_MUHIT=prod")
+                else:
+                    say(WARN, _xabar,
+                        "ishlab chiqarish qulfi ISHLAMAYDI: .env ga "
+                        "ERP_MUHIT=prod / staging / dev yozing")
         except Exception as _e:                     # noqa: BLE001
             say(WARN, f"muhit nomi o'qilmadi: {_e}")
 

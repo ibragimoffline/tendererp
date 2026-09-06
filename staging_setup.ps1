@@ -117,6 +117,28 @@ $n = & $psql -U postgres -d $Baza -tAc "SELECT count(*) FROM information_schema.
 Write-Host "[OK] tiklandi: erp sxemasida $n ta jadval"
 if ([int]$n -lt 10) { throw "Tiklash to'liq bo'lmadi ($n ta jadval). Zaxirani tekshiring." }
 
+# --- 4b) BAZANI BELGILAYMIZ ------------------------------------------------
+# ENG MUHIM QADAM. Zaxira ishlab chiqarish bazasidan olingan, ya'ni
+# `erp.setting` dagi `muhit` belgisi ham KO'CHDI: yangi staging bazasi
+# hozir o'zini "prod" deb hisoblaydi.
+#
+# Bu qulfning ikkinchi qavati (`api/muhit.py` -> qulf_tekshir_baza):
+# sinovlar bazadan "sen kimsan?" deb so'raydi. Belgi qayta yozilmasa,
+# staging'da HECH QAYSI sinov ishlamaydi - va bu XAVFSIZ tomonga
+# xato: unutilgan belgi ishni to'xtatadi, ochiq qoldirmaydi.
+& $psql -U postgres -d $Baza -v ON_ERROR_STOP=1 -c @"
+INSERT INTO erp.setting (key, value, updated_by)
+VALUES ('muhit', 'staging', 'staging_setup.ps1')
+ON CONFLICT (key) DO UPDATE
+    SET value = 'staging', updated_by = 'staging_setup.ps1',
+        updated_at = now();
+"@ | Out-Null
+$belgi = & $psql -U postgres -d $Baza -tAc "SELECT value FROM erp.setting WHERE key='muhit'"
+if ($belgi.Trim() -ne 'staging') {
+    throw "Baza belgilanmadi (olindi: '$belgi'). erp.setting jadvali bormi? (18-patch)"
+}
+Write-Host "[OK] baza belgilandi: erp.setting.muhit = staging"
+
 # --- 5) .env.staging -----------------------------------------------------
 $stagingEnv = Join-Path $Root '.env.staging'
 if ((Test-Path $stagingEnv) -and -not $Yangila) {
@@ -154,6 +176,10 @@ if (-not $prodMuhit) {
     Write-Host "[i] .env -> ERP_MUHIT=$prodMuhit"
 }
 
+Write-Host ''
+Write-Host 'TEKSHIRISH:'
+Write-Host '  .\.venv\Scripts\python.exe -m api.muhit'
+Write-Host '  (`.env` va baza BIR XIL narsani aytishi kerak)'
 Write-Host ''
 Write-Host 'KEYINGI QADAM (staging oynasida):'
 Write-Host '  $env:XT_DB_DSN = "<.env.staging dagi DSN>"'

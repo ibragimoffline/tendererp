@@ -20,9 +20,13 @@ UCHTA BUZILISH SINFI:
   3) NOTO'G'RI JOYDA ISHLASHI. Ilovaning o'zi (`uvicorn`,
      `check_setup.py`, `remind.py`) qulfga tushmasligi kerak: ular
      ishlab chiqarishda AYNAN ishlashi kerak.
+  4) `.env` YOLG'ON GAPIRSA. Qo'riqlanayotgan xavf aynan `.env`
+     ning almashib ketishi, ya'ni faqat unga qaraydigan qulf
+     aldanadi. Bazadagi belgi bilan ZIDLIK ushlanishi shart.
 
 BAZAGA TEGMAYDI: bu sof mantiq sinovi va bo'sh o'rnatmada ham
-ishlaydi.
+ishlaydi. Bazadagi belgi o'rniga uni O'QIYDIGAN funksiya
+almashtiriladi — ulanish talab qilinmasin.
 """
 import os
 import sys
@@ -194,6 +198,108 @@ def test_qulf():
         check(M._ogohlantirildi, "lekin ogohlantirish chiqadi")
 
 
+class _Belgi:
+    """`muhit.baza_muhiti()` ni vaqtincha almashtiradi.
+
+    Bazaga ULANMAYMIZ: sinov bo'sh o'rnatmada ham ishlashi kerak
+    va bu yerda tekshirilayotgan narsa — MANTIQ, so'rovning o'zi
+    emas (uni `check_setup.py` haqiqiy bazada tekshiradi)."""
+
+    def __init__(self, qiymat):
+        self.qiymat = qiymat
+
+    def __enter__(self):
+        self.eski = M.baza_muhiti
+        M.baza_muhiti = lambda: self.qiymat
+        return self
+
+    def __exit__(self, *a):
+        M.baza_muhiti = self.eski
+
+
+def test_moslik():
+    head("5. `.env` va BAZA mosligi")
+
+    # MOS — ishlaydi.
+    with _Muhit("staging"), _Belgi(M.STAGING):
+        eq("ikkalasi 'staging' -> ok", M.moslik()[0], "ok")
+
+    # ZID — eng muhim holat: noto'g'ri `.env` bilan ishga tushirish.
+    for e, b in (("prod", M.STAGING), ("staging", M.PROD),
+                 ("dev", M.PROD), ("prod", M.DEV)):
+        with _Muhit(e), _Belgi(b):
+            holat, xabar = M.moslik()
+            eq(f".env '{e}' + baza '{b}' -> zid", holat, "zid")
+            check(e in xabar and b in xabar,
+                  "xabar IKKALASINI ham aytadi", xabar)
+
+    # Yarim holatlar.
+    with _Muhit(None), _Belgi(M.PROD):
+        eq(".env yo'q -> env_yoq", M.moslik()[0], "env_yoq")
+    with _Muhit("prod"), _Belgi(None):
+        eq("baza belgilanmagan -> baza_yoq", M.moslik()[0], "baza_yoq")
+    with _Muhit(None), _Belgi(None):
+        eq("ikkalasi ham yo'q -> env_yoq", M.moslik()[0], "env_yoq")
+
+
+def test_baza_qulfi():
+    head("6. BAZANING O'ZI aytgan qulf")
+    sinov = os.path.join(ROOT, "_tests", "yangi_test.py")
+
+    # ENG MUHIM: `.env` YOLG'ON gapiradi, baza haqiqatni aytadi.
+    with _Muhit("dev"), _Belgi(M.PROD), _Skript(sinov):
+        try:
+            M.qulf_tekshir()        # `.env` ga qaraydi — O'TKAZADI
+            check(True, ".env qulfi 'dev' ni o'tkazadi (u aldangan)")
+        except M.ProdQulfi:
+            check(False, ".env qulfi 'dev' ni o'tkazadi", "rad etdi")
+        try:
+            M.qulf_tekshir_baza()   # BAZAGA qaraydi — TO'XTATADI
+            check(False, "BAZA qulfi to'xtatdi", "o'tkazib yubordi")
+        except M.ProdQulfi as e:
+            check(True, "BAZA qulfi to'xtatdi (.env yolg'on gapirsa ham)")
+            check("belgila" in str(e), "xabar tuzatish yo'lini aytadi")
+
+    # Staging bazada o'tadi.
+    with _Muhit("staging"), _Belgi(M.STAGING), _Skript(sinov):
+        try:
+            M.qulf_tekshir_baza()
+            check(True, "staging bazada sinov o'tadi")
+        except M.ProdQulfi:
+            check(False, "staging bazada sinov o'tadi", "rad etildi")
+
+    # Belgilanmagan bazada o'tadi (eski o'rnatma to'xtamasin).
+    with _Muhit("dev"), _Belgi(None), _Skript(sinov):
+        try:
+            M.qulf_tekshir_baza()
+            check(True, "belgilanmagan bazada sinov to'xtamaydi")
+        except M.ProdQulfi:
+            check(False, "belgilanmagan bazada sinov to'xtamaydi", "rad etildi")
+
+    # ILOVA prod bazada ham ishlaydi.
+    with _Muhit("prod"), _Belgi(M.PROD), _Skript(
+            os.path.join(ROOT, "check_setup.py")):
+        try:
+            M.qulf_tekshir_baza()
+            check(True, "ilova prod bazada ISHLAYDI")
+        except M.ProdQulfi:
+            check(False, "ilova prod bazada ishlaydi", "rad etildi")
+
+
+def test_belgilash():
+    head("7. Belgilashni tekshirish")
+    # NOMALUM QIYMAT rad etiladi: "prodakshn" deb yozilgan belgi
+    # jimgina "belgilanmagan" bo'lib qolardi va qulf ochilardi.
+    for yomon in ("prodakshn", "", "ishchi", None):
+        try:
+            M.baza_belgila(yomon)
+            check(False, f"{yomon!r} rad etildi", "qabul qilindi")
+        except ValueError as e:
+            check("Mumkin" in str(e), f"{yomon!r} rad etildi va yo'l ko'rsatildi")
+        except Exception as e:                      # noqa: BLE001
+            check(False, f"{yomon!r} rad etildi", f"boshqa xato: {e}")
+
+
 def test_tavsif():
     head("4. Ko'rsatish")
     with _Muhit("staging"):
@@ -211,6 +317,9 @@ if __name__ == "__main__":
     test_nom()
     test_sinov_aniqlash()
     test_qulf()
+    test_moslik()
+    test_baza_qulfi()
+    test_belgilash()
     test_tavsif()
     print("\n" + "=" * 50)
     print(f"NATIJA: {_pass} ta o'tdi, {_fail} ta xato")

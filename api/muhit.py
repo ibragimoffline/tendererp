@@ -19,6 +19,28 @@ ko'rinmaydi. Lekin `erp.doc_audit` — faqat qo'shiladigan jurnal
 YECHIM: muhit O'ZINI NOM BILAN aytadi (`ERP_MUHIT`), DSN satridan
 taxmin qilinmaydi. Baza nomi o'zgarishi mumkin, nom esa qaror.
 
+IKKI MANBA, CHUNKI `.env` NING O'ZI ALMASHIB KETADI
+═══════════════════════════════════════════════════
+`ERP_MUHIT` — `.env` da. Lekin qo'riqlanayotgan xavf AYNAN o'sha
+faylning almashib ketishi: agar `.env` yolg'on gapirsa, faqat unga
+qaragan qulf ham aldanadi. Ya'ni bir manba yetarli emas.
+
+Shuning uchun ikkinchi manba — BAZANING O'ZI: `erp.setting` da
+`muhit` kaliti. U ma'lumot bilan BIRGA yuradi va `.env` bilan
+alohida sayohat qiladi.
+
+    .env  aytadi:  staging          <- almashib ketishi mumkin
+    baza  aytadi:  prod             <- ma'lumot bilan birga
+
+Ikkisi ZID bo'lsa — bu aniq xato va u to'xtatiladi. Bittasi
+ikkinchisini "tasdiqlaydi" degan holat yo'q: mos kelmaslik
+o'zi javob.
+
+ZAXIRADAN TIKLASHDA belgi HAM KO'CHADI: ishlab chiqarish nusxasi
+staging'ga tiklansa, baza hamon "prod" deb turadi. Bu NUQSON EMAS,
+xususiyat: `staging_setup.ps1` uni qayta belgilaydi va belgilashni
+unutgan staging DARHOL to'xtaydi (xavfsiz tomonga xato).
+
 QULF QANDAY ISHLAYDI
 ════════════════════
 `db.init_pool()` chaqirilganda tekshiriladi: agar muhit `prod` bo'lsa
@@ -123,6 +145,84 @@ class ProdQulfi(SystemExit):
     nolinchi bo'lmagan kod bilan tugaydi va skript buni ko'radi."""
 
 
+#: Bazadagi belgi qayerda turadi. `erp.setting` — MAVJUD jadval
+#: (18-patch) va u aynan "shu o'rnatmaning qarori" uchun. Yangi
+#: jadval ochish ikkinchi haqiqat manbai bo'lardi.
+#:
+#: `sozlama.py` bu kalitni BILMAYDI va bu xavfsiz: u noma'lum
+#: kalitni jimgina e'tiborsiz qoldiradi (18-patch izohi). Kalit
+#: u yerga qo'shilmadi, chunki `sozlama.py` qiymatlarni BOOLEAN
+#: deb o'qiydi, bu esa matn.
+BAZA_KALIT = "muhit"
+
+BAZA_OQISH_SQL = ("SELECT value FROM erp.setting WHERE key = %(k)s")
+BAZA_YOZISH_SQL = """
+INSERT INTO erp.setting (key, value, updated_by)
+VALUES (%(k)s, %(v)s, %(kim)s)
+ON CONFLICT (key) DO UPDATE
+    SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by,
+        updated_at = now()
+RETURNING key, value
+"""
+
+
+def baza_muhiti() -> Optional[str]:
+    """BAZANING O'ZI nima deydi. Belgilanmagan bo'lsa `None`.
+
+    HECH QACHON YIQITMAYDI: jadval yo'q (18-patch qo'llanmagan),
+    ulanish yo'q yoki huquq yetmaydi — hammasi `None`. Belgi
+    yo'qligi ishni to'xtatmaydi, u faqat qulfni ochiq qoldiradi
+    va buni `check_setup.py` ko'rsatadi."""
+    try:
+        from api import db
+        r = db.query_one(BAZA_OQISH_SQL, {"k": BAZA_KALIT})
+    except Exception:                               # noqa: BLE001
+        return None
+    if not r:
+        return None
+    return NOMLAR.get((r["value"] or "").strip().lower())
+
+
+def baza_belgila(nom: str, kim: Optional[str] = None) -> str:
+    """Bazani belgilaydi. Qaytadi: normallashtirilgan nom.
+
+    Buyruq satridan:  python -m api.muhit --belgila prod"""
+    tozalangan = NOMLAR.get((nom or "").strip().lower())
+    if not tozalangan:
+        raise ValueError(
+            f"Noma'lum muhit: {nom!r}. Mumkin: prod, staging, dev")
+    from api import db
+    db.execute_returning(BAZA_YOZISH_SQL,
+                         {"k": BAZA_KALIT, "v": tozalangan,
+                          "kim": kim or "muhit CLI"})
+    return tozalangan
+
+
+def moslik() -> tuple:
+    """`.env` va BAZA bir narsani aytyaptimi.
+
+    Qaytadi: `(holat, xabar)`, holat —
+        'ok'        ikkalasi bor va mos;
+        'zid'       ikkalasi bor, LEKIN mos emas -> to'xtatish;
+        'env_yoq'   `.env` da nom yo'q;
+        'baza_yoq'  bazada belgi yo'q.
+
+    Qaror QABUL QILMAYDI — faqat holatni aytadi. Nima qilish
+    kerakligini chaqiruvchi hal qiladi (`check_setup.py` da
+    ishlab chiqarish uchun XATO, ishlab chiqish uchun ogohlantirish)."""
+    e, b = nomi(), baza_muhiti()
+    if e and b and e != b:
+        return ("zid",
+                f".env '{e}' deydi, baza '{b}' deydi "
+                f"(baza: {baza_nomi() or '—'})")
+    if not e:
+        return ("env_yoq", f"ERP_MUHIT qo'yilmagan "
+                           f"(baza: {baza_nomi() or '—'})")
+    if not b:
+        return ("baza_yoq", f".env '{e}' deydi, baza belgilanmagan")
+    return ("ok", f"{e} (baza: {baza_nomi() or '—'})")
+
+
 def sinovmi() -> bool:
     """Ishga tushirilgan skript SINOVMI.
 
@@ -168,3 +268,80 @@ def qulf_tekshir() -> None:
               "          Ishlab chiqarish qulfi ISHLAMAYDI. `.env` ga\n"
               "          ERP_MUHIT=dev yoki staging yozing.",
               file=sys.stderr)
+
+
+def qulf_tekshir_baza() -> None:
+    """BAZANING O'ZI aytgan narsaga qarab qulf. Ulanishdan KEYIN.
+
+    `qulf_tekshir()` `.env` ni o'qiydi — lekin qo'riqlanayotgan
+    xavf aynan `.env` ning almashib ketishi. Ya'ni u yolg'on
+    gapirsa, birinchi qulf o'tkazib yuboradi.
+
+    Bu ikkinchi qulf esa bazadan so'raydi: "sen kimsan?". Ishlab
+    chiqarish bazasi o'zini o'zi himoya qiladi va `.env` da nima
+    yozilganidan qat'i nazar sinovni ichkariga kiritmaydi.
+
+    Ulanish OCHILGANDAN keyin chaqiriladi (`api/db.py`) — belgini
+    o'qish uchun ulanish kerak. Qulf ishga tushsa, pool YOPILADI:
+    ochiq qolgan ulanish "ruxsat berildi" degan taassurot berardi."""
+    if not sinovmi():
+        return
+    if baza_muhiti() != PROD:
+        return
+    from api import db
+    db.close_pool()
+    print(f"\nTO'XTATILDI: BAZANING O'ZI ishlab chiqarish deb "
+          f"belgilangan (baza: {baza_nomi() or '—'}).",
+          file=sys.stderr)
+    raise ProdQulfi(
+        f"TO'XTATILDI: baza '{baza_nomi() or '—'}' ISHLAB CHIQARISH "
+        f"deb belgilangan (erp.setting.muhit = 'prod').\n"
+        f".env esa '{nomi() or 'nomsiz'}' deydi — ular ZID.\n\n"
+        "Bu odatda noto'g'ri `.env` bilan ishga tushirishdan bo'ladi.\n"
+        "Staging DSN sini tekshiring, yoki baza haqiqatan staging\n"
+        "bo'lsa uni qayta belgilang:\n"
+        "  python -m api.muhit --belgila staging")
+
+
+def main() -> int:
+    """CLI: bazani belgilash va holatni ko'rish.
+
+        python -m api.muhit                 # holat
+        python -m api.muhit --belgila prod  # bazani belgilash
+    """
+    import argparse
+    # `.env` YUKLANADI: bu CLI mustaqil ishga tushiriladi va
+    # `uvicorn` kabi uni o'zi o'qiydigan muhit yo'q.
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), ".env"))
+    ap = argparse.ArgumentParser(description="ERP muhiti")
+    ap.add_argument("--belgila", metavar="MUHIT",
+                    help="bazani belgilash: prod | staging | dev")
+    a = ap.parse_args()
+
+    from api import db
+    db.init_pool()
+    try:
+        if a.belgila:
+            # OGOHLANTIRISH: `prod` deb belgilash — sinovlarni shu
+            # bazada butunlay to'xtatadi. Bu ataylab qaytarib
+            # bo'ladigan amal (qayta belgilash), lekin u ONGLI
+            # bo'lishi kerak.
+            yangi = baza_belgila(a.belgila)
+            print(f"Baza belgilandi: {baza_nomi() or '—'} -> {yangi}")
+            if yangi == PROD:
+                print("DIQQAT: bu bazada endi SINOVLAR ishlamaydi "
+                      "(api/muhit.py qulfi).")
+        holat, xabar = moslik()
+        print(f".env:  {nomi() or '(qo`yilmagan)'}")
+        print(f"baza:  {baza_muhiti() or '(belgilanmagan)'} "
+              f"({baza_nomi() or '—'})")
+        print(f"holat: {holat} — {xabar}")
+        return 1 if holat == "zid" else 0
+    finally:
+        db.close_pool()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

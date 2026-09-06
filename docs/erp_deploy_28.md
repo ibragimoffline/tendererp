@@ -6,6 +6,42 @@
 
 ---
 
+## DEPLOY OLDIDAN — QATTIQ TALAB
+
+```text
+.env         ERP_MUHIT=prod
+baza         erp.setting.muhit = 'prod'
+```
+
+**Ikkalasi ham.** Bittasi yetarli emas va sabab aniq: qo'riqlanayotgan
+xavf — `.env` ning almashib ketishi. Faqat unga qaraydigan tekshiruv
+o'sha fayl yolg'on gapirsa aldanadi. Baza esa ma'lumot bilan birga
+yuradi va `.env` bilan alohida sayohat qiladi.
+
+```powershell
+# .env ga qo'shing:  ERP_MUHIT=prod
+.\.venv\Scripts\python.exe -m api.muhit --belgila prod
+.\.venv\Scripts\python.exe -m api.muhit          # ikkalasi mos ekanini ko'ring
+```
+
+Bu **hujjatda qolmaydi** — `check_setup.py` uni majburlaydi:
+
+| Holat | Natija |
+|---|---|
+| `.env` va baza **zid** | **XATO**, `exit 1` |
+| `.env` = `prod`, baza belgilanmagan | **XATO**, `exit 1` |
+| baza = `prod`, `.env` da nom yo'q | **XATO**, `exit 1` |
+| ikkalasi mos | OK |
+| ikkalasi ham yo'q (eski o'rnatma) | OGOH |
+
+Oxirgi qator ataylab OGOH: uni XATO qilish bugungi barcha
+o'rnatmani bir zarbada to'xtatardi va birinchi qilinadigan ish
+tekshiruvni o'chirish bo'lardi. Lekin `ERP_MUHIT=prod` bir marta
+yozilgach **orqaga qaytmaydi** — belgisiz qolgan ishlab chiqarish
+darvozadan o'tmaydi.
+
+---
+
 ## 0. Muhitning haqiqiy holati
 
 Buni oldindan bilib qo'ying — bu yerda CI/CD, Docker yoki alohida
@@ -47,8 +83,28 @@ Ikki fayl, ikki baza, ikki nom:
 .env.staging  ->  dbname=xtxarid_staging   ->  ERP_MUHIT=staging
 ```
 
+Va **uchinchi** joy — bazaning o'zi:
+
+```text
+erp.setting.muhit = 'prod' | 'staging' | 'dev'
+```
+
 `ERP_MUHIT` ni `api/muhit.py` o'qiydi va u **qulf**: muhit `prod`
 bo'lsa, `_tests/` dagi **hech qaysi** skript bazaga ulana olmaydi.
+
+**Qulfning ikkinchi qavati** — bazadagi belgi. `.env` almashib
+ketsa, birinchi qavat aldanadi; bazadan so'ralganda esa u haqiqatni
+aytadi. Sinov ulanish ochilgandan **keyin** so'raydi va javob `prod`
+bo'lsa — ulanish yopiladi.
+
+Bu haqiqatan sinab ko'rilgan: `.env` `dev` deb turganda, baza `prod`
+deb belgilangan holatda sinov chiqish kodi `1` bilan to'xtaydi.
+
+**Zaxiradan tiklashda belgi ham ko'chadi.** Ishlab chiqarish nusxasi
+staging'ga tiklansa, baza hamon "prod" deb turadi — ya'ni belgilashni
+unutgan staging **darhol to'xtaydi**. Bu nuqson emas, xususiyat:
+xato xavfsiz tomonga ketadi. `staging_setup.ps1` uni avtomatik qayta
+belgilaydi va natijani tekshiradi.
 
 Nega bu kerak: sinovlar haqiqiy yozuv yaratadi va tozalaydi, lekin
 `erp.doc_audit` — **faqat qo'shiladigan** jurnal (`doc_audit_guard`
@@ -79,7 +135,8 @@ ko'rsatadi. **Ishlab chiqarishni sozlashning birinchi qadami —
 Tekshirish:
 
 ```powershell
-.\.venv\Scripts\python.exe _tests\muhit_test.py    # 38 tekshiruv
+.\.venv\Scripts\python.exe _tests\muhit_test.py   # 60 tekshiruv
+.\.venv\Scripts\python.exe -m api.muhit           # joriy holat
 ```
 
 ---
@@ -202,6 +259,10 @@ bilan brauzerdan:
 ## 11. Production deploy
 
 ```powershell
+# 0) QATTIQ TALAB (yuqoridagi bo'limga qarang) — usiz check_setup
+#    darvozadan o'tkazmaydi.
+.\.venv\Scripts\python.exe -m api.muhit    # .env=prod, baza=prod
+
 .\backup_erp.ps1                    # ZAXIRA — majburiy
 git checkout erp-28
 cd frontend; npm ci; npm run build; cd ..

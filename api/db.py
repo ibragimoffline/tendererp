@@ -55,6 +55,14 @@ def init_pool() -> None:
         _pool = ThreadedConnectionPool(mn, mx, dsn=dsn, cursor_factory=RealDictCursor)
     except psycopg2.Error as e:
         raise DBUnavailable(f"Pool yaratib bo'lmadi: {e}") from e
+    # IKKINCHI QULF — BAZANING O'ZI aytgan narsaga qarab.
+    #
+    # Yuqoridagi `qulf_tekshir()` `.env` ni o'qiydi, lekin
+    # qo'riqlanayotgan xavf aynan `.env` ning almashib ketishi:
+    # u yolg'on gapirsa birinchi qulf o'tkazib yuboradi. Bu esa
+    # bazadan so'raydi — ulanish ochilgandan KEYIN, chunki belgi
+    # bazada turadi.
+    muhit.qulf_tekshir_baza()
 
 
 def close_pool() -> None:
