@@ -223,6 +223,43 @@ def moslik() -> tuple:
     return ("ok", f"{e} (baza: {baza_nomi() or '—'})")
 
 
+def darvoza(kutilgan: str) -> tuple:
+    """DEPLOY DARVOZASI: muhit AYNAN kutilganidekmi.
+
+        muhit.darvoza("prod")     # ishlab chiqarishga chiqishdan oldin
+        muhit.darvoza("staging")  # staging'ga chiqishdan oldin
+
+    Qaytadi: `(holat, xabar)`, holat `'ok'` yoki `'mos_emas'`.
+
+    NEGA `moslik()` YETARLI EMAS: u faqat ikki manba BIR-BIRIGA
+    mos ekanini aytadi. Lekin ikkalasi ham `staging` bo'lgan
+    o'rnatmaga "ishlab chiqarish deploy" qilish ham xato — mos,
+    lekin NOTO'G'RI muhit. Darvoza esa "qaysi muhitga chiqyapmiz"
+    degan NIYATNI ham hisobga oladi.
+
+    Amalda bu noto'g'ri DSN bilan deploy qilishni to'sadi: skript
+    `--kutilgan prod` bilan yuritiladi, `.env` esa staging bazasini
+    ko'rsatib turadi — darvoza o'tkazmaydi.
+
+    IKKALASI HAM TEKSHIRILADI. "Yo'q" ham mos kelmaslik sanaladi:
+    belgisiz muhitga deploy qilish — qulfning ikkinchi qavatisiz
+    deploy qilish demakdir."""
+    k = NOMLAR.get((kutilgan or "").strip().lower())
+    if not k:
+        return ("mos_emas",
+                f"Noma'lum kutilgan muhit: {kutilgan!r}. "
+                f"Mumkin: prod, staging, dev")
+    e, b = nomi(), baza_muhiti()
+    if e == k and b == k:
+        return ("ok", f"{k} (baza: {baza_nomi() or '—'})")
+    kamchilik = []
+    if e != k:
+        kamchilik.append(f".env '{e or 'yo`q'}' (kutilgan: '{k}')")
+    if b != k:
+        kamchilik.append(f"baza '{b or 'belgilanmagan'}' (kutilgan: '{k}')")
+    return ("mos_emas", "; ".join(kamchilik))
+
+
 def sinovmi() -> bool:
     """Ishga tushirilgan skript SINOVMI.
 
@@ -318,6 +355,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="ERP muhiti")
     ap.add_argument("--belgila", metavar="MUHIT",
                     help="bazani belgilash: prod | staging | dev")
+    ap.add_argument("--kutilgan", metavar="MUHIT",
+                    help="deploy darvozasi: ikkalasi AYNAN shu bo'lsin")
     a = ap.parse_args()
 
     from api import db
@@ -329,14 +368,30 @@ def main() -> int:
             # bo'ladigan amal (qayta belgilash), lekin u ONGLI
             # bo'lishi kerak.
             yangi = baza_belgila(a.belgila)
-            print(f"Baza belgilandi: {baza_nomi() or '—'} -> {yangi}")
-            if yangi == PROD:
+            # QAYTA O'QIYMIZ, yozganimizga ishonmaymiz: huquq
+            # yetmasligi, boshqa bazaga ulanish yoki tranzaksiya
+            # orqaga qaytishi mumkin. "Belgiladim" deb yolg'on
+            # aytish — qulfni ochiq qoldirishning eng oson yo'li.
+            tasdiq = baza_muhiti()
+            if tasdiq != yangi:
+                print(f"XATO: belgi yozilmadi (o'qildi: "
+                      f"{tasdiq or 'belgilanmagan'}).", file=sys.stderr)
+                return 1
+            print(f"Baza belgilandi va tasdiqlandi: "
+                  f"{baza_nomi() or '—'} -> {tasdiq}")
+            if tasdiq == PROD:
                 print("DIQQAT: bu bazada endi SINOVLAR ishlamaydi "
                       "(api/muhit.py qulfi).")
-        holat, xabar = moslik()
+
         print(f".env:  {nomi() or '(qo`yilmagan)'}")
         print(f"baza:  {baza_muhiti() or '(belgilanmagan)'} "
               f"({baza_nomi() or '—'})")
+
+        if a.kutilgan:
+            holat, xabar = darvoza(a.kutilgan)
+            print(f"darvoza ({a.kutilgan}): {holat} — {xabar}")
+            return 0 if holat == "ok" else 1
+        holat, xabar = moslik()
         print(f"holat: {holat} — {xabar}")
         return 1 if holat == "zid" else 0
     finally:

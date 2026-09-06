@@ -177,9 +177,9 @@ if (-not $prodMuhit) {
 }
 
 Write-Host ''
-Write-Host 'TEKSHIRISH:'
-Write-Host '  .\.venv\Scripts\python.exe -m api.muhit'
-Write-Host '  (`.env` va baza BIR XIL narsani aytishi kerak)'
+Write-Host 'TEKSHIRISH (staging oynasida):'
+Write-Host '  .\.venv\Scripts\python.exe check_setup.py --kutilgan staging'
+Write-Host '  (.env ham, baza ham AYNAN staging bo''lishi shart)'
 Write-Host ''
 Write-Host 'KEYINGI QADAM (staging oynasida):'
 Write-Host '  $env:XT_DB_DSN = "<.env.staging dagi DSN>"'

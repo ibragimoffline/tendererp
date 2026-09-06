@@ -152,8 +152,23 @@ def table_exists(schema: str, name: str) -> bool:
         {"s": schema, "n": name}))
 
 
+#: DEPLOY DARVOZASI: `--kutilgan prod` berilsa, muhit AYNAN shu
+#: bo'lishi shart (`.env` ham, baza ham). Berilmasa — oddiy
+#: tekshiruv: manbalar bir-biriga mos kelyaptimi.
+KUTILGAN = None
+
+
+class _Otkazish(Exception):
+    """Darvoza rejimida qolgan muhit tekshiruvlari ortiqcha.
+
+    Bayroq o'rniga istisno: tekshiruv `try` bloki ichida va
+    bayroqli `if` uni ikki qavatga bo'lardi."""
+
+
 def main() -> int:
     print("TENDER ERP — tayyorlik tekshiruvi")
+    if KUTILGAN:
+        print(f"DEPLOY DARVOZASI: kutilgan muhit — {KUTILGAN}")
 
     # --- 1. Baza ---
     head("1. Baza")
@@ -633,6 +648,22 @@ def main() -> int:
         # belgisiz qolgan ishlab chiqarish darvozadan o'tmaydi.
         try:
             from api import muhit as _muhit
+            if KUTILGAN:
+                # DARVOZA REJIMI: niyat ham tekshiriladi.
+                #
+                # Ikkala manba mos, lekin STAGING bo'lgan
+                # o'rnatmaga "ishlab chiqarish deploy" qilish ham
+                # xato — mos, lekin noto'g'ri muhit. Aynan shu
+                # noto'g'ri DSN bilan deploy qilish holati.
+                _h, _x = _muhit.darvoza(KUTILGAN)
+                if _h == "ok":
+                    say(OK, f"muhit darvozasi: {_x}")
+                else:
+                    say(ERR, f"MUHIT DARVOZASI YOPIQ: {_x}",
+                        f"kutilgan: .env va baza — ikkalasi ham "
+                        f"'{KUTILGAN}'. Bazani belgilash: "
+                        f"python -m api.muhit --belgila {KUTILGAN}")
+                raise _Otkazish()
             _holat, _xabar = _muhit.moslik()
             if _holat == "zid":
                 say(ERR, f"MUHIT ZID: {_xabar}",
@@ -657,6 +688,8 @@ def main() -> int:
                     say(WARN, _xabar,
                         "ishlab chiqarish qulfi ISHLAMAYDI: .env ga "
                         "ERP_MUHIT=prod / staging / dev yozing")
+        except _Otkazish:
+            pass
         except Exception as _e:                     # noqa: BLE001
             say(WARN, f"muhit nomi o'qilmadi: {_e}")
 
@@ -790,4 +823,11 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    import argparse
+
+    _ap = argparse.ArgumentParser(description="ERP tayyorlik tekshiruvi")
+    _ap.add_argument("--kutilgan", metavar="MUHIT",
+                     help="deploy darvozasi: .env ham, baza ham AYNAN "
+                          "shu muhit bo'lsin (prod | staging | dev)")
+    KUTILGAN = _ap.parse_args().kutilgan
     sys.exit(main())

@@ -24,7 +24,37 @@ yuradi va `.env` bilan alohida sayohat qiladi.
 .\.venv\Scripts\python.exe -m api.muhit          # ikkalasi mos ekanini ko'ring
 ```
 
-Bu **hujjatda qolmaydi** — `check_setup.py` uni majburlaydi:
+Bu **hujjatda qolmaydi** — `check_setup.py` uni majburlaydi.
+
+### Deploy darvozasi (niyat bilan)
+
+```powershell
+.\.venv\Scripts\python.exe check_setup.py --kutilgan staging
+.\.venv\Scripts\python.exe check_setup.py --kutilgan prod
+```
+
+`--kutilgan X` berilsa, `.env` **ham**, baza **ham** aynan `X`
+bo'lishi shart. Boshqa har qanday kombinatsiya — `exit 1`.
+
+Nega shunchaki "mos kelyaptimi" yetarli emas: ikkalasi ham
+`staging` bo'lgan o'rnatmaga "ishlab chiqarish deploy" qilish ham
+xato — manbalar o'zaro mos, lekin **muhit noto'g'ri**. Darvoza esa
+niyatni ham biladi va aynan noto'g'ri DSN bilan deploy qilishni
+to'sadi.
+
+Xabar **qaysi tomon** noto'g'ri ekanini aytadi:
+
+```text
+XATO  MUHIT DARVOZASI YOPIQ: baza 'staging' (kutilgan: 'prod')
+```
+
+To'g'ri tomon ayblanmaydi — aks holda operator ikkalasini ham
+qaytadan tekshirishga majbur bo'lardi.
+
+### Darvozasiz rejim (oddiy tekshiruv)
+
+`--kutilgan` berilmasa, faqat manbalar bir-biriga mosligi
+tekshiriladi:
 
 | Holat | Natija |
 |---|---|
@@ -34,11 +64,18 @@ Bu **hujjatda qolmaydi** — `check_setup.py` uni majburlaydi:
 | ikkalasi mos | OK |
 | ikkalasi ham yo'q (eski o'rnatma) | OGOH |
 
-Oxirgi qator ataylab OGOH: uni XATO qilish bugungi barcha
-o'rnatmani bir zarbada to'xtatardi va birinchi qilinadigan ish
-tekshiruvni o'chirish bo'lardi. Lekin `ERP_MUHIT=prod` bir marta
-yozilgach **orqaga qaytmaydi** — belgisiz qolgan ishlab chiqarish
-darvozadan o'tmaydi.
+Oxirgi qator ataylab OGOH: uni birinchi kundanoq XATO qilish
+bugungi barcha o'rnatmani to'xtatardi va birinchi qilinadigan ish
+tekshiruvni o'chirish bo'lardi. **Kuchaytirish yo'li — darvoza
+orqali:** staging va ishlab chiqarish deploy'lari `--kutilgan`
+bilan yuritiladi, ya'ni u yerda "belgilanmagan" allaqachon
+`exit 1`. Ishlab chiqishda esa ogohlantirish bo'lib qoladi.
+
+```text
+dev        belgisiz -> OGOH   (ishlashga xalaqit bermaydi)
+staging    belgisiz -> XATO   (--kutilgan staging darvozasi)
+prod       belgisiz -> XATO   (--kutilgan prod darvozasi)
+```
 
 ---
 
@@ -187,7 +224,11 @@ etadi va yarim qo'llangan patch qoladi.
 ## 7–8. Backend va frontend darvozalari
 
 ```powershell
-# 7 — backend (24 fayl, ~1640 tekshiruv)
+# 7a — MUHIT DARVOZASI birinchi: noto'g'ri bazada sinov
+#      yuritishning ma'nosi yo'q.
+.\.venv\Scripts\python.exe check_setup.py --kutilgan staging
+
+# 7b — backend (26 fayl, ~1750 tekshiruv)
 Get-ChildItem _tests\*_test.py | ForEach-Object {
     .\.venv\Scripts\python.exe $_.FullName
 }
@@ -259,9 +300,9 @@ bilan brauzerdan:
 ## 11. Production deploy
 
 ```powershell
-# 0) QATTIQ TALAB (yuqoridagi bo'limga qarang) — usiz check_setup
-#    darvozadan o'tkazmaydi.
-.\.venv\Scripts\python.exe -m api.muhit    # .env=prod, baza=prod
+# 0) MUHIT DARVOZASI — birinchi qadam va to'xtatuvchi.
+#    `.env` ham, baza ham 'prod' bo'lmasa, bu yerda tugaydi.
+.\.venv\Scripts\python.exe check_setup.py --kutilgan prod
 
 .\backup_erp.ps1                    # ZAXIRA — majburiy
 git checkout erp-28
@@ -281,10 +322,13 @@ bor), ya'ni patch va deploy orasidagi bir necha daqiqa xavfsiz.
 ## 12. Deploy'dan keyingi tekshiruv
 
 ```powershell
-.\.venv\Scripts\python.exe check_setup.py
+.\.venv\Scripts\python.exe check_setup.py --kutilgan prod
 ```
 
-Faqat o'qiydi — ishlab chiqarishda xavfsiz. 28-patch uchun to'rtta
+Faqat o'qiydi — ishlab chiqarishda xavfsiz. `--kutilgan prod`
+deploy'dan keyin ham beriladi: muhit deploy paytida o'zgarmaganini
+tasdiqlaydi (masalan noto'g'ri `.env` bilan qayta ishga
+tushirilgan bo'lsa). 28-patch uchun to'rtta
 qator:
 
 ```text

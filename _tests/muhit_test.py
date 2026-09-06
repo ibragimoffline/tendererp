@@ -286,6 +286,59 @@ def test_baza_qulfi():
             check(False, "ilova prod bazada ishlaydi", "rad etildi")
 
 
+def test_darvoza():
+    head("8. Deploy darvozasi (`--kutilgan`)")
+
+    # IKKALASI KUTILGANDEK — o'tadi.
+    for m in ("prod", "staging", "dev"):
+        with _Muhit(m), _Belgi(M.NOMLAR[m]):
+            eq(f"ikkalasi '{m}', kutilgan '{m}' -> ok",
+               M.darvoza(m)[0], "ok")
+
+    # MOS, LEKIN NOTO'G'RI MUHIT. `moslik()` buni "ok" deydi —
+    # ikki manba bir-biriga mos. Darvoza esa NIYATNI ham biladi:
+    # staging o'rnatmaga "ishlab chiqarish deploy" qilish xato.
+    with _Muhit("staging"), _Belgi(M.STAGING):
+        eq("ikki manba o'zaro mos", M.moslik()[0], "ok")
+        eq("lekin prod deploy darvozasi YOPIQ",
+           M.darvoza("prod")[0], "mos_emas")
+
+    # ENG MUHIM HOLAT: noto'g'ri DSN bilan ishlab chiqarish deploy.
+    # `.env` to'g'ri, baza esa boshqa. Xabar AYNAN noto'g'ri
+    # tomonni aytishi kerak — aks holda operator ikkalasini ham
+    # qaytadan tekshirishga majbur bo'lardi.
+    with _Muhit("prod"), _Belgi(M.STAGING):
+        holat, xabar = M.darvoza("prod")
+        eq(".env=prod, baza=staging -> yopiq", holat, "mos_emas")
+        check("baza" in xabar and "staging" in xabar,
+              "xabar BAZA noto'g'ri ekanini aytadi", xabar)
+        check(".env" not in xabar,
+              "va to'g'ri tomonni ayblamaydi", xabar)
+
+    # Teskarisi.
+    with _Muhit("staging"), _Belgi(M.PROD):
+        holat, xabar = M.darvoza("prod")
+        eq("baza=prod, .env=staging -> yopiq", holat, "mos_emas")
+        check(".env" in xabar and "baza" not in xabar,
+              "xabar .ENV noto'g'ri ekanini aytadi", xabar)
+
+    # BELGISIZ muhitga deploy — qulfning ikkinchi qavatisiz deploy.
+    with _Muhit("prod"), _Belgi(None):
+        holat, xabar = M.darvoza("prod")
+        eq("baza belgilanmagan -> yopiq", holat, "mos_emas")
+        check("belgilanmagan" in xabar, "sabab aytiladi", xabar)
+    with _Muhit(None), _Belgi(M.PROD):
+        eq(".env da nom yo'q -> yopiq", M.darvoza("prod")[0], "mos_emas")
+
+    # NOMA'LUM kutilgan muhit — yopiq (xato bosilgan nom qulfni
+    # ochib yubormasin).
+    with _Muhit("prod"), _Belgi(M.PROD):
+        holat, xabar = M.darvoza("prodakshn")
+        eq("noma'lum kutilgan muhit -> yopiq", holat, "mos_emas")
+        check("Mumkin" in xabar, "mumkin qiymatlar ko'rsatiladi")
+        eq("bo'sh kutilgan -> yopiq", M.darvoza("")[0], "mos_emas")
+
+
 def test_belgilash():
     head("7. Belgilashni tekshirish")
     # NOMALUM QIYMAT rad etiladi: "prodakshn" deb yozilgan belgi
@@ -319,6 +372,7 @@ if __name__ == "__main__":
     test_qulf()
     test_moslik()
     test_baza_qulfi()
+    test_darvoza()
     test_belgilash()
     test_tavsif()
     print("\n" + "=" * 50)
