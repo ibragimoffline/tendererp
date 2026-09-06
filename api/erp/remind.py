@@ -23,6 +23,7 @@ QARORLAR:
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import os
 import sys
 from typing import Any, Dict, List
@@ -134,7 +135,7 @@ def _hodimlarga(data: Dict[str, Any]) -> int:
 
     Menejer esa umumiy sonni oladi: kimdir kechikayotganini bilishi
     kerak, lekin har vazifa uchun alohida xabar olishi shart emas."""
-    from api.erp import xabar
+    from api.erp import hodisa
 
     yuborildi = 0
     #: broker_id -> [matn]
@@ -155,7 +156,14 @@ def _hodimlarga(data: Dict[str, Any]) -> int:
 
     for broker_id, qatorlar in kimga.items():
         for opp_id, matn in qatorlar:
-            if xabar.brokerga(broker_id, "muddat", matn, opp_id):
+            # DEDUP KUN BO'YICHA: eslatma skripti kuniga bir marta
+            # yuriydi, lekin qo'lda ham ishga tushiriladi (va CI da
+            # ikki marta ham). Bir kunda bir xil vazifa uchun ikkita
+            # bildirishnoma chiqmasin (§17).
+            if hodisa.chiqar("muddat", matn, broker_id=broker_id,
+                             opportunity_id=opp_id,
+                             dedup=f"muddat:{_bugun()}:{opp_id}:{matn[:40]}",
+                             kotar=False)["yozildi"]:
                 yuborildi += 1
 
     # KECHIKKANLAR — har karta uchun alohida emas, BITTA yig'ma xabar.
@@ -170,10 +178,13 @@ def _hodimlarga(data: Dict[str, Any]) -> int:
         if o.get("broker_id"):
             kech_kimga[o["broker_id"]] = kech_kimga.get(o["broker_id"], 0) + 1
     for broker_id, n_kech in kech_kimga.items():
-        if xabar.brokerga(
-                broker_id, "muddat",
+        if hodisa.chiqar(
+                "muddat",
                 f"{n_kech} ta kartaning muddati o'tgan, lekin yopilmagan. "
-                "Holatni qo'ying: yutqazildi / rad etildi / ulgurmadik."):
+                "Holatni qo'ying: yutqazildi / rad etildi / ulgurmadik.",
+                broker_id=broker_id,
+                dedup=f"kechikkan:{_bugun()}:{broker_id}",
+                kotar=True)["yozildi"]:
             yuborildi += 1
 
     # Egasiz qatorlar ham bor (karta hech kimga biriktirilmagan) —
@@ -183,10 +194,68 @@ def _hodimlarga(data: Dict[str, Any]) -> int:
               + [o for o in (data.get("kechikkan") or [])
                  if not o.get("broker_id")])
     if egasiz:
-        xabar.menejerlarga(
+        hodisa.chiqar(
             "muddat", f"Mas'uli yo'q {len(egasiz)} ta muddat yaqinlashdi — "
-            "kartalarni taqsimlash kerak.")
+            "kartalarni taqsimlash kerak.", boshliqqa=True,
+            dedup=f"egasiz:{_bugun()}", kotar=True)
     return yuborildi
+
+
+#: Hujjat muddati necha kun oldin ogohlantiriladi. 30 kun ataylab:
+#: litsenziya yoki sertifikatni yangilash bir kunlik ish emas, va
+#: "ertaga tugaydi" degan xabar allaqachon kech.
+HUJJAT_KUN = int(os.environ.get("ERP_HUJJAT_OGOH_KUN", "30"))
+
+HUJJAT_SQL = """
+SELECT d.id, d.name, d.doc_type, d.valid_until, c.name AS mijoz
+FROM erp.client_document d
+JOIN erp.client_company c ON c.id = d.client_id
+WHERE d.valid_until IS NOT NULL
+  AND d.valid_until >= current_date
+  AND d.valid_until <= current_date + make_interval(days => %(kun)s)
+-- FAQAT ISHLAYOTGAN MIJOZLAR: yopilmagan kartasi bor korxonalar.
+-- Aks holda bir marta ishlagan va unutilgan yuzta mijozning
+-- hujjatlari har oy eslatib turardi va ro'yxat foydasiz bo'lardi.
+  AND EXISTS (SELECT 1 FROM erp.opportunity o
+               WHERE o.client_id = c.id
+                 AND o.status NOT IN ('won', 'lost', 'rejected', 'ulgurmadik'))
+ORDER BY d.valid_until, d.id
+"""
+
+
+def _hujjat_muddati() -> int:
+    """Mijoz hujjatining muddati tugayapti -> boshliqqa.
+
+    NEGA BROKERGA EMAS: hujjat MIJOZNIKI, kartaniki emas. Bitta
+    litsenziya o'nta kartada ishlatiladi va o'nta brokerga bir xil
+    xabar yuborish shovqin bo'lardi. Yangilash esa baribir
+    menejerning ishi."""
+    from api.erp import hodisa
+    rows = db.query(HUJJAT_SQL, {"kun": HUJJAT_KUN})
+    if not rows:
+        return 0
+    kimga = hodisa.boshliqlar()
+    n = 0
+    for d in rows:
+        qoldi = (d["valid_until"] - dt.date.today()).days
+        r = hodisa.hujjat_muddati(
+            kimga,
+            f"{d['mijoz']}: \"{d['name']}\" hujjati {qoldi} kundan keyin "
+            f"tugaydi ({_when(d['valid_until'])}).",
+            # BIR HUJJAT BIR MARTA: kalitda sana YO'Q, ya'ni
+            # ogohlantirish 30 kun davomida HAR KUNI takrorlanmaydi.
+            # Muddat uzaytirilsa kalit o'zgaradi va yangi xabar ketadi.
+            dedup=f"hujjat:{d['id']}:{d['valid_until']}")
+        n += r["yozildi"]
+    return n
+
+
+def _bugun() -> str:
+    """Dedup kaliti uchun sana. Vaqt EMAS: kalit kun bo'yicha
+    bo'lishi kerak, aks holda har yurishda yangi kalit chiqib
+    takrorlanishdan himoya ishlamay qolardi."""
+    import datetime as _dt
+    return _dt.date.today().isoformat()
 
 
 def run(days: int = 1, deadline_days: int = 3, dry_run: bool = False) -> Dict[str, Any]:
@@ -214,8 +283,16 @@ def run(days: int = 1, deadline_days: int = 3, dry_run: bool = False) -> Dict[st
                            "deadlines": len(data["deadlines"]),
                            "kechikkan": len(kech),
                            "dry_run": dry_run, "sent": False}
+    # HUJJAT MUDDATI — ALOHIDA va ERTAROQ: u vazifa/deadline
+    # ro'yxatiga bog'liq emas. Ilgari bu qator pastda edi va
+    # "eslatadigan narsa yo'q" degan erta qaytish uni butunlay
+    # chetlab o'tardi — ya'ni vazifasi yo'q kunda hujjat muddati
+    # HECH QACHON eslatilmasdi.
+    out["hujjat"] = 0 if dry_run else _hujjat_muddati()
     if not n:
-        out["message"] = "Eslatadigan narsa yo'q."
+        out["message"] = ("Eslatadigan narsa yo'q."
+                          if not out["hujjat"] else
+                          f"Faqat hujjat muddati: {out['hujjat']}")
         return out
 
     text = build_message(data)

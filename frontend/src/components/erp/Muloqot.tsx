@@ -42,15 +42,26 @@ const TAKLIF_MAX = 6
 const AT_RE = /@([^@\n]{0,40})$/
 
 interface Props {
-  /** Berilsa — faqat SHU chat ko'rsatiladi (karta oynasi uchun). */
+  /** Berilsa — SHU chat ochiladi.
+   *
+   *  IKKI MA'NO, BITTA XOSSA:
+   *    karta oynasida — ro'yxat KO'RSATILMAYDI (`oppId` bilan birga);
+   *    bildirishnomadan — ro'yxat ko'rinadi, lekin shu chat tanlanadi.
+   *  Farqni `royxatsiz` ajratadi. */
   chatId?: number
   /** Karta oynasidan: chat id sini kartadan olish. */
   oppId?: number
   /** Ekran balandligi: yon panelda to'liq, kartada past. */
   compact?: boolean
+  /** Chat ro'yxatini yashirish (karta oynasi). */
+  royxatsiz?: boolean
+  /** O'qilganlik o'zgardi — tashqi hisoblagich yangilansin. */
+  onUnreadChange?: () => void
 }
 
-export default function Muloqot({ chatId, oppId, compact }: Props) {
+export default function Muloqot(
+  { chatId, oppId, compact, royxatsiz, onUnreadChange }: Props,
+) {
   const { dateTimeFmt } = useFormat()
   const [chats, setChats] = useState<ErpChat[] | null>(null)
   const [aktiv, setAktiv] = useState<number | null>(chatId ?? null)
@@ -69,7 +80,20 @@ export default function Muloqot({ chatId, oppId, compact }: Props) {
   const [eslatilgan, setEslatilgan] = useState<Record<number, string>>({})
   const [taklif, setTaklif] = useState<ErpChatMember[]>([])
   const [kursor, setKursor] = useState(0)
+  // ESKI TARIX: `lenta` OXIRGI sahifani beradi, bu esa undan
+  // oldingilarini. Ikkalasi alohida saqlanadi, chunki so'rov
+  // (polling) faqat oxirgisini yangilaydi va eski sahifalarni
+  // qaytadan yuklab o'tirmasligi kerak.
+  const [eski, setEski] = useState<ErpChatMessage[]>([])
+  const [jim, setJim] = useState(false)
+  const [yanaBor, setYanaBor] = useState(false)
   const oxiri = useRef<HTMLDivElement>(null)
+  //: Eski tarix ochilganmi (yuqoridagi izohga qarang).
+  const eskiRef = useRef(false)
+  //: Tashqi hisoblagich chaqirig'i — o'zgaruvchan, lekin qayta
+  //: yuklashga sabab bo'lmasin.
+  const unreadRef = useRef(onUnreadChange)
+  unreadRef.current = onUnreadChange
   const yolg = useRef(false)          // birinchi yuklashdan keyin pastga surish
 
   const yozaOladi = can('chat.yozish')
@@ -82,6 +106,8 @@ export default function Muloqot({ chatId, oppId, compact }: Props) {
       const r = await api.chats()
       setChats(r)
       setAktiv((cur) => cur ?? (r.length ? r[0].id : null))
+      // Jimlash holati ro'yxatdan emas, ochilgan chatdan olinadi —
+      // shuning uchun bu yerda tegilmaydi.
       setErr('')
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
@@ -90,7 +116,14 @@ export default function Muloqot({ chatId, oppId, compact }: Props) {
   }, [])
 
   useEffect(() => {
-    if (chatId) { setAktiv(chatId); return }
+    // BILDIRISHNOMADAN kelganda ham ro'yxat yuklanadi: odam bitta
+    // chatga tushib, boshqasiga o'ta olishi kerak. Faqat karta
+    // oynasida (`royxatsiz`) ro'yxat ko'rsatilmaydi.
+    if (chatId) {
+      setAktiv(chatId)
+      if (!royxatsiz && !oppId) void chatlarniYukla()
+      return
+    }
     if (oppId) {
       api.oppChat(oppId)
         .then((r) => setAktiv(r.chat_id))
@@ -98,27 +131,72 @@ export default function Muloqot({ chatId, oppId, compact }: Props) {
       return
     }
     void chatlarniYukla()
-  }, [chatId, oppId, chatlarniYukla])
+  }, [chatId, oppId, royxatsiz, chatlarniYukla])
 
   // --- lenta -------------------------------------------------------------
-  const lentaniYukla = useCallback(async (id: number, jim = false) => {
+  const lentaniYukla = useCallback(async (id: number, sokin = false) => {
     try {
       const r = await api.chatMessages(id)
       setLenta(r)
-      if (!jim) setErr('')
+      // Faqat BIRINCHI yuklashda: keyin `eskiniYukla` o'zi qo'yadi,
+      // aks holda so'rov (polling) "yana bor" ni qayta yoqib,
+      // tugma allaqachon oxirigacha yuklangan chatda ham turardi.
+      //
+      // REF, HOLAT EMAS: agar bu qiymat `useCallback` bog'liqligiga
+      // tushsa, "eskiroq xabarlar" bosilishi funksiya identikligini
+      // o'zgartirardi -> effekt qayta ishga tushardi -> lenta
+      // QAYTADAN yuklanardi. Ya'ni tarixni ochish har safar oxirgi
+      // sahifani qayta so'rardi.
+      if (!eskiRef.current) setYanaBor(r.yana)
+      if (!sokin) setErr('')
       // O'QILGAN deb belgilaymiz — hisoblagich lentani ochgan zahoti
       // nolga tushsin, keyingi so'rovni kutmasin.
+      //
+      // BU YERDA "ro'yxat ko'rindi" EMAS, "chat OCHILDI va oxirgi
+      // xabar ekranda" degani (§10): lenta aynan shu chat uchun
+      // so'ralgan va uning oxirgi id si ma'lum.
       const oxirgi = r.messages.at(-1)?.id
-      if (oxirgi) await api.chatRead(id, oxirgi)
+      if (oxirgi) {
+        await api.chatRead(id, oxirgi)
+        // REF orqali: chaqiruvchi bu funksiyani odatda ichma-ich
+        // (`() => ...`) beradi va u har render'da YANGI bo'ladi.
+        // Bog'liqlikka qo'yilsa effekt cheksiz qayta ishga tushardi.
+        unreadRef.current?.()
+      }
     } catch (e) {
-      if (!jim) setErr(e instanceof Error ? e.message : String(e))
+      if (!sokin) setErr(e instanceof Error ? e.message : String(e))
       setLenta(null)
     }
   }, [])
 
+  /** ESKI TARIXNI yuklash. Serverdagi `before_id` bo'yicha —
+   *  vaqt bo'yicha emas, aks holda bir vaqtda yozilgan ikki xabar
+   *  chegarada takrorlanardi yoki tushib qolardi. */
+  async function eskiniYukla() {
+    const chegara = eski[0]?.id ?? lenta?.eng_eski_id
+    if (!aktiv || !chegara) return
+    setBusy(true)
+    eskiRef.current = true
+    try {
+      const r = await api.chatMessages(aktiv, { before_id: chegara })
+      setEski((p) => [...r.messages, ...p])
+      setYanaBor(r.yana)
+      setErr('')
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   useEffect(() => {
     if (!aktiv) return
     yolg.current = false
+    // CHAT ALMASHDI — eski sahifalar TOZALANADI. Aks holda boshqa
+    // chatning tarixi yangisining tepasida qolib ketardi.
+    setEski([])
+    setYanaBor(false)
+    eskiRef.current = false
     void lentaniYukla(aktiv)
     api.chatMembers(aktiv).then(setAzolar).catch(() => setAzolar(null))
   }, [aktiv, lentaniYukla])
@@ -129,10 +207,10 @@ export default function Muloqot({ chatId, oppId, compact }: Props) {
     if (!aktiv) return
     const t = setInterval(() => {
       void lentaniYukla(aktiv, true)
-      if (!chatId && !oppId) void api.chats().then(setChats).catch(() => {})
+      if (!royxatsiz && !oppId) void api.chats().then(setChats).catch(() => {})
     }, POLL_MS)
     return () => clearInterval(t)
-  }, [aktiv, chatId, oppId, lentaniYukla])
+  }, [aktiv, royxatsiz, oppId, lentaniYukla])
 
   // Yangi xabar kelganda pastga suriladi.
   useEffect(() => {
@@ -239,15 +317,39 @@ export default function Muloqot({ chatId, oppId, compact }: Props) {
     }
   }
 
+  async function jimlaTugma() {
+    if (!aktiv) return
+    setBusy(true)
+    try {
+      const r = await api.chatMute(aktiv, !jim)
+      setJim(r.jim)
+      setErr('')
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const arxiv = !!lenta?.chat.arxiv
   const azoman = !!lenta?.chat.azoman
+  const kontekst = lenta?.chat.kontekst ?? null
+  // ESKI + OXIRGI sahifa birga. Takrorlanish bo'lmasligi serverda
+  // ta'minlangan (`before_id` qat'iy `<`), lekin bu yerda ham
+  // qo'riqlanadi: bir marta yuklangan xabar ikki marta chizilsa
+  // React kalit takrorlanishidan ogohlantiradi va tartib buziladi.
+  const barcha = (() => {
+    const kor = new Set(lenta?.messages.map((m) => m.id) ?? [])
+    return [...eski.filter((m) => !kor.has(m.id)), ...(lenta?.messages ?? [])]
+  })()
 
   return (
     <div className={cn('flex gap-4', compact ? 'h-[26rem]' : 'h-[calc(100vh-11rem)]')}
       data-testid="muloqot">
       {/* --- CHAT RO'YXATI (karta oynasida ko'rsatilmaydi) --- */}
-      {!chatId && !oppId && (
-        <aside className="w-64 shrink-0 overflow-y-auto rounded-lg border bg-surface-2 p-1.5">
+      {!royxatsiz && !oppId && (
+        <aside className="w-64 shrink-0 overflow-y-auto rounded-lg border bg-surface-2 p-1.5"
+          data-testid="chat-royxat">
           {chats === null && (
             <p className="p-2 text-body text-muted-foreground">Yuklanmoqda…</p>
           )}
@@ -281,37 +383,93 @@ export default function Muloqot({ chatId, oppId, compact }: Props) {
 
       {/* --- LENTA --- */}
       <section className="flex min-w-0 flex-1 flex-col rounded-lg border bg-card">
-        <header className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
-          <h3 className="text-lead font-semibold">
-            {lenta?.chat.title || 'Muloqot'}
-          </h3>
-          {arxiv && (
-            <span className="rounded-md bg-muted px-1.5 py-0.5 text-micro
-                             text-muted-foreground">
-              arxiv — faqat o'qish
-            </span>
-          )}
-          {azolar && !azolar.virtual && (
-            <span className="ml-auto text-caption text-muted-foreground">
-              {azolar.members.length} a'zo
-            </span>
-          )}
-          {azolar?.virtual && (
-            <span className="ml-auto text-caption text-muted-foreground">
-              barcha hodimlar
-            </span>
+        <header className="border-b px-3 py-2" data-testid="chat-header">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="min-w-0 truncate text-lead font-semibold">
+              {lenta?.chat.title || 'Muloqot'}
+            </h3>
+            {arxiv && (
+              <span className="rounded-md bg-muted px-1.5 py-0.5 text-micro
+                               text-muted-foreground">
+                arxiv — faqat o'qish
+              </span>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              {azolar && !azolar.virtual && (
+                <span className="text-caption text-muted-foreground">
+                  {azolar.members.length} a'zo
+                </span>
+              )}
+              {azolar?.virtual && (
+                <span className="text-caption text-muted-foreground">
+                  barcha hodimlar
+                </span>
+              )}
+              {aktiv && (
+                // JIMLASH — bildirishnoma kelmasin, lekin O'QILMAGAN
+                // hisoblagichi ISHLAYVERADI (serverdagi qoida). Ikkisini
+                // bitta tugmaga bog'lash odam yozishmani butunlay
+                // yo'qotib qo'yishiga olib kelardi.
+                <button type="button" disabled={busy} data-testid="jimla"
+                  onClick={() => void jimlaTugma()}
+                  title={jim ? 'Bildirishnoma o‘chirilgan' : 'Jimlash'}
+                  className="text-caption text-muted-foreground hover:text-foreground">
+                  {jim ? '🔕' : '🔔'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* KONTEKST (§6) — "qaysi tender haqida yozyapman" degan
+              savol EKRANDA javobsiz qolmasin. Karta chatida har doim
+              ko'rinadi; umumiy chatda karta yo'q va sarlavha ham yo'q
+              (bo'sh maydonlar chalg'itardi). */}
+          {kontekst && (
+            <dl data-testid="chat-kontekst"
+              className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-micro">
+              <div className="flex gap-1">
+                <dt className="text-muted-foreground">Holat:</dt>
+                <dd className="font-medium">{kontekst.status_label}</dd>
+              </div>
+              <div className="flex gap-1">
+                <dt className="text-muted-foreground">Mas'ul:</dt>
+                <dd className="font-medium">{kontekst.masul || '—'}</dd>
+              </div>
+              <div className="flex gap-1">
+                <dt className="text-muted-foreground">Muddat:</dt>
+                <dd className="font-medium">
+                  {kontekst.deadline_at ? dateTimeFmt(kontekst.deadline_at) : '—'}
+                </dd>
+              </div>
+              {kontekst.customer_name && (
+                <div className="flex min-w-0 gap-1">
+                  <dt className="text-muted-foreground">Buyurtmachi:</dt>
+                  <dd className="truncate font-medium">{kontekst.customer_name}</dd>
+                </div>
+              )}
+            </dl>
           )}
         </header>
 
         {err && <div className="px-3 pt-2"><ErpError msg={err} /></div>}
 
-        <div className="flex-1 space-y-2 overflow-y-auto px-3 py-3">
-          {lenta?.messages.length === 0 && (
+        <div className="flex-1 space-y-2 overflow-y-auto px-3 py-3"
+          data-testid="lenta">
+          {yanaBor && (
+            <button type="button" disabled={busy} data-testid="eski-yukla"
+              onClick={() => void eskiniYukla()}
+              className="mx-auto block rounded-md border px-3 py-1
+                         text-caption text-muted-foreground hover:bg-accent
+                         disabled:opacity-50">
+              Eskiroq xabarlar
+            </button>
+          )}
+          {barcha.length === 0 && (
             <p className="text-body text-muted-foreground">
               Hali xabar yo'q — birinchi bo'lib yozing.
             </p>
           )}
-          {lenta?.messages.map((m) => (
+          {barcha.map((m) => (
             <Xabar key={m.id} m={m} arxiv={arxiv}
               vaqt={m.created_at ? dateTimeFmt(m.created_at) : ''}
               onJavob={() => setJavob(m)}

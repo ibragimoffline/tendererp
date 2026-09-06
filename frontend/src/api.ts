@@ -18,9 +18,10 @@ import type {
   AuditReport, AuditRow,
   OpportunityFile, FaylQamrov,
   ErpChat, ErpChatLenta, ErpChatMembers, ErpChatHistory,
+  ErpNotificationList, ErpUnread, ErpNavbatSogliq,
   LoginAttempt,
   ProfitReport, ProfitRow,
-  Setting, ErpNotification, ErpTahlil, TopshiriqHolat,
+  Setting, ErpTahlil, TopshiriqHolat,
 } from './types'
 
 const BASE = import.meta.env.VITE_API_BASE || '/api'
@@ -371,12 +372,24 @@ export const api = {
   // --- bildirishnomalar (o'ziniki) ---
   // HUQUQ yo'q: har kim faqat o'zinikini ko'radi va `app_user_id`
   // sessiyadan olinadi (so'rovdan emas).
-  notifications: (onlyUnread = false) =>
-    request<{ ready: boolean; items: ErpNotification[]; unread: number }>(
-      'GET', '/erp/notifications', { params: { only_unread: onlyUnread } }),
+  notifications: (onlyUnread = false, beforeId?: number) =>
+    request<ErpNotificationList>(
+      'GET', '/erp/notifications',
+      { params: { only_unread: onlyUnread, before_id: beforeId ?? null } }),
+  /** `ids` BERILMASA — HAMMASI. Bu ALOHIDA amal: ro'yxat ochilgani
+   *  o'qilgan degani emas, shuning uchun avtomatik chaqirilmaydi. */
   readNotifications: (ids?: number[]) =>
     request<{ belgilandi: number; unread: number }>(
       'POST', '/erp/notifications/read', { body: { ids: ids ?? null } }),
+  /** YAGONA hisoblagich manbai: bildirishnoma + chat. */
+  unread: () => request<ErpUnread>('GET', '/erp/unread'),
+  /** Navbat holati — administrator ekrani (§20). */
+  notificationHealth: () =>
+    request<ErpNavbatSogliq>('GET', '/erp/notifications/health'),
+  /** Navbatni qo'lda yurgizish ("Telegram tuzatildi, endi yuboring"). */
+  sendNotificationQueue: () =>
+    request<{ olindi: number; sent: number; failed: number; terminal: number }>(
+      'POST', '/erp/notifications/send-queue'),
 
   // --- Tender-AI yo'naltirish oqimi (admin) ---
   // Xarita OPERATOR qarori: qaysi Tender-AI ijarachisi ekanimiz
@@ -546,11 +559,16 @@ export const api = {
                             { body: { app_user_id: appUserId ?? null } }),
   chatMemberRemove: (chatId: number, uid: number) =>
     request<ErpChatMembers>('DELETE', `/erp/chats/${chatId}/members/${uid}`),
+  /** Chatni jimlash: bildirishnoma kelmaydi, hisoblagich ishlaydi. */
+  chatMute: (chatId: number, jim: boolean) =>
+    request<{ chat_id: number; jim: boolean }>(
+      'PUT', `/erp/chats/${chatId}/mute`, { params: { jim } }),
   chatRead: (chatId: number, lastReadId?: number) =>
     request<{ last_read_id: number }>('PUT', `/erp/chats/${chatId}/read`,
                                       { body: { last_read_id: lastReadId } }),
   oppChat: (oppId: number) =>
-    request<{ chat_id: number }>('GET', `/erp/opportunities/${oppId}/chat`),
+    request<{ chat_id: number; oqilmagan: number }>(
+      'GET', `/erp/opportunities/${oppId}/chat`),
 
   // --- tender-ai bilan integratsiya (server orqali) ---
   documentTypes: () => request<DocumentType[]>('GET', '/erp/document-types'),

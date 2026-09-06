@@ -79,6 +79,10 @@ export default function OpportunityCard(props: OpportunityCardProps) {
   // karta ochilganda avtomatik boshlansa, bir nechta ochiq oyna
   // serverga bejiz so'rov yog'dirardi.
   const [chatOpen, setChatOpen] = useState(false)
+  // O'QILMAGAN XABARLAR SONI — chat OCHILMASDAN oldin ham kerak.
+  // Bitta arzon so'rov (`/erp/opportunities/{id}/chat`), chunki u
+  // baribir chat id sini olish uchun chaqiriladi.
+  const [chatUnread, setChatUnread] = useState(0)
   // "Qayta taqsimlashni so'rash" — brokerda kartani o'tkazish
   // huquqi yo'q, lekin so'rovi IZ QOLDIRISHI kerak.
   const [sorov, setSorov] = useState<string | null>(null)
@@ -104,6 +108,11 @@ export default function OpportunityCard(props: OpportunityCardProps) {
       .catch((e: Error) => setError(e.message))
     // Farq — ma'lumot, majburiyat emas: so'rov yiqilsa karta baribir ochiladi.
     api.tenderDiff(id).then(setDiff).catch(() => setDiff(null))
+    // Chat belgisi ham SHUNDAY: yiqilsa belgi ko'rinmaydi, karta esa
+    // ochilaveradi (`chat_ready` sxema qo'llanmagan o'rnatmada false).
+    setChatUnread(0)
+    api.oppChat(id).then((r) => setChatUnread(r.oqilmagan || 0))
+      .catch(() => setChatUnread(0))
   }, [id])
 
   // Cheklist tender-ai orqali keladi. U yiqilgan bo'lsa ERP ishlayveradi —
@@ -506,16 +515,27 @@ export default function OpportunityCard(props: OpportunityCardProps) {
                   boshqa kartaning chatiga o'tish chalg'itardi. */}
               {meta?.chat_ready !== false && (
                 <section className="mt-5">
-                  <button type="button"
+                  <button type="button" data-testid="muloqot-tab"
                     onClick={() => setChatOpen((v) => !v)}
-                    className={cn('rounded-md px-3 py-1.5 text-body transition-colors',
+                    className={cn('flex items-center gap-2 rounded-md px-3 py-1.5 text-body transition-colors',
                       chatOpen ? 'bg-secondary font-semibold text-primary'
                         : 'hover:bg-accent')}>
                     Muloqot
+                    {/* O'QILMAGAN BELGISI (§7): odam kartani ochib,
+                        chatni ochmasdan turib "menga yozishganmi"
+                        degan savolga javob topsin. Chat ochilgach
+                        belgi ketadi — o'qilgan chegara suriladi. */}
+                    {!chatOpen && !!chatUnread && (
+                      <span data-testid="karta-chat-unread"
+                        className="rounded-full bg-primary px-1.5 text-micro font-semibold text-on-primary">
+                        {chatUnread}
+                      </span>
+                    )}
                   </button>
                   {chatOpen && (
                     <div className="mt-2">
-                      <Muloqot oppId={o.id} compact />
+                      <Muloqot oppId={o.id} compact royxatsiz
+                        onUnreadChange={() => setChatUnread(0)} />
                     </div>
                   )}
                 </section>

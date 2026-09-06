@@ -555,6 +555,13 @@ def test_tozalash(before):
             cur.execute("DELETE FROM erp.notification WHERE app_user_id = ANY("
                         "  SELECT id FROM erp.app_user WHERE username LIKE "
                         "  'zztest_chat%')")
+            # UMUMIY CHATGA yozilgan sinov xabari HAQIQIY hodimlarga
+            # bildirishnoma beradi (27-patch: `chat_yangi`). Ular
+            # sinov hisoblariga tegishli emas, ya'ni yuqoridagi
+            # so'rov ularni OLMAYDI va ular haqiqiy odamning
+            # qutisida qolib ketardi.
+            cur.execute("DELETE FROM erp.notification WHERE matn LIKE %(p)s",
+                        {"p": "%" + MARK + "%"})
             cur.execute("DELETE FROM erp.chat_member WHERE app_user_id = ANY("
                         "  SELECT id FROM erp.app_user WHERE username LIKE "
                         "  'zztest_chat%')")

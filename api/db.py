@@ -96,6 +96,55 @@ def scalar(sql: str, params: Optional[Dict[str, Any]] = None) -> Any:
     return next(iter(row.values()))
 
 
+@contextmanager
+def tx():
+    """BIR NECHTA yozuv — BITTA tranzaksiya.
+
+        with db.tx() as t:
+            row = t.one("INSERT ... RETURNING id", {...})
+            t.one("INSERT ... RETURNING id", {"n": row["id"]})
+
+    NEGA KERAK: `execute_returning()` har chaqiruvda commit qiladi va
+    bu ko'pchilik joyda to'g'ri. Lekin bildirishnoma bilan uning
+    YETKAZISH navbati (`erp.notification_delivery`) BIRGA yozilishi
+    shart: bildirishnoma yozilib, navbat qatori yozilmasa, u hech
+    qachon yuborilmasdi va buni HECH NARSA ko'rsatmasdi — jadvalda
+    "bor" bo'lib turardi (`schema_patch_erp_27.sql` §2).
+
+    Xato bo'lsa HAMMASI orqaga qaytadi. Chaqiruvchi buni ushlashi
+    kerak: bu yerda yutilmaydi, chunki "yozildi" deb yolg'on
+    qaytargandan ko'ra yiqilgani yaxshi."""
+    if _pool is None:
+        raise DBUnavailable("DB pool ishga tushmagan.")
+    conn = _pool.getconn()
+    try:
+        class _Tx:
+            @staticmethod
+            def one(sql: str, params: Optional[Dict[str, Any]] = None):
+                with conn.cursor() as cur:
+                    cur.execute(sql, params or {})
+                    row = cur.fetchone() if cur.description else None
+                return dict(row) if row else None
+
+            @staticmethod
+            def all(sql: str, params: Optional[Dict[str, Any]] = None):
+                with conn.cursor() as cur:
+                    cur.execute(sql, params or {})
+                    rows = cur.fetchall() if cur.description else []
+                return [dict(r) for r in rows]
+
+        yield _Tx()
+        conn.commit()
+    except psycopg2.Error as e:
+        conn.rollback()
+        raise DBUnavailable(str(e)) from e
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        _pool.putconn(conn)
+
+
 def execute_returning(sql: str, params: Optional[Dict[str, Any]] = None,
                       actor: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """YOZISH (INSERT/UPDATE ... RETURNING) — commit qiladi. query() faqat o'qish

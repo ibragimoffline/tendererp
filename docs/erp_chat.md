@@ -204,7 +204,7 @@ Hammasi ERP sessiyasi ostida; huquq `perm.can()` orqali (endpoint ichida
 | Metod | Yo'l | Vazifasi |
 |---|---|---|
 | GET | `/erp/chats` | mening chatlarim + unread soni (umumiy birinchi) |
-| GET | `/erp/chats/{id}/messages?after_id=&limit=&q=` | lenta (sahifalash `id` bo'yicha) |
+| GET | `/erp/chats/{id}/messages?after_id=&before_id=&limit=&q=` | lenta: bo'sh = **oxirgi sahifa**, `after_id` = yangilari (polling), `before_id` = eskiroqlari |
 | POST | `/erp/chats/{id}/messages` | yozish (`text`, `reply_to_id?`, `mentions[]?`) |
 | PUT | `/erp/chats/{id}/messages/{mid}` | o'z xabarini tahrirlash |
 | DELETE | `/erp/chats/{id}/messages/{mid}` | yumshoq o'chirish (`note` — moderatsiyada majburiy) |
@@ -213,7 +213,9 @@ Hammasi ERP sessiyasi ostida; huquq `perm.can()` orqali (endpoint ichida
 | DELETE | `/erp/chats/{id}/members/{uid}` | chiqarish |
 | PUT | `/erp/chats/{id}/read` | `last_read_id` yangilash (faqat oldinga) |
 | GET | `/erp/chats/{id}/messages/{mid}/history` | tahrir tarixi (rahbar/admin) |
-| GET | `/erp/opportunities/{id}/chat` | karta chatiga o'tish; chat yo'q bo'lsa **ochadi** |
+| PUT | `/erp/chats/{id}/mute?jim=` | jimlash: bildirishnoma kelmaydi, unread ISHLAYVERADI |
+| GET | `/erp/opportunities/{id}/chat` | karta chatiga o'tish (+`oqilmagan`); chat yo'q bo'lsa **ochadi** |
+| GET | `/erp/unread` | yagona hisoblagich: bildirishnoma + chat kesimlari |
 
 Xato kodlari: a'zo emas -> 403; arxiv chatga yozish -> 400; biriktirilgan
 hodimni chiqarish -> 400; o'zganing xabarini tahrirlash -> 403.
@@ -264,11 +266,37 @@ bo'lib qolardi, bu esa umuman ishlamasligidan yomonroq.
 - Karta oynasidagi tab ataylab **yopiq** turadi: u polling yuritadi va har
   karta ochilganda avtomatik boshlansa, bir nechta ochiq oyna serverga
   bejiz so'rov yog'dirardi.
-- Bildirishnoma (`xabar.py`, 3 tur): chatga qo'shildingiz; sizni eslatishdi;
-  xabaringiz moderatsiyada o'chirildi (+izoh). Har xabarga bildirishnoma
-  **yo'q** — unread hisoblagichi yetadi.
+- Karta chatida **kontekst sarlavhasi** (27-patch): holat, mas'ul, muddat,
+  buyurtmachi. "Qaysi tender haqida yozyapman" degan savol ekranda
+  javobsiz qolmasin — nomlar bir-biriga o'xshab ketadi. Umumiy chatda
+  sarlavha yo'q: u yerda karta yo'q va bo'sh maydonlar chalg'itardi.
+- **Lenta OXIRGI sahifadan boshlanadi** (27-patchda tuzatilgan nuqson).
+  Ilgari so'rov `ORDER BY id LIMIT 50` edi, ya'ni chatning eng **eski**
+  50 xabarini qaytarardi: 50 dan oshgan chatda odam birinchi kunning
+  yozishmasini ko'rib turardi va yangi xabarlar ekranga umuman
+  chiqmasdi — xato ham bermasdi, chat shunchaki "jim" bo'lib ko'rinardi.
+  Endi uch shakl: bo'sh (oxirgi sahifa), `after_id` (polling),
+  `before_id` ("eskiroq xabarlar").
+- Bildirishnoma (`hodisa.py`, `docs/erp_xabar.md`): chatga qo'shildingiz;
+  sizni eslatishdi; xabaringiz moderatsiyada o'chirildi (+izoh); va
+  **yangi xabar** — lekin har xabarga alohida emas, chat bo'yicha
+  **bitta yig'ma** qator (`chat_yangi`, dedup kaliti `chat_yangi:{chat}`).
+  20 ta xabarlik suhbat 20 ta bildirishnoma bergan bo'lsa, odam
+  ertasiga hammasini o'qimay yopishni odat qilardi. Aniq son baribir
+  ko'rinadi — chat ro'yxatidagi unread hisoblagichida.
+- **Jimlash** (`chat_member.muted_at`): yangi xabar uchun bildirishnoma
+  kelmaydi, lekin **unread hisoblagichi ishlayveradi**. Jimlash
+  "bildirishnoma kelmasin" degani, "bu chatni ko'rmayman" degani emas;
+  ikkalasini bitta tugmaga bog'lash odam yozishmani butunlay yo'qotib
+  qo'yishiga olib kelardi. Umumiy chatda `chat_member` qatori paydo
+  bo'ladi, lekin u a'zolik emas — **sozlama** (`azomi()` unga
+  qaramaydi). Karta chatida jimlash uchun a'zolik **shart**: aks holda
+  `INSERT` a'zolik yaratib, begona odam "jimlash" tugmasi orqali chatga
+  kirib olardi.
 - Karta chatidagi tizim xabarlari `opportunity_history` bilan takrorlanadi —
-  ataylab: tarix rasmiy jurnal, chat esa muloqot oqimi.
+  ataylab: tarix rasmiy jurnal, chat esa muloqot oqimi. Status
+  o'zgarishi **bildirishnoma** ham beradi: lentadagi yozuvni chatni
+  ochgan odam ko'radi, bildirishnoma esa ochmaganini ham topadi.
 
 ---
 
@@ -284,6 +312,9 @@ bo'lib qolardi, bu esa umuman ishlamasligidan yomonroq.
 ---
 
 ## 8. Sinov — `_tests/erp_chat_test.py` (88 tekshiruv)
+
+Chatning bildirishnoma bilan bog'lanishi, sahifalash va jimlash
+alohida faylda: `_tests/erp_bildirishnoma_test.py` (118 tekshiruv).
 
 1. Umumiy chat bitta (baza darajasida ham); har kartada chat bor.
 2. Broker begona karta chatini ko'rmaydi (403); a'zo qilingach ko'radi.

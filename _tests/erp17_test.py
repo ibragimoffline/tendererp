@@ -39,6 +39,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from api import db  # noqa: E402
+from api.erp import hodisa as H  # noqa: E402
 from api.erp import xabar as X  # noqa: E402
 
 MARK = "ZZTEST-XAB"
@@ -136,22 +137,29 @@ def test_db():
             {"n": f"{MARK} karta", "b": d["broker"]})["id"]
 
         # --- 2. MANZIL ---
-        r = X.brokerga(d["broker"], "topshiriq", f"{MARK} sizga karta",
-                       d["opp"])
-        check(bool(r), "hodimga (hisobi orqali) xabar yozildi")
-        eq("xabar o'sha hisobga tegishli", r["app_user_id"], d["user"])
+        # QABUL QILUVCHINI ANIQLASH 27-patchda `api/erp/hodisa.py` ga
+        # ko'chdi: `xabar.py` endi FAQAT saqlaydi va o'qiydi. Sinov
+        # ham o'sha yerni chaqiradi — aks holda u endi mavjud
+        # bo'lmagan qatlamni tekshirgan bo'lardi.
+        eq("hodim -> uning faol hisobi", H.broker_hisobi(d["broker"]),
+           d["user"])
+        r = H.chiqar("topshiriq", f"{MARK} sizga karta",
+                     broker_id=d["broker"], opportunity_id=d["opp"])
+        eq("hodimga (hisobi orqali) xabar yozildi", r["yozildi"], 1)
+        eq("xabar o'sha hisobga tegishli", r["kimga"], [d["user"]])
         eq("hisobsiz hodimga xabar yozilmaydi",
-           X.brokerga(d["hisobsiz"], "topshiriq", "yo'q", d["opp"]), None)
+           H.chiqar("topshiriq", "yo'q", broker_id=d["hisobsiz"],
+                    opportunity_id=d["opp"])["yozildi"], 0)
         eq("hodimsiz chaqiruv ham yiqitmaydi",
-           X.brokerga(None, "topshiriq", "yo'q"), None)
+           H.chiqar("topshiriq", "yo'q", broker_id=None)["yozildi"], 0)
 
         # --- 3. TAQSIMLANMAGAN -> menejer (yo'q bo'lsa rahbar) ---
         d["menejer"] = db.execute_returning(
             "INSERT INTO erp.app_user (username, full_name, password_hash, "
             "role) VALUES ('zztest_xab_men', %(f)s, 'x', 'menejer') "
             "RETURNING id", {"f": f"{MARK} menejer"})["id"]
-        n = X.menejerlarga("taqsimlanmagan", f"{MARK} taqsimlanmagan",
-                           d["opp"])
+        n = H.chiqar("taqsimlanmagan", f"{MARK} taqsimlanmagan",
+                     boshliqqa=True, opportunity_id=d["opp"])["yozildi"]
         check(n >= 1, "menejerga xabar ketdi", str(n))
         eq("menejerning qutisida ko'rinadi",
            any(f"{MARK} taqsimlanmagan" in x["matn"]
@@ -171,8 +179,13 @@ def test_db():
            X.oqildi(d["user"], [begona]), 0)
         eq("begona xabar o'qilmagan qoldi", X.sanoq(d["menejer"]), 1)
 
+        # `H.chiqar()` HISOBOT qaytaradi (nechta, kimga), qator EMAS:
+        # bitta hodisa bir nechta odamga ketishi mumkin va "qaysi
+        # qator" degan savolning yagona javobi yo'q. Shuning uchun id
+        # o'z ro'yxatidan olinadi.
+        oziniki = royxat["items"][0]["id"]
         eq("o'zinikini belgilash ishlaydi",
-           X.oqildi(d["user"], [r["id"]]), 1)
+           X.oqildi(d["user"], [oziniki]), 1)
         eq("hisoblagich kamaydi", X.sanoq(d["user"]),
            len(royxat["items"]) - 1)
         X.oqildi(d["user"])

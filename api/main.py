@@ -40,6 +40,7 @@ from api.erp import (act as erp_act, analytics as erp_analytics,  # noqa: E402
                      opportunity as erp_opp, perm, profit as erp_profit,
                      sozlama as erp_sozlama,
                      topshiriq as erp_topshiriq, xabar as erp_xabar,
+                     hodisa as erp_hodisa, navbat as erp_navbat,
                      staff as erp_staff,
                      stats as erp_stats, stock as erp_stock_mod,
                      submission as erp_sub, tasks as erp_tasks)
@@ -690,21 +691,102 @@ class XabarOqishIn(BaseModel):
 @app.get("/erp/notifications")
 def erp_notifications(only_unread: bool = False,
                       limit: int = Query(50, ge=1, le=200),
+                      before_id: Optional[int] = None,
                       user: Dict[str, Any] = Depends(me)):
     """O'Z bildirishnomalari.
 
     HUQUQ TEKSHIRILMAYDI va bu ataylab: bu o'zining ishi. Boshqaning
     xabarini o'qish YO'LI YO'Q — `app_user_id` sessiyadan olinadi,
-    so'rovdan emas (parol almashtirish bilan bir xil qoida)."""
-    return _erp(erp_xabar.royxat, user["id"], only_unread, limit)
+    so'rovdan emas (parol almashtirish bilan bir xil qoida).
+
+    `before_id` — "yana yuklash": shu id dan oldingilari."""
+    return _erp(erp_xabar.royxat, user["id"], only_unread, limit, before_id)
 
 
 @app.post("/erp/notifications/read")
 def erp_notifications_read(body: XabarOqishIn,
                            user: Dict[str, Any] = Depends(me)):
-    """O'qilgan deb belgilash (o'ziniki)."""
+    """O'qilgan deb belgilash (o'ziniki).
+
+    `ids` BERILMASA — HAMMASI ("hammasini o'qildi" tugmasi). Bu
+    ALOHIDA amal: ro'yxat ochilgani o'qilgan degani emas (§10)."""
     n = _erp(erp_xabar.oqildi, user["id"], body.ids)
     return {"belgilandi": n, "unread": _erp(erp_xabar.sanoq, user["id"])}
+
+
+@app.get("/erp/unread")
+def erp_unread(user: Dict[str, Any] = Depends(me)):
+    """YAGONA hisoblagich manbai: bildirishnoma + chat.
+
+    NEGA BITTA ENDPOINT: yon panelda ikkita raqam turadi va ular
+    ikki xil so'rovdan kelsa, biri yangilanib ikkinchisi qolib
+    ketardi — foydalanuvchi "3 ta xabar bor" deb ko'rib, ochganda
+    hech narsa topmasdi.
+
+    Chat kesimi AJRATILGAN (§10): umumiy chat va karta chatlari
+    boshqa-boshqa ish. `chatlar` — o'qilmagani BOR chatlar soni,
+    `xabarlar` — o'qilmagan XABARLAR soni."""
+    out = {"bildirishnoma": _erp(erp_xabar.sanoq, user["id"]),
+           "umumiy": 0, "kartalar": 0, "chatlar": 0, "xabarlar": 0}
+    if not erp_chat.schema_ready():
+        return out
+    for c in _erp(erp_chat.chatlarim, auth.user_id(user),
+                  _chat_hammasi(user)):
+        n = int(c.get("oqilmagan") or 0)
+        if not n:
+            continue
+        out["chatlar"] += 1
+        out["xabarlar"] += n
+        out["umumiy" if c["turi"] == "umumiy" else "kartalar"] += n
+    return out
+
+
+@app.get("/erp/notifications/health")
+def erp_notifications_health(user: Dict[str, Any] = Depends(me)):
+    """Navbat holati — "bildirishnoma jim yo'qolmayaptimi" (§20).
+
+    `tizim.sozlama` huquqi: bu ISHLASH ko'rsatkichi, biznes ma'lumot
+    emas. Shuning uchun u administrator ekranida turadi."""
+    _can(user, "tizim.sozlama")
+    return _erp(erp_navbat.sogliq)
+
+
+@app.post("/erp/notifications/send-queue")
+def erp_notifications_send_queue(limit: int = Query(50, ge=1, le=500),
+                                 user: Dict[str, Any] = Depends(me)):
+    """Navbatni QO'LDA yurgizish.
+
+    Odatda buni jadval (`api/erp/navbat.py` CLI) bajaradi. Tugma esa
+    "Telegram tuzatildi, endi kutib turganlarni yuboring" degan
+    holat uchun — aks holda administrator keyingi yurishni kutardi
+    va nima bo'lganini ko'rmasdi."""
+    _can(user, "tizim.sozlama")
+    return _erp(erp_navbat.yur, limit, False)
+
+
+class XabarSozlamaIn(BaseModel):
+    """Kanal sozlamasi. `kind` — hodisa turi yoki '*' (hammasi)."""
+    kind: str = "*"
+    kanal: str
+    yoqilgan: bool = True
+
+
+@app.get("/erp/notification-prefs")
+def erp_notification_prefs(user: Dict[str, Any] = Depends(me)):
+    """O'Z sozlamalari. Huquq tekshirilmaydi — o'zining ishi."""
+    return _erp(erp_hodisa.sozlamalarim, auth.user_id(user))
+
+
+@app.put("/erp/notification-prefs")
+def erp_notification_prefs_set(body: XabarSozlamaIn,
+                               user: Dict[str, Any] = Depends(me)):
+    """O'Z sozlamasini o'zgartirish (faqat TASHQI kanallar).
+
+    Ilova kanalini o'chirib bo'lmaydi (modulda): u yagona ishonchli
+    joy va uni o'chirish "yubordik, lekin hech qayerda yo'q" degan
+    holatni yaratardi."""
+    return _erp(erp_hodisa.sozlama_qoy, auth.user_id(user), body.kind,
+                body.kanal, body.yoqilgan)
 
 
 @app.get("/erp/topshiriq/holat")
@@ -956,7 +1038,7 @@ def erp_status(opp_id: int, body: OpportunityStatusIn, user: Dict[str, Any] = De
     _can_obj(user, "karta.yopish" if body.status in erp_opp.FINAL
              else "karta.status", "opportunity", opp_id)
     return _erp(erp_opp.set_status, opp_id, body.status, auth.actor(user),
-                body.note, body.lost_reason)
+                body.note, body.lost_reason, auth.user_id(user))
 
 
 # --- bizning kompaniya va shartnomalar (5A-1) --------------------------------
@@ -1225,10 +1307,16 @@ def erp_chats(user: Dict[str, Any] = Depends(me)):
 
 @app.get("/erp/chats/{chat_id}/messages")
 def erp_chat_messages(chat_id: int, after_id: Optional[int] = None,
+                      before_id: Optional[int] = None,
                       limit: int = Query(erp_chat.LIMIT_DEFAULT),
                       q: Optional[str] = None,
                       user: Dict[str, Any] = Depends(me)):
-    """Lenta. Sahifalash `after_id` bo'yicha; `q` — chat ichida qidiruv.
+    """Lenta. `q` — chat ichida qidiruv.
+
+    UCH SO'ROV SHAKLI:
+      bo'sh        — OXIRGI sahifa (chat ochilganda);
+      `after_id`   — shundan keyin kelganlar (so'rov/polling);
+      `before_id`  — shundan oldingilari ("yana yuklash").
 
     YANGILANISH — SO'ROV (polling) bilan, 5 soniyada: `after_id` bilan
     so'ralganda javob odatda bo'sh va arzon. WebSocket ataylab yo'q
@@ -1237,7 +1325,18 @@ def erp_chat_messages(chat_id: int, after_id: Optional[int] = None,
     _can(user, "chat.korish")
     return _erp(erp_chat.lenta, chat_id, auth.user_id(user),
                 _chat_hammasi(user), after_id, limit, q,
-                perm.can(user, "chat.tarix") is not None)
+                perm.can(user, "chat.tarix") is not None, before_id)
+
+
+@app.put("/erp/chats/{chat_id}/mute")
+def erp_chat_mute(chat_id: int, jim: bool = True,
+                  user: Dict[str, Any] = Depends(me)):
+    """Chatni jimlash: yangi xabar uchun bildirishnoma kelmaydi.
+
+    O'QILMAGAN HISOBLAGICHI ISHLAYVERADI (modulda): jimlash
+    "bildirishnoma kelmasin" degani, "ko'rmayman" degani emas."""
+    _can(user, "chat.korish")
+    return _erp(erp_chat.jimla, chat_id, auth.user_id(user), jim)
 
 
 @app.post("/erp/chats/{chat_id}/messages", status_code=201)

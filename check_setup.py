@@ -83,6 +83,12 @@ PATCHES = [
      "sabab hujjati va 'ulgurmadik' holati"),
     ("schema_patch_erp_25.sql", "erp", "chat_message",
      "ichki chat (hodimlar muloqoti)"),
+    # 27-patch YANGI JADVAL qo'shadi (`notification_delivery`), shuning
+    # uchun shu ro'yxatda. `notification` ning O'ZIGA qaralmaydi: u
+    # 22-patchda yaratilgan va tekshiruv YOLG'ON "OK" berardi
+    # (`_tests/patch_test.py` topgan nuqson sinfi).
+    ("schema_patch_erp_27.sql", "erp", "notification_delivery",
+     "bildirishnoma yetkazish navbati (retry, kuzatuv)"),
 ]
 
 #: 23-patch JADVAL qo'shmaydi — u HUQUQ beradi, shuning uchun
@@ -541,16 +547,58 @@ def main() -> int:
         head("11. Joylashtirish")
 
         # 1) Jadvalga qo'yilgan vazifalar.
+        # `TenderERP-Notifications` ro'yxatda: usiz TASHQI kanal
+        # (Telegram/email) UMUMAN yubormaydi — navbat to'ladi va
+        # buni hech narsa ko'rsatmasdi. Ilova bildirishnomasi esa
+        # ishlayveradi, ya'ni nuqson JIM: "xabar bordi" deb
+        # o'ylanadi, aslida faqat ekranda turadi.
+        SKRIPT = {"TenderERP-Backup": "register_backup_task.ps1",
+                  "TenderERP-Reminders": "register_erp_task.ps1",
+                  "TenderERP-Notifications": "register_navbat_task.ps1"}
         for task, what in (("TenderERP-Backup", "kunlik zaxira"),
-                           ("TenderERP-Reminders", "vazifa eslatmalari")):
+                           ("TenderERP-Reminders", "vazifa eslatmalari"),
+                           ("TenderERP-Notifications",
+                            "bildirishnoma navbati: Telegram/email")):
             state = _task_state(task)
             if state is None:
                 say(WARN, f"'{task}' jadvalga qo'yilmagan ({what} ishlamaydi)",
-                    f"register_{'backup' if 'Backup' in task else 'erp'}_task.ps1")
+                    SKRIPT[task])
             elif state.lower() in ("disabled", "o'chirilgan"):
                 say(WARN, f"'{task}' O'CHIRILGAN", "Task Scheduler'dan yoqing")
             else:
                 say(OK, f"'{task}' jadvalda ({what})")
+
+        # 1b) NAVBAT TO'XTAB QOLMAGANMI.
+        #
+        # Vazifa jadvalda TURISHI yetarli emas: u yiqilib, o'chib
+        # yoki xato bilan tugab turgan bo'lishi mumkin. Yagona
+        # ishonchli belgi — eng eski kutayotgan qatorning YOSHI.
+        try:
+            from api.erp import navbat as _navbat
+            if _navbat.schema_ready():
+                import datetime as _dt2
+                _eng = None
+                for _k in _navbat.sogliq().get("kanallar", []):
+                    if _k["kanal"] == "inapp" or not _k["eng_eski_pending"]:
+                        continue
+                    _t = _dt2.datetime.fromisoformat(_k["eng_eski_pending"])
+                    if _eng is None or _t < _eng:
+                        _eng = _t
+                    if _k["terminal"]:
+                        say(WARN, f"'{_k['kanal']}': {_k['terminal']} ta xabar "
+                            "butunlay yetkazilmadi",
+                            "sabab: erp.notification_delivery.last_error")
+                if _eng is not None:
+                    _soat = (_dt2.datetime.now(_eng.tzinfo) - _eng).total_seconds() / 3600
+                    if _soat > 1:
+                        say(WARN, f"navbatda {_soat:.0f} soatdan beri kutayotgan "
+                            "xabar bor", "navbat yurmayapti: register_navbat_task.ps1")
+                    else:
+                        say(OK, "bildirishnoma navbati harakatda")
+                else:
+                    say(OK, "bildirishnoma navbati bo'sh")
+        except Exception as _e:                     # noqa: BLE001
+            say(WARN, f"navbat holatini o'qib bo'lmadi: {_e}")
 
         # 2) Qurilgan interfeys.
         import datetime as _dt

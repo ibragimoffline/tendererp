@@ -1290,6 +1290,18 @@ export interface ErpTahlil {
 
 /** BILDIRISHNOMA (`erp.notification`). Hodimga qaratilgan: Tender-AI
  *  dagi xabar KOMPANIYA darajasida va odamni bilmaydi. */
+/** KLIK MANZILI — bildirishnoma bosilganda nima ochiladi.
+ *  Serverda hisoblanadi (`api/erp/xabar.py` -> `_nishon`): ekran
+ *  o'z qoidasini tutmasin, aks holda ikkalasi ajralib ketardi va
+ *  yangi hodisa turi jimgina "hech qayerga olib bormaydigan"
+ *  bildirishnoma bo'lib qolardi. */
+export interface ErpNishon {
+  turi: Nullable<'chat' | 'task' | 'opportunity'>
+  id: Nullable<number>
+  /** Kontekst uchun: chat/vazifa qaysi kartaga tegishli */
+  opportunity_id: Nullable<number>
+}
+
 export interface ErpNotification {
   id: number
   kind: string
@@ -1298,10 +1310,63 @@ export interface ErpNotification {
   matn: string
   opportunity_id: Nullable<number>
   opportunity_title: Nullable<string>
+  chat_id: Nullable<number>
+  task_id: Nullable<number>
+  chat_title: Nullable<string>
+  nishon: ErpNishon
   /** `localhost` bo'lsa serverda YOZILMAYDI — buzuq havola bermaslik uchun */
   havola: Nullable<string>
   created_at: string
   read_at: Nullable<string>
+}
+
+/** Bildirishnoma ro'yxati — sahifalash bilan. */
+export interface ErpNotificationList {
+  ready: boolean
+  items: ErpNotification[]
+  unread: number
+  /** true = eskiroqlari bor (`before_id` bilan so'raladi) */
+  yana: boolean
+}
+
+/** YAGONA hisoblagich manbai (`GET /erp/unread`).
+ *  Ikki raqam ikki so'rovdan kelsa biri yangilanib ikkinchisi
+ *  qolib ketardi — foydalanuvchi "3 ta xabar" ko'rib, ochganda
+ *  hech narsa topmasdi. */
+export interface ErpUnread {
+  bildirishnoma: number
+  /** Umumiy chatdagi o'qilmagan XABARLAR */
+  umumiy: number
+  /** Karta chatlaridagi o'qilmagan xabarlar */
+  kartalar: number
+  /** O'qilmagani BOR chatlar soni */
+  chatlar: number
+  /** Jami o'qilmagan xabarlar */
+  xabarlar: number
+}
+
+/** Navbat holati (`GET /erp/notifications/health`) — §20.
+ *  `delivered` YO'Q: tashqi kanal yetib borganiga dalil bermaydi. */
+export interface ErpNavbatKanal {
+  kanal: string
+  jami: number
+  pending: number
+  sent: number
+  failed: number
+  terminal: number
+  /** Navbat TO'XTAB QOLGANINI faqat shu ko'rsatadi */
+  eng_eski_pending: Nullable<string>
+  oxirgi_yuborilgan: Nullable<string>
+  nosozlik_foiz: Nullable<number>
+}
+
+export interface ErpNavbatSogliq {
+  ready: boolean
+  kanallar: ErpNavbatKanal[]
+  jami: number
+  oqilmagan: number
+  sutkada: number
+  max_urinish: number
 }
 
 /** TENDER-AI YO'NALTIRISH OQIMINING holati
@@ -1440,6 +1505,18 @@ export interface ErpChatMessage {
   tahrirlangan: boolean
 }
 
+/** KARTA chatining sarlavhasi: qaysi tender, holati, mas'uli, muddati.
+ *  `umumiy` chatda `null` — u yerda karta yo'q. */
+export interface ErpChatKontekst {
+  opportunity_id: number
+  title: Nullable<string>
+  status: string
+  status_label: string
+  masul: Nullable<string>
+  customer_name: Nullable<string>
+  deadline_at: Nullable<string>
+}
+
 export interface ErpChatLenta {
   chat: {
     id: number
@@ -1448,9 +1525,12 @@ export interface ErpChatLenta {
     title: Nullable<string>
     arxiv: boolean
     azoman: boolean
+    kontekst: Nullable<ErpChatKontekst>
   }
   messages: ErpChatMessage[]
-  /** true = yana sahifa bor (`after_id` bilan so'raladi) */
+  /** Eng eski yuklangan xabar — `before_id` uchun */
+  eng_eski_id: Nullable<number>
+  /** true = ESKIROQ xabarlar bor ("yana yuklash") */
   yana: boolean
 }
 

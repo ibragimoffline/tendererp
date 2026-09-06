@@ -141,7 +141,23 @@ SELECT 1 AS x FROM erp.chat_member
 WHERE chat_id = %(chat)s AND app_user_id = %(uid)s AND removed_at IS NULL
 """
 
-LENTA_SQL = """
+# LENTA — IKKI YO'NALISH, IKKI SO'ROV.
+#
+# NUQSON EDI: bitta so'rov bor edi va u `ORDER BY m.id LIMIT 50`
+# qilardi, ya'ni chatning ENG ESKI 50 xabarini qaytarardi. 50 dan
+# oshgan chatda odam BIRINCHI kunning yozishmasini ko'rib turardi va
+# yangi xabarlar ekranga UMUMAN chiqmasdi — xato ham bermasdi,
+# shunchaki "chat jim" bo'lib ko'rinardi.
+#
+#   ORQAGA  (`before_id` yoki bo'sh) — OXIRGI sahifa. Chat ochilganda
+#           kerak bo'ladigan narsa aynan shu: oxirgi gaplar.
+#   OLDINGA (`after_id`)            — so'rov (polling) uchun: "shu
+#           id dan keyin nima keldi". Javob odatda bo'sh va arzon.
+#
+# Ikkalasi ham BUTUN so'rov sifatida yozilgan, biridan ikkinchisini
+# satr almashtirish bilan yasash EMAS: `BITTA_SQL` dagi saboq
+# (so'rov matni ozgina o'zgarsa ikkinchisi JIMGINA buziladi).
+_LENTA_SELECT = """
 SELECT m.id, m.chat_id, m.author_id, u.full_name AS author_name,
        u.role AS author_role,
        m.text, m.reply_to_id, m.created_at, m.edited_at,
@@ -156,10 +172,32 @@ LEFT JOIN erp.app_user u  ON u.id = m.author_id
 LEFT JOIN erp.app_user d  ON d.id = m.deleted_by
 LEFT JOIN erp.chat_message rm ON rm.id = m.reply_to_id
 LEFT JOIN erp.app_user ru ON ru.id = rm.author_id
+"""
+
+_LENTA_SHART = """
 WHERE m.chat_id = %(chat)s
-  AND (%(after_id)s::int IS NULL OR m.id > %(after_id)s)
   AND (%(q)s::text IS NULL OR (m.deleted_at IS NULL
                                AND m.text ILIKE '%%' || %(q)s || '%%'))
+"""
+
+# OXIRGI sahifa (yoki `before_id` dan oldingilari). Ichkarida DESC —
+# oxirgilarini olish uchun; tashqarida ASC — ekranda tartib to'g'ri
+# bo'lishi uchun. Mijoz qatorlarni AGDARIB o'tirmasin.
+LENTA_ORQAGA_SQL = f"""
+SELECT * FROM (
+    {_LENTA_SELECT}
+    {_LENTA_SHART}
+      AND (%(before_id)s::int IS NULL OR m.id < %(before_id)s)
+    ORDER BY m.id DESC
+    LIMIT %(limit)s
+) t ORDER BY t.id
+"""
+
+# YANGILARI — so'rov uchun.
+LENTA_OLDINGA_SQL = f"""
+{_LENTA_SELECT}
+{_LENTA_SHART}
+  AND m.id > %(after_id)s
 ORDER BY m.id
 LIMIT %(limit)s
 """
@@ -399,22 +437,64 @@ def chatlarim(user_id: int, hammasi: bool = False) -> List[Dict[str, Any]]:
 def lenta(chat_id: int, user_id: int, hammasi: bool = False,
           after_id: Optional[int] = None, limit: int = LIMIT_DEFAULT,
           q: Optional[str] = None,
-          tarix_korish: bool = False) -> Dict[str, Any]:
-    """Xabarlar lentasi. Sahifalash `after_id` bo'yicha (`id` o'sib boradi)."""
+          tarix_korish: bool = False,
+          before_id: Optional[int] = None) -> Dict[str, Any]:
+    """Xabarlar lentasi.
+
+    `after_id` — SO'ROV uchun ("shundan keyin nima keldi").
+    `before_id` — ESKI TARIXNI yuklash ("yana yuklash" tugmasi).
+    Ikkalasi ham berilmasa — OXIRGI sahifa (yuqoridagi izohga qarang).
+
+    `yana` — ESKIROQ xabarlar bormi. `after_id` bilan so'ralganda u
+    ma'nosiz (yangi kelganlar to'liq qaytadi), shuning uchun `False`."""
     _need_schema25()
     ch = korish_talab(chat_id, user_id, hammasi)
     lim = max(1, min(int(limit or LIMIT_DEFAULT), LIMIT_MAX))
-    rows = db.query(LENTA_SQL, {"chat": chat_id, "after_id": after_id,
-                                "limit": lim, "q": (q or "").strip() or None})
+    p = {"chat": chat_id, "after_id": after_id, "before_id": before_id,
+         "limit": lim, "q": (q or "").strip() or None}
+    oldinga = after_id is not None
+    rows = db.query(LENTA_OLDINGA_SQL if oldinga else LENTA_ORQAGA_SQL, p)
     return {
         "chat": {"id": ch["id"], "turi": ch["turi"],
                  "opportunity_id": ch["opportunity_id"],
                  "title": ch["title"], "arxiv": ch["archived_at"] is not None,
-                 "azoman": azomi(chat_id, user_id)},
+                 "azoman": azomi(chat_id, user_id),
+                 "kontekst": kontekst(ch)},
         "messages": [_shape_msg(r, tarix_korish) for r in rows],
-        # "Yana bormi" — mijoz shunga qarab keyingi sahifani so'raydi.
-        "yana": len(rows) == lim,
+        # Mijoz shu id ni `before_id` qilib keyingi sahifani so'raydi.
+        "eng_eski_id": rows[0]["id"] if rows else None,
+        "yana": (not oldinga) and len(rows) == lim,
     }
+
+
+def kontekst(ch: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """KARTA chatining sarlavhasi uchun: qaysi tender, holati, mas'uli,
+    muddati.
+
+    NEGA KERAK: karta chatida yozayotgan odam "qaysi tender haqida
+    yozyapman" degan savolga QAYTA o'tmasdan javob topishi kerak
+    (§6). Ilgari sarlavhada faqat nom bor edi va nom ko'pincha
+    "Server uskunalari yetkazib berish" kabi bir-biriga o'xshash
+    bo'ladi.
+
+    `umumiy` chatda karta yo'q — `None` qaytadi va interfeys
+    sarlavhani ko'rsatmaydi (bo'sh maydonlar chalg'itardi)."""
+    if not ch.get("opportunity_id"):
+        return None
+    from api.erp.opportunity import STATUS_LABEL
+    o = db.query_one(
+        "SELECT o.id, o.title, o.status, o.deadline_at, o.customer_name, "
+        "       b.full_name AS masul "
+        "FROM erp.opportunity o "
+        "LEFT JOIN erp.broker b ON b.id = o.broker_id "
+        "WHERE o.id = %(i)s", {"i": ch["opportunity_id"]})
+    if not o:
+        return None
+    return {"opportunity_id": o["id"], "title": o["title"],
+            "status": o["status"],
+            "status_label": STATUS_LABEL.get(o["status"], o["status"]),
+            "masul": o["masul"], "customer_name": o["customer_name"],
+            "deadline_at": _iso(o["deadline_at"])}
 
 
 def azolar(chat_id: int, user_id: int, hammasi: bool = False) -> Dict[str, Any]:
@@ -477,7 +557,7 @@ def _signal(chat_id: int) -> None:
 def yoz(chat_id: int, user_id: int, text: str,
         reply_to_id: Optional[int] = None) -> Dict[str, Any]:
     _need_schema25()
-    yozish_talab(chat_id, user_id)
+    ch = yozish_talab(chat_id, user_id)
     matn = (text or "").strip()
     if not matn:
         raise ErpError("Xabar bo'sh.")
@@ -493,7 +573,71 @@ def yoz(chat_id: int, user_id: int, text: str,
         "chat": chat_id, "author": user_id, "text": matn,
         "reply": reply_to_id})
     _signal(chat_id)
+    _bildir(ch, chat_id, user_id, matn)
     return _bitta(row["id"])
+
+
+def _bildir(ch: Dict[str, Any], chat_id: int, user_id: int,
+            matn: str) -> None:
+    """Yangi xabar -> a'zolarga bildirishnoma. YIQITMAYDI.
+
+    XABAR YOZILGANDAN KEYIN va ALOHIDA (§22): bildirishnoma quviri
+    yiqilsa ham xabarning O'ZI yozilgan bo'lib qoladi. Teskarisi —
+    yozuvni bildirishnoma bilan bir tranzaksiyaga qo'yish — Telegram
+    o'chganda odamlarning yozishmasini yo'qotardi.
+
+    HAR XABARGA ALOHIDA QATOR EMAS: `hodisa.chat_xabar` ularni bitta
+    bildirishnomaga yig'adi (u yerdagi izohga qarang)."""
+    try:
+        from api.erp import hodisa
+        kim = db.query_one("SELECT full_name FROM erp.app_user "
+                           "WHERE id = %(i)s", {"i": user_id}) or {}
+        hodisa.chat_xabar(
+            chat_id, user_id, kim.get("full_name") or "Hodim", matn,
+            opportunity_id=ch.get("opportunity_id"),
+            chat_nomi=(ch.get("title") if ch["turi"] != "umumiy" else None))
+    except Exception:                               # noqa: BLE001
+        import logging
+        logging.getLogger("erp.chat").exception(
+            "chat bildirishnomasi yozilmadi (chat %s)", chat_id)
+
+
+# ---------------------------------------------------------------------------
+# Jimlash (27-patch)
+# ---------------------------------------------------------------------------
+JIM_SQL = """
+INSERT INTO erp.chat_member (chat_id, app_user_id, added_by, muted_at)
+VALUES (%(c)s, %(u)s, %(u)s, CASE WHEN %(jim)s THEN now() END)
+ON CONFLICT (chat_id, app_user_id) DO UPDATE
+    SET muted_at = CASE WHEN %(jim)s THEN now() END
+RETURNING (muted_at IS NOT NULL) AS jim
+"""
+
+
+def jimla(chat_id: int, user_id: int, jim: bool = True) -> Dict[str, Any]:
+    """Chatni jimlash: yangi xabar uchun bildirishnoma KELMAYDI.
+
+    O'QILMAGAN HISOBLAGICHI ISHLAYVERADI va bu ataylab: jimlash
+    "bildirishnoma kelmasin" degani, "bu chatni ko'rmayman" degani
+    emas. Ikkalasini bitta tugmaga bog'lash odam yozishmani butunlay
+    yo'qotib qo'yishiga olib kelardi.
+
+    UMUMIY chatda ham ishlaydi: u yerda `chat_member` qatori paydo
+    bo'ladi, lekin u A'ZOLIK emas — SOZLAMA (`azomi()` unga
+    qaramaydi, `schema_patch_erp_27.sql` §3)."""
+    _need_schema25()
+    ch = _chat_yoki_404(chat_id)
+    # KARTA CHATIDA A'ZOLIK SHART. Aks holda `INSERT` a'zolik qatorini
+    # YARATIB YUBORARDI va begona odam "jimlash" tugmasi orqali
+    # o'zini chatga qo'shib olardi — huquq teshigi, jimlash emas.
+    # (`umumiy` da a'zolik virtual, shuning uchun u yerda qator
+    # sozlama sifatida paydo bo'ladi.)
+    if ch["turi"] != "umumiy" and not db.query_one(
+            AZOMI_SQL, {"chat": chat_id, "uid": user_id}):
+        raise ErpError("Bu chatning a'zosi emassiz.", 403)
+    r = db.execute_returning(JIM_SQL, {"c": chat_id, "u": user_id,
+                                       "jim": bool(jim)})
+    return {"chat_id": chat_id, "jim": bool(r and r["jim"])}
 
 
 def tizim_xabari(chat_id: Optional[int], text: str) -> Optional[int]:
@@ -581,12 +725,14 @@ def ochir(msg_id: int, user_id: int, moderator: bool = False,
     _signal(m["chat_id"])
 
     if not oziniki:
-        # Import shu yerda: `xabar` moduli `chat` ni bilmaydi va aylanma
-        # bog'lanish paydo bo'lmasin.
-        from api.erp import xabar
-        xabar.yoz(m["author_id"], "chat_ochirildi",
-                  f"Xabaringiz o'chirildi. Sabab: {izoh}",
-                  m["opportunity_id"])
+        # Import shu yerda: `hodisa` moduli `chat` ni bilmaydi va
+        # aylanma bog'lanish paydo bo'lmasin.
+        from api.erp import hodisa
+        hodisa.chiqar("chat_ochirildi",
+                      f"Xabaringiz o'chirildi. Sabab: {izoh}",
+                      qabul=[m["author_id"]], chat_id=m["chat_id"],
+                      opportunity_id=m["opportunity_id"],
+                      dedup=f"chat_ochirildi:{msg_id}", kotar=False)
     return _bitta(msg_id)
 
 
@@ -625,11 +771,12 @@ def azo_qosh(chat_id: int, kim_id: int, yangi_user_id: int) -> Dict[str, Any]:
     tizim_xabari(chat_id, f"{u['full_name']} chatga qo'shildi."
                  if not ozini else f"{u['full_name']} chatga o'zi qo'shildi.")
     if not ozini:
-        from api.erp import xabar
-        xabar.yoz(yangi_user_id, "chat_qoshildi",
-                  f"Sizni chatga qo'shdi: {kim.get('full_name') or 'hodim'}"
-                  + (f" — {ch['title']}" if ch["title"] else ""),
-                  ch["opportunity_id"])
+        from api.erp import hodisa
+        hodisa.chiqar("chat_qoshildi",
+                      f"Sizni chatga qo'shdi: {kim.get('full_name') or 'hodim'}"
+                      + (f" — {ch['title']}" if ch["title"] else ""),
+                      qabul=[yangi_user_id], chat_id=chat_id,
+                      opportunity_id=ch["opportunity_id"])
     return azolar(chat_id, kim_id, hammasi=True)
 
 
@@ -756,7 +903,22 @@ def karta_chati_id(opp_id: int, user_id: int) -> Dict[str, Any]:
         # yopilgan kartada yozish ochiq qolib ketmasin.
         if o["status"] in ARXIV_HOLATLAR:
             karta_arxiv(opp_id, True)
-    return {"chat_id": chat_id, "opportunity_id": opp_id}
+    # O'QILMAGAN SONI HAM QAYTADI: karta oynasidagi "Muloqot" tugmasi
+    # yonida belgi turishi kerak (§7). Alohida endpoint qo'shilsa
+    # ekran ikkita so'rov yuborardi va ular ajralib ketardi.
+    #
+    # Hisob `chatlarim` bilan BIR XIL qoida bo'yicha: o'z xabarlari
+    # va o'chirilganlar sanalmaydi.
+    oqilmagan = db.scalar(
+        "SELECT count(*) FROM erp.chat_message m "
+        "LEFT JOIN erp.chat_read r ON r.chat_id = m.chat_id "
+        "                         AND r.app_user_id = %(u)s "
+        "WHERE m.chat_id = %(c)s AND m.deleted_at IS NULL "
+        "  AND m.id > coalesce(r.last_read_id, 0) "
+        "  AND (m.author_id IS NULL OR m.author_id <> %(u)s)",
+        {"c": chat_id, "u": user_id}) or 0
+    return {"chat_id": chat_id, "opportunity_id": opp_id,
+            "oqilmagan": int(oqilmagan)}
 
 
 def egalik_talab(chat_id: int, user: Dict[str, Any], amal: str) -> None:
@@ -817,12 +979,18 @@ def eslat(chat_id: int, kim_id: int, msg_id: int,
     kim = db.query_one("SELECT full_name FROM erp.app_user WHERE id = %(id)s",
                        {"id": kim_id}) or {}
     nom = ch["title"] or "Umumiy"
-    from api.erp import xabar
+    from api.erp import hodisa
     ketgan = []
     for uid in sorted(yangi):
-        if xabar.yoz(uid, "chat_mention",
-                     f"{kim.get('full_name') or 'Hodim'} sizni eslatdi "
-                     f"({nom}).", ch["opportunity_id"]):
+        # NISHON — CHAT, karta emas: eslatilgan odam aynan o'sha
+        # suhbatga tushishi kerak (§15). Ilgari karta ochilardi va
+        # odam yozishmani QAYTADAN qidirardi.
+        if hodisa.chiqar("chat_mention",
+                         f"{kim.get('full_name') or 'Hodim'} sizni eslatdi "
+                         f"({nom}).", qabul=[uid], chat_id=chat_id,
+                         opportunity_id=ch["opportunity_id"],
+                         dedup=f"chat_mention:{msg_id}", kotar=False,
+                         )["yozildi"]:
             ketgan.append(uid)
     if ketgan:
         # FAQAT YUBORILGANLARI yoziladi. `xabar.yoz()` yiqilsa (hisobi

@@ -254,11 +254,35 @@ def add(opp_id: int, data: dict) -> List[dict]:
     if not db.query_one("SELECT 1 AS x FROM erp.opportunity WHERE id=%(id)s",
                         {"id": opp_id}):
         raise ErpError("Karta topilmadi.", 404)
-    db.execute_returning(TASK_INSERT_SQL, {
+    row = db.execute_returning(TASK_INSERT_SQL, {
         **{k: data.get(k) for k in TASK_FIELDS},
         "title": data["title"].strip(),
         "opportunity_id": opp_id, "created_by": data.get("created_by")})
+    _biriktirildi(row, opp_id, data)
     return list_(opp_id)
+
+
+def _biriktirildi(row: Optional[dict], opp_id: int, data: dict) -> None:
+    """Vazifa BOSHQA odamga biriktirilgan bo'lsa — bildirishnoma.
+
+    MAS'ULSIZ vazifa xabar bermaydi: u kartaning brokeriniki
+    hisoblanadi (`my_tasks`) va u karta haqida allaqachon biladi.
+    Har vazifaga xabar yuborish ro'yxatni shovqinga aylantirardi.
+
+    YIQITMAYDI: vazifa yozilishi bildirishnomadan muhimroq."""
+    if not row or not data.get("assignee_broker_id"):
+        return
+    try:
+        from api.erp import hodisa
+        hodisa.vazifa_biriktirildi(
+            row["id"], data["assignee_broker_id"], data["title"].strip(),
+            opp_id, muddat=(str(data.get("due_at"))[:10]
+                            if data.get("due_at") else None),
+            chiqaruvchi=data.get("actor_user_id"))
+    except Exception:                               # noqa: BLE001
+        import logging
+        logging.getLogger("erp.tasks").exception(
+            "vazifa bildirishnomasi yozilmadi (karta %s)", opp_id)
 
 
 def update(task_id: int, data: dict) -> List[dict]:
@@ -270,6 +294,11 @@ def update(task_id: int, data: dict) -> List[dict]:
     db.execute_returning(TASK_UPDATE_SQL, {
         **{k: data.get(k) for k in TASK_FIELDS},
         "title": data["title"].strip(), "id": task_id})
+    # MAS'UL O'ZGARGANDA xabar. Boshqa maydon (izoh, muddat)
+    # o'zgarganda YO'Q: `hodisa.vazifa_biriktirildi` dedup kaliti
+    # vazifa id si bo'yicha va `kotar=False`, ya'ni takror yozilmaydi.
+    if data.get("assignee_broker_id") != cur.get("assignee_broker_id"):
+        _biriktirildi({"id": task_id}, cur["opportunity_id"], data)
     return list_(cur["opportunity_id"])
 
 

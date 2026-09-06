@@ -55,7 +55,7 @@ import psycopg2
 
 from api import db
 from api.erp import opportunity as erp_opp
-from api.erp import xabar
+from api.erp import hodisa
 from api.erp.opportunity import ErpError
 
 log = logging.getLogger("erp.topshiriq")
@@ -295,17 +295,10 @@ def _xabar_bering(karta: Dict[str, Any], t: Dict[str, Any],
     Ikkinchisi eng muhim: aks holda karta "Taqsimlanmagan" ustunida
     hech kim ko'rmasdan yotib qolardi va Tender-AI da "berildi" deb
     turardi."""
-    nom = karta.get("title") or f"#{karta['id']}"
-    if broker_id:
-        xabar.brokerga(broker_id, "topshiriq",
-                       f"Tender-AI'dan yangi karta: {nom}. "
-                       f"Yo'naltirdi: {kim}.", karta["id"])
-    else:
-        xabar.menejerlarga(
-            "taqsimlanmagan",
-            f"Karta TAQSIMLANMAGAN: {nom}. Tender-AI'da hodim "
-            f"ko'rsatilmagan yoki u ERP hodimiga xaritalanmagan "
-            f"(yo'naltirdi: {kim}).", karta["id"])
+    # MATN VA QABUL QILUVCHI shu yerda EMAS: ikkalasi ham
+    # `api/erp/hodisa.py` da. Ilgari har modul o'zicha yozardi va
+    # bir xil hodisa ikki joyda ikki xil matn berardi.
+    hodisa.karta_biriktirildi(broker_id, karta["id"], karta.get("title"), kim)
 
 
 def _karta_bekor(t: Dict[str, Any], opp: Dict[str, Any]) -> Dict[str, Any]:
@@ -332,11 +325,15 @@ def _karta_bekor(t: Dict[str, Any], opp: Dict[str, Any]) -> Dict[str, Any]:
     to_liq = db.query_one("SELECT broker_id, title FROM erp.opportunity "
                           "WHERE id = %(i)s", {"i": opp["id"]}) or {}
     nom = to_liq.get("title") or f"#{opp['id']}"
-    xabar.brokerga(to_liq.get("broker_id"), "bekor",
-                   f"Tender-AI'da qaror bekor qilindi: {nom}. "
-                   f"Karta 'Rad etildi' ga o'tkazildi.", opp["id"])
-    xabar.menejerlarga("bekor",
-                       f"Tender-AI'da qaror bekor qilindi: {nom}.", opp["id"])
+    hodisa.chiqar("bekor",
+                  f"Tender-AI'da qaror bekor qilindi: {nom}. "
+                  f"Karta 'Rad etildi' ga o'tkazildi.",
+                  broker_id=to_liq.get("broker_id"), boshliqqa=True,
+                  opportunity_id=opp["id"],
+                  # BIR YO'NALTIRISH BIR MARTA: Tender-AI xabarni
+                  # qayta yuborsa (tinglovchi uzilib qayta ulansa)
+                  # ikkinchi bildirishnoma yozilmaydi.
+                  dedup=f"bekor:{t['routing_id']}", kotar=False)
     return {"holat": "bekor_qilindi", "opportunity_id": opp["id"],
             "routing_id": t["routing_id"]}
 

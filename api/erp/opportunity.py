@@ -578,10 +578,12 @@ def update(opp_id: int, data: dict) -> dict:
     # bog'lanish xavfi paydo bo'lardi (`stock` bilan bir xil naqsh).
     yangi = data.get("broker_id")
     if oldingi and yangi and yangi != oldingi.get("broker_id"):
-        from api.erp import xabar as _xabar
-        _xabar.brokerga(yangi, "otkazildi",
-                        f"Karta sizga o'tkazildi: "
-                        f"{oldingi.get('title') or f'#{opp_id}'}.", opp_id)
+        from api.erp import hodisa as _hodisa
+        # ESKI MAS'ULGA HAM xabar ketadi (`hodisa.karta_otkazildi`):
+        # u karta ustida ishlayotgan bo'lishi mumkin va ish jimgina
+        # qo'lidan olinsa, buni faqat ro'yxatdan yo'qolganda sezardi.
+        _hodisa.karta_otkazildi(yangi, oldingi.get("broker_id"), opp_id,
+                                oldingi.get("title"))
         # YANGI MAS'UL CHATGA QO'SHILADI. Aks holda unga karta
         # berilardi-yu, u haqidagi butun yozishma ko'rinmasdi — eng
         # kerakli paytda, ishni qabul qilib olayotganda.
@@ -636,17 +638,26 @@ def taqsimlash_sorovi(opp_id: int, izoh: Optional[str],
         "opportunity_id": opp_id, "from_status": cur["status"],
         "to_status": cur["status"], "changed_by": kim,
         "note": f"Qayta taqsimlash so'raldi: {matn[:500]}"})
-    from api.erp import xabar as _xabar
+    from api.erp import hodisa as _hodisa
     nom = cur.get("title") or f"#{opp_id}"
-    n = _xabar.menejerlarga(
-        "otkazildi", f"Qayta taqsimlash so'rovi: {nom}. "
-                     f"So'radi: {kim or 'noma`lum'}. Sabab: {matn[:300]}",
-        opp_id)
-    return {"ok": True, "xabar_ketdi": n, "opportunity_id": opp_id}
+    # `qaror` turi: bu so'rov, xabar emas — menejer NIMADIR QILISHI
+    # kerak. Ilgari `otkazildi` turi ishlatilardi va ekranda "karta
+    # sizga o'tkazildi" nishoni chiqardi, ya'ni menejer allaqachon
+    # bajarilgan ish deb o'ylardi.
+    r = _hodisa.qaror_kerak(f"Qayta taqsimlash so'rovi: {nom}. "
+                            f"So'radi: {kim or 'noma`lum'}. "
+                            f"Sabab: {matn[:300]}", opp_id=opp_id)
+    return {"ok": True, "xabar_ketdi": r["yozildi"], "opportunity_id": opp_id}
 
 
 def set_status(opp_id: int, status: str, changed_by: Optional[str],
-               note: Optional[str], lost_reason: Optional[str] = None) -> dict:
+               note: Optional[str], lost_reason: Optional[str] = None,
+               actor_user_id: Optional[int] = None) -> dict:
+    """`actor_user_id` — amalni bajargan HISOB (ism emas).
+
+    Faqat bildirishnoma uchun: o'z amali haqida xabar olmasin (§13).
+    `changed_by` ISM va u tarixga yoziladi; ism bo'yicha hisob
+    qidirish ishonchsiz bo'lardi (bir xil ismli ikki hodim)."""
     _need_schema()
     if status not in STATUS_LABEL:
         raise ErpError("Noma'lum status.")
@@ -719,6 +730,16 @@ def set_status(opp_id: int, status: str, changed_by: Optional[str],
     # Yakuniy holat -> chat ARXIV (faqat o'qish); qaytarilsa ochiladi.
     if (status in FINAL) != (cur["status"] in FINAL):
         _chat.karta_arxiv(opp_id, status in FINAL)
+
+    # BILDIRISHNOMA — chat tizim xabaridan ALOHIDA va bu takror EMAS:
+    # lentadagi yozuv chatni OCHGAN odam ko'radi, bildirishnoma esa
+    # ochmaganini ham topadi. Mas'ul kartasining yopilganini bilmay
+    # qolishi eng qimmat holat.
+    from api.erp import hodisa as _hodisa
+    _hodisa.karta_holati(opp_id, cur.get("title"),
+                         STATUS_LABEL.get(cur["status"], cur["status"]),
+                         STATUS_LABEL[status], changed_by,
+                         chiqaruvchi=actor_user_id)
 
     from api.erp import stock as _stock
     stock_result = _stock.on_status_change(opp_id, cur["status"], status,

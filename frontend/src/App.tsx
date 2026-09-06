@@ -19,7 +19,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/theme'
 import type { Theme } from '@/theme'
-import type { AuthUser, ErpBroker, ErpHealth } from '@/types'
+import type { AuthUser, ErpBroker, ErpHealth, ErpUnread } from '@/types'
 
 // TENDER-AI ERP — alohida ilova.
 //
@@ -163,6 +163,10 @@ export default function App() {
   // Chuqur havolalar — faqat birinchi yuklashda o'qiladi
   const [takeTender] = useState<number | null>(() => readParam('take'))
   const [oppFocus, setOppFocus] = useState<number | null>(() => readParam('opp'))
+  // Bildirishnomadan kelgan chat. `null` — oddiy holat (ro'yxatdan
+  // tanlanadi).
+  const [chatFocus, setChatFocus] = useState<number | null>(null)
+  const [unread, setUnread] = useState<ErpUnread | null>(null)
   const [takeOpen, setTakeOpen] = useState<boolean>(() => readParam('take') !== null)
 
   // Brokerlar ro'yxati bir marta: "Mening ishlarim" filtri uchun.
@@ -204,6 +208,24 @@ export default function App() {
     clearQuery()
   }, [user])
 
+  // HISOBLAGICHLAR — YAGONA MANBA (`GET /erp/unread`).
+  //
+  // Ilgari qo'ng'iroq o'z sonini, chat ekrani o'zinikini so'rardi va
+  // ular ajralib ketardi: yon panelda "3" turardi, chat ochilganda
+  // esa hech narsa yo'q edi. Endi ikkala raqam BITTA javobdan
+  // keladi va bir vaqtda yangilanadi.
+  //
+  // 60 soniya: chat ekranining o'z so'rovi 5 soniyada yuradi
+  // (`Muloqot.tsx`), bu esa faqat yon paneldagi belgi uchun.
+  const HISOBLAGICH_MS = 60_000
+  useEffect(() => {
+    if (!user) return
+    const yukla = () => { void api.unread().then(setUnread).catch(() => {}) }
+    yukla()
+    const t = window.setInterval(yukla, HISOBLAGICH_MS)
+    return () => window.clearInterval(t)
+  }, [user])
+
   async function logout() {
     await api.logout().catch(() => {})
     setUser(null); setHealth(null); setBrokers([])
@@ -216,6 +238,15 @@ export default function App() {
     setOppFocus(null)
     setView('opportunities')
     setTimeout(() => setOppFocus(oppId), 0)
+  }
+
+  /** Bildirishnomadan AYNAN O'SHA chatga (§15).
+   *  Umumiy panelga olib bormaydi: kontekst bor ekan, odam uni
+   *  qaytadan qidirmasligi kerak. */
+  function openChat(chatId: number) {
+    setChatFocus(null)
+    setView('muloqot')
+    setTimeout(() => setChatFocus(chatId), 0)
   }
 
   // Token tekshirilmaguncha bo'sh ekran — kirish formasi chaqnamasin
@@ -269,6 +300,15 @@ export default function App() {
                     <Icon name={n.icon} size={17}
                       className={view === n.key ? '' : 'text-muted-foreground'} />
                     <span className="flex-1 truncate">{n.label}</span>
+                    {/* O'QILMAGAN XABARLAR — bo'lim yonida. Odam yon
+                        panelga qarab "menga yozishganmi" degan savolga
+                        javob topishi kerak, bo'limni ochib emas. */}
+                    {n.key === 'muloqot' && !!unread?.xabarlar && (
+                      <span data-testid="nav-chat-unread"
+                        className="rounded-full bg-primary px-1.5 text-micro font-semibold text-on-primary">
+                        {unread.xabarlar}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -295,7 +335,9 @@ export default function App() {
           {/* BILDIRISHNOMA — yo'naltirish oqimi kartani o'zi
               ochadi, ya'ni "sizga ish berildi" degan gap biror
               joyda aytilishi kerak (`api/erp/xabar.py`). */}
-          <NotificationBell onOpenOpportunity={openOpportunity} />
+          <NotificationBell onOpenOpportunity={openOpportunity}
+            onOpenChat={openChat} unread={unread?.bildirishnoma}
+            onChange={() => void api.unread().then(setUnread).catch(() => {})} />
 
           <ThemeSwitch theme={theme} onChange={setTheme} />
           {/* O'Z parolini almashtirish — HAR KIM uchun (auth-6).
@@ -412,7 +454,11 @@ export default function App() {
           {view === 'company' && (
             <OwnCompanyPage onOpenOpportunity={openOpportunity} />
           )}
-          {view === 'muloqot' && <Muloqot />}
+          {view === 'muloqot' && (
+            <Muloqot chatId={chatFocus ?? undefined}
+              onUnreadChange={() => void api.unread().then(setUnread)
+                .catch(() => {})} />
+          )}
           {view === 'stock' && <StockPage />}
           {view === 'invoices' && <InvoicePage />}
           {view === 'staff' && can('tizim.hodim') && <StaffPage />}
