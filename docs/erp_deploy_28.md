@@ -28,13 +28,51 @@ Bu **hujjatda qolmaydi** — `check_setup.py` uni majburlaydi.
 
 ### Deploy darvozasi (niyat bilan)
 
+**Operator `--kutilgan` ni qo'lda yozmaydi** — `deploy.ps1` uni
+o'zi beradi:
+
+```powershell
+.\deploy.ps1 -Muhit staging -Patch schema_patch_erp_28.sql
+.\deploy.ps1 -Muhit prod    -Patch schema_patch_erp_28.sql
+.\deploy.ps1 -Muhit prod    -Tekshir      # faqat darvozalar
+```
+
+Nega: darvoza allaqachon bor edi, lekin uni operator yozardi —
+ya'ni staging buyrug'ini ishlab chiqarish oynasiga **nusxalash**
+yetarli edi. Endi muhit skript ichida, bitta joyda.
+
+`-Muhit` **majburiy va standart qiymati yo'q**. Standart qiymat eng
+xavfli narsa: u eslab qolinmaydi va noto'g'ri muhitga jimgina
+tushib qolinadi.
+
+Bevosita ham chaqirsa bo'ladi:
+
 ```powershell
 .\.venv\Scripts\python.exe check_setup.py --kutilgan staging
-.\.venv\Scripts\python.exe check_setup.py --kutilgan prod
 ```
 
 `--kutilgan X` berilsa, `.env` **ham**, baza **ham** aynan `X`
 bo'lishi shart. Boshqa har qanday kombinatsiya — `exit 1`.
+
+### Uch qavat
+
+```text
+1-qavat   .env nima deydi                  ERP_MUHIT
+2-qavat   baza o'zini nima deb belgilagan  erp.setting.muhit
+3-qavat   deploy nimani kutyapti           deploy.ps1 -Muhit
+```
+
+Uchovining javobi bir xil bo'lishi shart. Ikkinchi va uchinchi
+qavat alohida kerak:
+
+```text
+.env=prod    baza=staging  kutilgan=prod     -> FAIL  (noto'g'ri DSN)
+.env=staging baza=staging  kutilgan=prod     -> FAIL  (niyat noto'g'ri)
+.env=prod    baza=prod     kutilgan=prod     -> PASS
+```
+
+Ikkinchi qator aynan `moslik()` topa olmaydigan holat: manbalar
+o'zaro to'g'ri, **maqsad** esa noto'g'ri.
 
 Nega shunchaki "mos kelyaptimi" yetarli emas: ikkalasi ham
 `staging` bo'lgan o'rnatmaga "ishlab chiqarish deploy" qilish ham
@@ -198,7 +236,34 @@ shu SHA ga qaytiladi.
 
 ---
 
-## 5–6. Staging deploy va patch
+## 5–9. Staging: bitta buyruq
+
+```powershell
+.\backup_erp.ps1
+.\staging_setup.ps1                        # xtxarid_staging + belgi
+$env:XT_DB_DSN = "<.env.staging dagi DSN>"
+$env:ERP_MUHIT = "staging"
+.\deploy.ps1 -Muhit staging -Patch schema_patch_erp_28.sql
+```
+
+`deploy.ps1` ketma-ketligi (har biri to'xtatuvchi):
+
+```text
+1. muhit darvozasi     check_setup.py --kutilgan staging
+2. kod holati          SHA yoziladi; prod'da iflos daraxt -> to'xtash
+3. zaxira              backup_erp.ps1
+4. sxema patchi        psql -v ON_ERROR_STOP=1
+5. interfeys           npm ci && npm run build
+6. sinov darvozalari   backend + typecheck + vitest
+7. qayta tekshiruv     check_setup.py --kutilgan staging
+```
+
+Keyin HTTP darvozasi (9-qadam) va odam bilan tekshirish (10-qadam)
+— pastda.
+
+---
+
+## 5–6 (qo'lda). Staging deploy va patch
 
 ```powershell
 git checkout erp-28
@@ -300,16 +365,22 @@ bilan brauzerdan:
 ## 11. Production deploy
 
 ```powershell
-# 0) MUHIT DARVOZASI — birinchi qadam va to'xtatuvchi.
-#    `.env` ham, baza ham 'prod' bo'lmasa, bu yerda tugaydi.
-.\.venv\Scripts\python.exe check_setup.py --kutilgan prod
-
-.\backup_erp.ps1                    # ZAXIRA — majburiy
 git checkout erp-28
-cd frontend; npm ci; npm run build; cd ..
-psql "$env:XT_DB_DSN" -v ON_ERROR_STOP=1 -f schema_patch_erp_28.sql
+.\deploy.ps1 -Muhit prod -Patch schema_patch_erp_28.sql
 .\run_erp.ps1 -Prod
 ```
+
+**Ishlab chiqarishda sinovlar yuritilmaydi** va skript buni jim
+o'tkazib yubormaydi — sababini yozadi va shu SHA staging'da
+darvozalardan o'tgan bo'lishini talab qiladi. Sabab: sinovlar
+haqiqiy yozuv yaratadi va `erp.doc_audit` da qaytarib bo'lmaydigan
+iz qoldiradi (`api/muhit.py` qulfi ularni baribir to'sardi).
+
+Ikkita qo'shimcha to'siq faqat `prod` uchun:
+
+* **iflos ish daraxti** — to'xtash (commit qilinmagan o'zgarish
+  bilan deploy qilingan narsani keyin qayta tiklab bo'lmaydi);
+* **`-ZaxirasiZ`** qabul qilinmaydi.
 
 **Tartib muhim:** patch AVVAL, ilova KEYIN. Teskarisi bo'lsa yangi
 kod hali yo'q ustunlarni so'rab 500 beradi.

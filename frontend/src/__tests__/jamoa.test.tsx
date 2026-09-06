@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ErpBroker, Jamoa, MyTask } from '@/types'
 
@@ -26,6 +26,25 @@ if (!Element.prototype.scrollIntoView) {
 if (!('ResizeObserver' in globalThis)) {
   ;(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver =
     class { observe() {} unobserve() {} disconnect() {} }
+}
+
+// POINTER CAPTURE — jsdom da YO'Q, Radix Select esa uni chaqiradi.
+//
+// Usiz sinov "88 ta o'tdi" deb ko'rinadi, lekin vitest oxirida
+// `Errors 1 error` yozadi va NOLINCHI BO'LMAGAN kod qaytaradi:
+// ushlanmagan istisno sinov tugagandan KEYIN otiladi, ya'ni
+// hech bir `it()` ni yiqitmaydi.
+//
+// Buni deploy skripti topdi — men esa `npx vitest run | grep "Tests"`
+// qilib tekshirayotgan edim va o'sha qator "88 passed" deb turardi.
+// Ya'ni SINOV EMAS, MENING TEKSHIRISH USULIM aldagan. Chiqish kodi
+// yagona ishonchli belgi.
+for (const nom of ['hasPointerCapture', 'setPointerCapture',
+                   'releasePointerCapture'] as const) {
+  if (!(nom in Element.prototype)) {
+    ;(Element.prototype as unknown as Record<string, unknown>)[nom] =
+      function stub() { return false }
+  }
 }
 
 const api = {
@@ -326,17 +345,39 @@ describe('Vazifalar: holat va yaratish', () => {
     expect(screen.queryByTestId('vazifa-yangi')).toBeNull()
   })
 
+  it('biriktirish huquqi BOR bo‘lsa hodimlar ro‘yxati chiqadi', async () => {
+    // IJOBIY JUFT. Usiz quyidagi "yo'q" tekshiruvi select UMUMAN
+    // ochilmasa ham o'tardi — ya'ni hech narsani isbotlamasdi.
+    setPerms({ 'hisobot.deadline': 'full', 'vazifa.yaratish': 'full',
+               'vazifa.biriktirish': 'full' })
+    api.myTasks.mockResolvedValue(myTasks([]))
+    render(<MyTasksPage brokers={BROKERS} onOpenOpportunity={vi.fn()} />)
+
+    await userEvent.click(await screen.findByTestId('vazifa-yangi'))
+    fireEvent.keyDown(screen.getByTestId('vazifa-masul'), { key: 'ArrowDown' })
+    expect(await screen.findByText('Aliyev B.')).toBeTruthy()
+    // FAOLSIZ hodim esa ro'yxatda yo'q.
+    expect(screen.queryByText('Eski X.')).toBeNull()
+  })
+
   it('biriktirish huquqi yo‘q bo‘lsa faqat "o‘zimga" tanlanadi', async () => {
     setPerms({ 'hisobot.deadline': 'own', 'vazifa.yaratish': 'own' })
     api.myTasks.mockResolvedValue(myTasks([]))
     render(<MyTasksPage brokers={BROKERS} onOpenOpportunity={vi.fn()} />)
 
     await userEvent.click(await screen.findByTestId('vazifa-yangi'))
-    await userEvent.click(screen.getByTestId('vazifa-masul'))
-    expect(await screen.findByText('O‘zimga')).toBeTruthy()
-    // Boshqa hodimlar ro'yxatda YO'Q — server baribir rad etardi va
-    // tanlov "buzuq" bo'lib ko'rinardi.
+    // RADIX SELECT KLAVIATURA bilan ochiladi: jsdom da `click`
+    // pointer capture zanjiriga tayanadi va ro'yxat ochilmaydi —
+    // sinov esa "topilmadi" deb emas, JIMGINA o'tib ketardi.
+    fireEvent.keyDown(screen.getByTestId('vazifa-masul'),
+                      { key: 'ArrowDown' })
+    // `findAll`: Radix tanlangan qiymatni TUGMADA ham ko'rsatadi,
+    // ya'ni matn ikki joyda uchraydi.
+    expect((await screen.findAllByText('O‘zimga')).length).toBeGreaterThan(0)
+    // ASOSIY TEKSHIRUV: boshqa hodimlar ro'yxatda YO'Q — server
+    // baribir rad etardi va tanlov "buzuq" bo'lib ko'rinardi.
     expect(screen.queryByText('Aliyev B.')).toBeNull()
+    expect(screen.queryByText('Rasulov D.')).toBeNull()
   })
 })
 
