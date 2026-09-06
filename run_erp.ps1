@@ -60,6 +60,24 @@ if ($Stop) {
     return
 }
 
+# --- 0) QAYSI MUHIT VA QAYSI BAZA -------------------------------------------
+# Staging qo'shilgach eng ko'p uchraydigan xato - noto'g'ri .env bilan
+# ishga tushirish. U EKRANDA ko'rinmasa, faqat ma'lumot o'zgargandan
+# keyin sezilardi.
+$envFile = Join-Path $Root '.env'
+$muhit = '(qo''yilmagan)'
+$baza = '(noma''lum)'
+if (Test-Path $envFile) {
+    foreach ($line in Get-Content $envFile) {
+        if ($line -match '^\s*ERP_MUHIT\s*=\s*(.+)$') { $muhit = $Matches[1].Trim() }
+        if ($line -match '^\s*XT_DB_DSN\s*=.*dbname=(\S+)') { $baza = $Matches[1] }
+    }
+}
+Write-Host "[i] muhit: $muhit   baza: $baza"
+if ($muhit -eq '(qo''yilmagan)') {
+    Write-Warning ".env da ERP_MUHIT yo'q - sinovlar ishlab chiqarish bazasidan to'silmaydi."
+}
+
 # --- 0a) XAVFSIZLIK QULFI ----------------------------------------------------
 # `AUTH_COOKIE_SECURE=0` - IShLAB CHIQISH uchun qulaylik. Yuqoridagi izoh
 # uni tarmoqqa chiqishda 0 qilishni TAVSIYA qiladi, va aynan shu yo'l

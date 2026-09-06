@@ -605,6 +605,26 @@ def main() -> int:
         except Exception as _e:                     # noqa: BLE001
             say(WARN, f"navbat holatini o'qib bo'lmadi: {_e}")
 
+        # 1b0) QAYSI MUHIT. Bu birinchi savol: quyidagi hamma
+        # tekshiruv MA'LUM bir bazaga tegishli va u qaysi ekani
+        # ko'rinmasa, natija ham ma'nosiz.
+        #
+        # `ERP_MUHIT` shunchaki yorliq emas — `api/muhit.py` qulfi
+        # shunga qaraydi va `prod` bo'lsa sinovlarni umuman ishga
+        # tushirmaydi.
+        try:
+            from api import muhit as _muhit
+            _nom = _muhit.nomi()
+            if _nom is None:
+                say(WARN, f"ERP_MUHIT qo'yilmagan (baza: "
+                    f"{_muhit.baza_nomi() or '—'})",
+                    "ishlab chiqarish qulfi ISHLAMAYDI: .env ga "
+                    "ERP_MUHIT=prod / staging / dev yozing")
+            else:
+                say(OK, f"muhit: {_muhit.tavsif()}")
+        except Exception as _e:                     # noqa: BLE001
+            say(WARN, f"muhit nomi o'qilmadi: {_e}")
+
         # 1c) 28-PATCH INVARIANTLARI — faqat O'QIYDI.
         #
         # NEGA KERAK: patch qo'llangani (yuqorida) obyekt BORLIGINI

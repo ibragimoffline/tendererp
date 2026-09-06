@@ -30,10 +30,20 @@ class DBUnavailable(RuntimeError):
 
 
 def init_pool() -> None:
-    """Pool'ni yaratadi. main.py lifespan startup'da chaqiriladi."""
+    """Pool'ni yaratadi. main.py lifespan startup'da chaqiriladi.
+
+    MUHIT QULFI shu yerda (`api/muhit.py`): ishlab chiqarish
+    bazasiga SINOV ulanmoqchi bo'lsa, ulanish RAD etiladi.
+
+    Nega aynan bu yerda: har sinov faylida qo'lda chaqirish kerak
+    bo'lsa, qulf ertami-kechmi unutilardi — va aynan unutilgan
+    faylda ishlab chiqarish bazasiga yozilardi. Bu yerda esa
+    HALI YOZILMAGAN sinov ham qulfni avtomatik oladi."""
     global _pool
     if _pool is not None:
         return
+    from api import muhit
+    muhit.qulf_tekshir()
     dsn = os.environ.get("XT_DB_DSN")
     if not dsn:
         raise RuntimeError(
