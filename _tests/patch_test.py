@@ -30,9 +30,13 @@ BU SINOV BAZAGA TEGMAYDI: u `.sql` FAYLLARINI o'qiydi va `check_setup`
 ro'yxatlari bilan solishtiradi. Ya'ni bo'sh o'rnatmada ham ishlaydi va
 yangi patch qo'shilganda darhol ogohlantiradi.
 """
+import io
 import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -167,10 +171,67 @@ def test_ozini_tekshirish():
           "izohdagi nomlar obyekt deb sanalmaydi")
 
 
+def test_yurgizuvchi_royxati():
+    head("4. Migratsiya yurgizuvchisi QAYSI fayllarni oladi")
+
+    # SKRIPT O'QILMAYDI, YURGIZILADI. Naqshni matn sifatida tekshirish
+    # aynan o'sha nuqsonni o'tkazib yuborardi: `-name
+    # 'schema_patch_erp_*.sql'` KO'ZGA to'g'ri ko'rinadi va faqat
+    # `sed`/`sort`/`cut` bilan BIRGA ishlaganda yolg'on beradi.
+    #
+    # O'LCHANGAN NUQSON (2026-09-07): `schema_patch_erp_28_rollback.sql`
+    # migratsiya deb olinardi va raqamsiz kalit tufayli 1-patchdan ham
+    # OLDIN qo'llanardi — ya'ni orqaga qaytarish skripti oldinga
+    # joylashtirishning BIRINCHI qadami edi.
+    if shutil.which("bash") is None:                 # pragma: no cover
+        check(True, "bash yo'q — tekshirilmadi (Windows)")
+        return
+
+    with tempfile.TemporaryDirectory() as tmp:
+        os.makedirs(os.path.join(tmp, "deploy", "bin"))
+        shutil.copy(os.path.join(ROOT, "deploy", "bin", "migratsiya.sh"),
+                    os.path.join(tmp, "deploy", "bin", "migratsiya.sh"))
+
+        # ALIFBO va RAQAM ataylab ZID: alifboda `_10` `_2` dan oldin.
+        # Yonida esa migratsiya BO'LMAGAN uchta fayl.
+        for nom in ("schema_patch_erp_1.sql", "schema_patch_erp_2.sql",
+                    "schema_patch_erp_10.sql", "schema_patch_erp_28.sql",
+                    "schema_patch_erp_28_rollback.sql",
+                    "schema_patch_erp_28_qoralama.sql",
+                    "schema_patch_erp_qoshimcha.sql"):
+            io.open(os.path.join(tmp, nom), "w", encoding="utf-8").write("-- bo'sh\n")
+
+        natija = subprocess.run(
+            ["bash", os.path.join(tmp, "deploy", "bin", "migratsiya.sh"), "--royxat"],
+            capture_output=True, text=True)
+
+        check(natija.returncode == 0,
+              "`--royxat` bazasiz ishlaydi",
+              f"chiqish kodi {natija.returncode}: {natija.stderr.strip()[:200]}")
+
+        olingan = [q for q in natija.stdout.split() if q]
+        kutilgan = ["schema_patch_erp_1.sql", "schema_patch_erp_2.sql",
+                    "schema_patch_erp_10.sql", "schema_patch_erp_28.sql"]
+        check(olingan == kutilgan,
+              "faqat raqamli patchlar, RAQAM tartibida",
+              f"olingan: {olingan}")
+
+        # Alohida aytiladi: xabar "ro'yxat mos emas" emas, AYNAN
+        # qaysi fayl kirib qolgani bo'lsin.
+        for yot in ("schema_patch_erp_28_rollback.sql",
+                    "schema_patch_erp_28_qoralama.sql",
+                    "schema_patch_erp_qoshimcha.sql"):
+            check(yot not in olingan,
+                  f"`{yot}` migratsiya deb OLINMAYDI",
+                  "raqamsiz fayl ro'yxatga tushdi — u `sort -n` da NOL "
+                  "kalit bo'lib BIRINCHI qo'llanadi")
+
+
 if __name__ == "__main__":
     test_royxatlar()
     test_qamrov()
     test_ozini_tekshirish()
+    test_yurgizuvchi_royxati()
     print("\n" + "=" * 50)
     print(f"NATIJA: {_pass} ta o'tdi, {_fail} ta xato")
     sys.exit(1 if _fail else 0)

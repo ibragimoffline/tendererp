@@ -3,6 +3,7 @@
 # Tender ERP — sxema patchlarini QO'LLASH
 # =============================================================================
 #     migratsiya.sh --holat            # nima qo'llangan, nima yo'q
+#     migratsiya.sh --royxat           # QAYSI fayllar, QAYSI tartibda (bazasiz)
 #     migratsiya.sh --qolla            # qo'llash
 #     migratsiya.sh --qolla --dsn "dbname=... user=... "
 #
@@ -48,11 +49,46 @@ DSN=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --holat|--qolla) AMAL="$1"; shift ;;
+        --holat|--qolla|--royxat) AMAL="$1"; shift ;;
         --dsn)           DSN="${2:?--dsn qiymatsiz}"; shift 2 ;;
         *) echo "Noma'lum argument: $1" >&2; exit 2 ;;
     esac
 done
+
+# --- Fayllar RAQAM bo'yicha (yuqoridagi 1-sabab) -----------------------------
+# NAQSH `find` NING O'ZIDA RAQAMGA QOTIRILGAN va bu ATAYLAB.
+#
+# O'LCHANGAN NUQSON (2026-09-07, 28-patch bilan birga kelgan
+# `schema_patch_erp_28_rollback.sql`): `-name 'schema_patch_erp_*.sql'`
+# uni ham OLARDI. Keyingi `sed` unga mos kelmagani uchun qatorda
+# BO'SHLIQ qolmasdi, `sort -n` esa raqamsiz kalitni NOL deb hisoblardi
+# va `cut -d' ' -f2` ajratgich yo'q qatorni O'ZGARTIRMASDAN qaytarardi.
+#
+# Ya'ni ORQAGA QAYTARISH skripti migratsiya bo'lib, BIRINCHI o'rinda —
+# 1-patchdan ham oldin — qo'llanardi. Bo'sh bazada u shovqinsiz o'tardi
+# (`DROP ... IF EXISTS`) va jurnalga "qo'llandi" deb yozilardi; 28-patch
+# allaqachon turgan bazada esa TIRIK triggerni tashlab yuborardi.
+#
+# Muammo faylning nomida emas, KASHFIYOTDA edi: migratsiya — FAQAT
+# `schema_patch_erp_<raqam>.sql`. Qolgan hamma narsa (rollback, qoralama,
+# nusxa) yonida tursa ham migratsiya EMAS.
+mapfile -t FAYLLAR < <(
+    find "$BU" -maxdepth 1 -regextype posix-extended \
+         -regex '.*/schema_patch_erp_[0-9]+\.sql' -printf '%f\n' \
+    | sed -E 's/^schema_patch_erp_([0-9]+)\.sql$/\1 &/' \
+    | sort -n -k1,1 \
+    | cut -d' ' -f2
+)
+[ "${#FAYLLAR[@]}" -gt 0 ] || { echo "XATO: patch fayli topilmadi: $BU" >&2; exit 1; }
+
+# --- `--royxat`: KASHFIYOT NATIJASI, BAZASIZ ---------------------------------
+# Tartib va ro'yxatning O'ZI shu skriptning eng jim qismi edi: u faqat
+# baza bor bo'lgandagina ko'rinardi. `--royxat` uni bazasiz ko'rsatadi,
+# ya'ni `_tests/patch_test.py` skriptni O'QIMASDAN, YURGIZIB tekshiradi.
+if [ "$AMAL" = "--royxat" ]; then
+    printf '%s\n' "${FAYLLAR[@]}"
+    exit 0
+fi
 
 DSN="${DSN:-${XT_DB_DSN_OWNER:-${XT_DB_DSN:-}}}"
 [ -n "$DSN" ] || { echo "XATO: DSN yo'q (--dsn yoki XT_DB_DSN_OWNER)" >&2; exit 2; }
@@ -74,15 +110,6 @@ CREATE TABLE IF NOT EXISTS erp.schema_migration (
 COMMENT ON TABLE erp.schema_migration IS
     'Qaysi schema_patch_erp_*.sql qo''llangani. deploy/bin/migratsiya.sh yuritadi.';
 SQL
-
-# --- Fayllar RAQAM bo'yicha (yuqoridagi 1-sabab) -----------------------------
-mapfile -t FAYLLAR < <(
-    find "$BU" -maxdepth 1 -name 'schema_patch_erp_*.sql' -printf '%f\n' \
-    | sed -E 's/^schema_patch_erp_([0-9]+)\.sql$/\1 &/' \
-    | sort -n -k1,1 \
-    | cut -d' ' -f2
-)
-[ "${#FAYLLAR[@]}" -gt 0 ] || { echo "XATO: patch fayli topilmadi: $BU" >&2; exit 1; }
 
 KUTILMOQDA=()
 for F in "${FAYLLAR[@]}"; do
