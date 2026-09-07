@@ -14,6 +14,9 @@ logs/
 # TypeScript build keshi - qurilish natijasi, kod emas
 *.tsbuildinfo
 
+# Muhit fayllari — SIR. Faqat namuna kuzatiladi.
+deploy/env/*.env
+
 # Agent vositalarining sozlamalari - kod emas, mashinaga xos
 .claude/
 .agents/

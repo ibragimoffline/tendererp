@@ -1,6 +1,6 @@
 # HUJJATLAR XARITASI
 
-Bu papkada 18 ta hujjat bosqichma-bosqich yozilgan: har biri o'z paytida qabul
+Bu papkada 19 ta hujjat bosqichma-bosqich yozilgan: har biri o'z paytida qabul
 qilingan qarorni va **nega shunday qilingani** saqlaydi. Bu fayl — ularga
 kirish: nima qayerda va qaysi savolga javob qayerdan topiladi.
 
@@ -51,6 +51,13 @@ Undan kelib chiqqan ishlar shu papkada yozilgan:
 | `erp_integratsiya_6.md` | **Shartnoma-view'lar**: ERP dan Tender-AI ga ochilgan to'rt view, maxfiylik chegarasi, shaklni qulflash |
 | `erp_integratsiya_7.md` | **Yo'naltirish oqimi**: "Olindi" qarori ish kartasiga aylanadi (HTTP'siz, `pg_notify` + view), operator xaritasi, tahlil snapshoti |
 | `../INTEGRATSIYA.md` | Tender-AI tomonida **nima o'zgargani** — o'sha loyihaga o'tkaziladigan ro'yxat |
+
+### Ishga tushirish
+
+| Fayl | Nima haqida |
+|---|---|
+| `erp_ishga_tushirish.md` | Bo'sh bazadan real ishgacha — ishlab chiqish mashinasida (Windows) |
+| `deploy_linux.md` | **SERVER**: systemd, reliz kataloglari, staging darvozasi, orqaga qaytish |
 
 ### Modullar
 
