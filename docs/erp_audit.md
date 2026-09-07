@@ -138,7 +138,7 @@ Shartnoma va ombor bu yerga kirmaydi: birinchisi pul hujjati emas
 | `GET /erp/audit` | Oxirgi o'zgarishlar + yig'ma javob. Filtrlar: `days`, `doc_type`, `only_frozen`, `only_outside` |
 | `GET /erp/audit/{doc_type}/{doc_id}` | Bitta hujjatning butun tarixi |
 
-Ikkalasi ham **`manager`** huquqini talab qiladi: jurnalda pul
+Ikkalasi ham **`menejer`** (va undan yuqori) huquqini talab qiladi: jurnalda pul
 hujjatlarining ichki tarixi bor.
 
 Javobdagi `clean` — "shubhali o'zgarish yo'q". U ataylab bor: bo'sh

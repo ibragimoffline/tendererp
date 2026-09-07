@@ -10,7 +10,7 @@ import {
 import Icon from '../Icon'
 import { cn } from '@/lib/utils'
 import type { StockBalance, StockList, StockProduct } from '@/types'
-import { ErpError } from './erpShared'
+import { ErpError, can } from './erpShared'
 
 // OMBOR (5B-1) — qoldiqning egasi ERP.
 //
@@ -111,29 +111,36 @@ export default function StockPage() {
             qolgan
           </div>
           <p className="mb-2 text-caption">
-            Ularni bir marta "boshlang'ich qoldiq" sifatida ko'chirib olish
-            kerak. Shundan keyin qoldiqning yagona manbai — shu jurnal.
+            Bir marta ko'chirib oling — shundan keyin qoldiq shu jurnaldan
+            hisoblanadi.
           </p>
-          <Button size="sm" disabled={busy}
-            onClick={() => run(api.seedOpening, 'Boshlang\'ich qoldiqlar ko\'chirildi')}>
-            Import qoldiqlarini ko'chirish
-          </Button>
+          {can('ombor.harakat') && (
+            <Button size="sm" disabled={busy}
+              onClick={() => run(api.seedOpening, 'Boshlang\'ich qoldiqlar ko\'chirildi')}>
+              Import qoldiqlarini ko'chirish
+            </Button>
+          )}
         </div>
       )}
 
       <section className="rounded-lg border bg-card p-4">
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <h2 className="text-body font-semibold">
-            Qoldiqlar {data ? `(${data.items.length})` : ''}
+            {/* Son FILTRLANGAN ro'yxatniki: qidiruvda "Qoldiqlar (1800)"
+                deb turgan sarlavha 3 ta qator ustida yolg'on gapiradi.
+                Filtr yoqilganda umumiy son ham ko'rsatiladi. */}
+            Qoldiqlar {data
+              ? (q.trim()
+                ? `(${items.length} / ${data.items.length})`
+                : `(${data.items.length})`)
+              : ''}
           </h2>
           <Input className="ml-auto max-w-56" placeholder="Mahsulot nomi"
             value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
 
         <p className="mb-3 text-caption text-muted-foreground">
-          Qoldiq alohida saqlanmaydi — u harakatlar yig'indisi. Qatorni
-          bosing: kim, qachon va nima uchun o'zgartirgani ko'rinadi.
-          Mahsulot katalogi Tender-AI da.
+          Qoldiq — harakatlar yig'indisi. Katalog Tender-AI da.
         </p>
 
         {items.length === 0 ? (
@@ -182,6 +189,15 @@ export default function StockPage() {
                 {openId === r.product_id && (
                   <div className="mb-2 rounded-md border bg-background p-3">
                     {/* --- yangi harakat --- */}
+                    {/* Kirim va chiqim — rahbar-menejer ishi
+                        (`ombor.harakat`). Brokerga qoldiq KO'RINADI:
+                        u tenderga nima yetishini bilishi kerak, lekin
+                        jurnalga yozmaydi. */}
+                    {!can('ombor.harakat') ? (
+                      <div className="text-caption text-muted-foreground">
+                        Ombor harakatini rahbar yoki menejer yozadi.
+                      </div>
+                    ) : (<>
                     <div className="grid gap-2 sm:grid-cols-4">
                       <div>
                         <div className="mb-1 text-caption font-semibold text-muted-foreground">
@@ -230,6 +246,7 @@ export default function StockPage() {
                         </span>
                       )}
                     </div>
+                    </>)}
 
                     {/* --- tarix --- */}
                     <div className="mt-3 border-t pt-2">
@@ -279,17 +296,15 @@ export default function StockPage() {
 
         {data && data.over_reserved.length > 0 && (
           <div className="mt-3 rounded-md border border-soon/40 bg-soon-soft px-3 py-2 text-caption text-soon-strong">
-            {data.over_reserved.length} ta mahsulot butunlay band: jismonan
-            omborda bor, lekin hammasi kartalarga ajratilgan. Yangi kartaga
-            ajratish uchun avval kirim qiling yoki eski rezervni bo'shating.
+            {data.over_reserved.length} ta mahsulot butunlay band. Ajratish
+            uchun kirim qiling yoki rezervni bo'shating.
           </div>
         )}
 
         {data && data.negative.length > 0 && (
           <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-caption text-destructive">
             {data.negative.length} ta mahsulotning qoldig'i manfiy — kirim
-            hujjati kiritilmagan bo'lishi mumkin. Bu taqiqlanmaydi, lekin
-            tekshirib chiqing.
+            hujjati kiritilmagan bo'lishi mumkin. Tekshiring.
           </div>
         )}
       </section>

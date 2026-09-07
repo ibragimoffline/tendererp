@@ -8,7 +8,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import Icon from '../Icon'
-import type { AuthUser, LoginAttempt, StaffRow } from '@/types'
+import type { AuthUser, LoginAttempt, Setting, StaffRow, TopshiriqHolat } from '@/types'
 import { ErpError } from './erpShared'
 
 // HODIMLAR — faqat administrator uchun.
@@ -24,9 +24,18 @@ import { ErpError } from './erpShared'
 // Hodimga bog'lanmagan hisoblar (masalan `admin`) pastda alohida: ular
 // hech qaysi qatorga tushmaydi va ko'zdan yo'qolmasligi kerak.
 
-const ROLE_LABEL: Record<string, string> = {
-  admin: 'Administrator', manager: 'Rahbar', broker: 'Broker',
-}
+// ROLLAR SERVERDAN keladi (`GET /erp/auth/roles`). Ro'yxatni bu yerda
+// takrorlash uchinchi nusxa bo'lardi (baza CHECK, `api/auth.py` ROLES va
+// shu fayl) — rol qo'shilganda ekranda jimgina eskisi qolardi.
+//
+// Zaxira ro'yxat FAQAT so'rov yiqilganda ishlaydi: usiz rol yorlig'i
+// o'rnida kod ko'rinardi ("menejer" emas, `menejer`).
+const ROLE_FALLBACK: Array<{ code: string; label: string }> = [
+  { code: 'admin', label: 'Administrator' },
+  { code: 'rahbar', label: 'Rahbar' },
+  { code: 'menejer', label: 'Menejer' },
+  { code: 'broker', label: 'Broker' },
+]
 
 type Draft = {
   full_name: string
@@ -54,6 +63,7 @@ export default function StaffPage() {
   const [draft, setDraft] = useState<Draft>({ full_name: '', email: '', phone: '', active: true })
   const [accFor, setAccFor] = useState<number | null>(null)
   const [acc, setAcc] = useState<AccDraft>({ username: '', password: '', role: 'broker' })
+  const [roles, setRoles] = useState(ROLE_FALLBACK)
   const [pwdFor, setPwdFor] = useState<number | null>(null)
   const [pwd, setPwd] = useState('')
   const [newName, setNewName] = useState('')
@@ -65,6 +75,15 @@ export default function StaffPage() {
   }
 
   useEffect(load, [])
+
+  // Rol lug'ati bir marta: u ish davomida o'zgarmaydi.
+  useEffect(() => {
+    api.roles().then((r) => { if (r.roles?.length) setRoles(r.roles) })
+      .catch(() => { /* zaxira ro'yxat qoladi */ })
+  }, [])
+
+  const roleLabel = (code: string) =>
+    roles.find((r) => r.code === code)?.label || code
 
   /** Har amaldan keyin ro'yxat QAYTA o'qiladi: hisob ochilganda hodim
    *  qatori ham, "bog'lanmagan hisoblar" ro'yxati ham o'zgaradi. */
@@ -112,8 +131,8 @@ export default function StaffPage() {
           Hodimlar {rows ? `(${rows.length})` : ''}
         </h2>
         <p className="mb-3 text-caption text-muted-foreground">
-          Hodim — kartaga mas'ul va tarixdagi ism. Hisob — tizimga kirish.
-          Hodim hisobsiz ham bo'lishi mumkin (masalan omborchi).
+          Hodim — kartaga mas'ul. Hisob — tizimga kirish. Hodim hisobsiz ham
+          bo'ladi.
         </p>
 
         {rows && rows.length === 0 && (
@@ -133,7 +152,7 @@ export default function StaffPage() {
                 {s.user ? (
                   <>
                     <span className="rounded bg-secondary px-1.5 py-px text-micro font-semibold text-primary">
-                      {ROLE_LABEL[s.user.role] || s.user.role}
+                      {roleLabel(s.user.role)}
                     </span>
                     <span className="text-caption text-muted-foreground">
                       {s.user.username}
@@ -174,8 +193,8 @@ export default function StaffPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(ROLE_LABEL).map(([code, label]) => (
-                        <SelectItem key={code} value={code}>{label}</SelectItem>
+                      {roles.map((r) => (
+                        <SelectItem key={r.code} value={r.code}>{r.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -254,16 +273,15 @@ export default function StaffPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {Object.entries(ROLE_LABEL).map(([code, label]) => (
-                            <SelectItem key={code} value={code}>{label}</SelectItem>
+                          {roles.map((r) => (
+                            <SelectItem key={r.code} value={r.code}>{r.label}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
                   <p className="mt-2 text-micro text-muted-foreground">
-                    Parol shu yerda BIR MARTA ko'rsatiladi — uni hodimga
-                    o'zingiz yetkazasiz. Bazada faqat xeshi saqlanadi.
+                    Parol bir marta ko'rsatiladi — hodimga o'zingiz yetkazasiz.
                   </p>
                   <div className="mt-2 flex gap-2">
                     <Button size="sm"
@@ -301,9 +319,8 @@ export default function StaffPage() {
                     {s.user.username} uchun yangi parol
                   </div>
                   <p className="mb-2 text-micro text-muted-foreground">
-                    Joriy parol so'ralmaydi, lekin bu hisobning
-                    <b> hamma sessiyasi yopiladi</b> — u qaytadan kirishi
-                    kerak bo'ladi.
+                    Joriy parol so'ralmaydi. Hisobning
+                    <b> hamma sessiyasi yopiladi</b>.
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
                     <Input type="password" autoComplete="new-password"
@@ -360,9 +377,7 @@ export default function StaffPage() {
             Hodimga bog'lanmagan hisoblar ({unlinked.length})
           </h2>
           <p className="mb-3 text-caption text-muted-foreground">
-            Odatda bu tizim administratori — u tenderlar bilan ishlamaydi.
-            Bunday hisob kartaga mas'ul bo'lolmaydi va "mening ishlarim"
-            filtriga tushmaydi.
+            Bunday hisob kartaga mas'ul bo'lolmaydi.
           </p>
           <ul className="divide-y">
             {unlinked.map((u) => (
@@ -383,9 +398,185 @@ export default function StaffPage() {
           </ul>
         </section>
       )}
+      {/* --- Tender-AI ulanishi --- */}
+      <TaiUlanish />
+      {/* --- tizim sozlamalari --- */}
+      <SettingsPanel />
       {/* --- kirish urinishlari --- */}
       <LoginAttempts />
     </div>
+  )
+}
+
+// TENDER-AI ULANISHI — yo'naltirish oqimi ishlaydimi.
+//
+// NEGA SHU EKRANDA: xarita ("biz qaysi ijarachimiz") — hodimlar
+// bilan bitta savolning davomi: Tender-AI dagi aktor ERP hodimiga
+// bog'lanadi. Va ikkalasi ham administrator ishi.
+//
+// SOZLANMAGAN HOLAT KO'RINIB TURADI. Ilgari buni faqat `curl` yoki
+// `check_setup.py` bilan bilish mumkin edi; endi "nega hech narsa
+// kelmayapti" degan savol shu paneldan javob oladi.
+function TaiUlanish() {
+  const [h, setH] = useState<TopshiriqHolat | null>(null)
+  const [qiymat, setQiymat] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [xabar, setXabar] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  function load() {
+    api.topshiriqHolat()
+      .then((r) => { setH(r); setQiymat(r.tai_company_id ? String(r.tai_company_id) : '') })
+      .catch((e: Error) => setError(e.message))
+  }
+
+  useEffect(load, [])
+
+  async function run(fn: () => Promise<unknown>, ok: string) {
+    setBusy(true); setError(null); setXabar(null)
+    try {
+      await fn()
+      setXabar(ok)
+      load()
+    } catch (e) {
+      setError((e as Error).message.replace(/^\d+:\s*/, ''))
+    } finally { setBusy(false) }
+  }
+
+  if (!h) return null
+
+  return (
+    <section className="rounded-lg border bg-card p-4">
+      <h2 className="mb-1 text-body font-semibold">Tender-AI ulanishi</h2>
+      <p className="mb-3 text-caption text-muted-foreground">
+        Tender-AI da "Olindi" deyilgan tender shu yerda kartaga aylanadi.
+        Ijarachi ko'rsatilmasa oqim ishlamaydi.
+      </p>
+      {error && <ErpError msg={error} />}
+      {xabar && (
+        <div className="mb-2 rounded-md border border-ok/40 bg-ok-soft px-3 py-2 text-caption text-ok-strong">
+          {xabar}
+        </div>
+      )}
+
+      {/* Sozlanmagan yoki buzuq holat — OCHIQ aytiladi */}
+      {h.sabab && (
+        <div className="mb-2 rounded-md border border-soon/40 bg-soon-soft px-3 py-2 text-caption text-soon-strong">
+          {h.sabab}
+        </div>
+      )}
+      {h.oxirgi_xato && (
+        <div className="mb-2 text-caption text-destructive">
+          Oxirgi xato: {h.oxirgi_xato}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-end gap-2">
+        <div>
+          <div className="mb-1 text-caption font-semibold text-muted-foreground">
+            Tender-AI ijarachisi (company_account.id)
+          </div>
+          <Input className="max-w-40" inputMode="numeric" value={qiymat}
+            onChange={(e) => setQiymat(e.target.value)} />
+        </div>
+        <Button size="sm" disabled={busy}
+          onClick={() => run(
+            () => api.setTaiXarita(qiymat.trim() ? Number(qiymat) : null),
+            qiymat.trim() ? 'Xarita saqlandi' : 'Xarita olib tashlandi')}>
+          Saqlash
+        </Button>
+        <Button size="sm" variant="outline" disabled={busy || !h.tai_company_id}
+          onClick={() => run(api.topshiriqSync, 'Sinxronlandi')}>
+          Hozir sinxronlash
+        </Button>
+      </div>
+
+      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-caption text-muted-foreground">
+        <li>Tinglovchi: {h.tinglovchi ? 'ishlayapti' : 'ishlamayapti'}</li>
+        <li>Zaxira so'rov: {h.oraliq} soniyada</li>
+        {h.kutayotgan !== undefined && <li>Kutmoqda: {h.kutayotgan}</li>}
+        {h.kartalar !== undefined && <li>Yo'naltirilgan kartalar: {h.kartalar}</li>}
+      </ul>
+    </section>
+  )
+}
+
+// TIZIM SOZLAMALARI — huquqning kompaniyaga bog'liq qismi.
+//
+// NEGA SHU EKRANDA: sozlamalar HUQUQNI o'zgartiradi ("broker kartani
+// o'zi yakunlaydimi"), ya'ni ular hodimlar va rollar bilan bitta
+// savolning ikki tomoni. Alohida "Sozlamalar" bo'limi ochish esa
+// bitta sahifalik ro'yxat uchun ortiqcha bo'lardi.
+//
+// Ro'yxat, standart qiymatlar va IZOHLAR serverdan keladi
+// (`api/erp/sozlama.py`): ekran ikkinchi nusxa tutmaydi.
+function SettingsPanel() {
+  const f = useFormat()
+  const [rows, setRows] = useState<Setting[] | null>(null)
+  const [ready, setReady] = useState(true)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  function load() {
+    api.settings()
+      .then((r) => { setRows(r.settings); setReady(r.ready) })
+      .catch((e: Error) => { setError(e.message); setRows([]) })
+  }
+
+  useEffect(load, [])
+
+  async function toggle(x: Setting) {
+    setBusy(x.key); setError(null)
+    try {
+      await api.setSetting(x.key, !x.value)
+      load()
+    } catch (e) {
+      setError((e as Error).message.replace(/^\d+:\s*/, ''))
+    } finally { setBusy(null) }
+  }
+
+  if (!rows) return null
+
+  return (
+    <section className="rounded-lg border bg-card p-4">
+      <h2 className="mb-1 text-body font-semibold">Tizim sozlamalari</h2>
+      <p className="mb-3 text-caption text-muted-foreground">
+        Huquqni o'zgartiradi, darhol kuchga kiradi. Kim o'zgartirgani
+        yoziladi.
+      </p>
+      {error && <ErpError msg={error} />}
+      {!ready && (
+        <div className="text-body text-muted-foreground">
+          Sozlamalar standart qiymatda (schema_patch_erp_18.sql qo'llanmagan).
+        </div>
+      )}
+      <ul className="divide-y">
+        {rows.map((x) => (
+          <li key={x.key} className="py-3">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <label className="flex cursor-pointer items-center gap-2 text-body font-medium">
+                <input type="checkbox" checked={x.value} disabled={!!busy}
+                  onChange={() => toggle(x)} />
+                {x.label}
+              </label>
+              {!x.changed && (
+                <span className="rounded bg-secondary px-1.5 py-px text-micro
+                                 font-semibold text-muted-foreground">
+                  standart
+                </span>
+              )}
+              {x.changed && x.updated_by && (
+                <span className="ml-auto text-caption text-muted-foreground">
+                  {x.updated_by}
+                  {x.updated_at ? ` · ${f.dateFmt(x.updated_at)}` : ''}
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-caption text-muted-foreground">{x.help}</p>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 
@@ -417,8 +608,8 @@ function LoginAttempts() {
         Muvaffaqiyatsiz kirish urinishlari ({rows.length})
       </h2>
       <p className="mb-3 text-caption text-muted-foreground">
-        Oxirgi 3 kun. Bitta login va manzil uchun ketma-ket bir necha xatodan
-        keyin kirish vaqtincha to'xtatiladi — hisobning o'zi bloklanmaydi.
+        Oxirgi 3 kun. Ketma-ket xatolardan keyin kirish vaqtincha
+        to'xtatiladi — hisob bloklanmaydi.
         {unknown > 0 && (
           <>
             {' '}

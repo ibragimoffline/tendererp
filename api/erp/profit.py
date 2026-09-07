@@ -36,7 +36,7 @@ yo'q yig'indidan yomonroq. Bu — loyihadagi umumiy qoida (narx va
 ball aralashtirilmaydi, `erp_arxitektura.md`).
 
 RAHBAR KO'RINISHI: pul haqidagi umumiy ko'rsatkich har kimga emas —
-endpointlar `manager` huquqini talab qiladi.
+endpointlar `menejer` (va undan yuqori) huquqini talab qiladi.
 """
 from __future__ import annotations
 

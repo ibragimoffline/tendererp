@@ -188,7 +188,7 @@ o'zinikini tekshiradi.
   (`/auth/login|logout|me`, `/auth/account` GET+PUT, `/auth/password`),
   `create_company.py` CLI.
 - **ERP** — HODIM hisoblari (`erp.app_user`, FK `erp.broker` ga), rollar
-  `broker < manager < admin`, `create_user.py` CLI.
+  `broker < menejer < rahbar < admin`, `create_user.py` CLI.
 
 Sabab: odam — ERP ning tushunchasi, kompaniya esa tender-ai niki.
 Auth-1 da teskarisi qilingan edi va tuzatildi (`docs/erp_auth.md` 1-bo'lim);
@@ -309,9 +309,55 @@ Qarorlar va sabablari: `docs/erp_auth.md` 11-bo'lim.
 
 ---
 
+## 14. SHARTNOMA-VIEW'LAR — ERP dan o'qiladigan yuza
+
+`schema_patch_erp_19.sql` (ERP tomonida) to'rt view chop etadi va
+`tai_app` ga faqat ularga `SELECT` beradi:
+
+| View | Nima beradi |
+|---|---|
+| `erp.v_tender_status` | karta holati + `assignee_full_name` (YANGI ustun, oxirida) |
+| `erp.v_tai_actor` | ERP hodimlari: `erp_user_id, full_name, rol, faol, erp_broker_id` |
+| `erp.v_stock` | ombor qoldig'i (`v_stock_balance` ning shartnoma yuzasi) |
+| `erp.v_client_document` | mijoz hujjatlari cheklist uchun (`expired` hisoblangan) |
+
+Tender-AI tomonida bajariladigan ish: `actor` xaritasini
+`v_tai_actor` dan to'ldirish, cheklistni `v_client_document` ga
+o'tkazish (hozir ERP ularni HTTP orqali yuboradi — ro'yxat AYNAN bir
+xil), `aktor_majburiy` ni xaritadan KEYIN yoqish.
+
+Ustun faqat OXIRIGA qo'shiladi; shakl ERP sinovida qulflangan
+(`_tests/erp15_test.py`). Batafsil: `docs/erp_integratsiya_6.md`.
+
+---
+
+## 15. YO'NALTIRISH OQIMI — "Olindi" ERP kartasiga aylanadi
+
+Tender-AI tomonida (batafsil: `docs/erp_integratsiya_7.md`):
+
+| Nima | Fayl |
+|---|---|
+| `tender_topshiriq` jadvali + `v_erp_topshiriq` view + `pg_notify` triggeri | `schema_patch_topshiriq.sql` (yangi) |
+| Tahlil SNAPSHOTINI yig'ish va topshiriq yozish/bekor qilish | `api/topshiriq.py` (yangi, ~330 qator) |
+| `POST /routing/{id}/decision` — tanaga `hodim_actor_id`, `ustuvorlik`, `muddat`; javobga `topshiriq` | `api/main.py` |
+| `GET /routing/{id}/topshiriq` | `api/main.py` |
+| Navbatda hodim/ustuvorlik/muddat tanlash va ERP natijasini ko'rsatish | `frontend/src/components/BrokerQueue.tsx`, `api.ts`, `locales/*.ts` |
+| Sinov (37 tekshiruv): chegara, izolyatsiya, tahlil, takrorlanmaslik, `pg_notify` | `_tests/topshiriq_test.py` (yangi) |
+
+ERP tomonida: `schema_patch_erp_21.sql`, `api/erp/topshiriq.py`
+(`LISTEN` + zaxira so'rov), `PUT /erp/topshiriq/xarita`,
+`POST /erp/topshiriq/sync`.
+
+**Chegara buzilmadi:** Tender-AI `erp.*` ga yozmaydi (faqat 4 ta
+shartnoma-view ni o'qiydi), ERP `public.*` ga yozmaydi (faqat
+`v_erp_topshiriq` va `tender` ni o'qiydi).
+
+---
+
 ## Nima QILINMAYDI (tender-ai tomonida)
 
-- ERP jadvallariga murojaat yo'q — na `api/`, na SQL, na migratsiya.
+- ERP JADVALLARIGA murojaat yo'q — na `api/`, na SQL, na migratsiya.
+  O'qiladigan yagona narsa — 14-bo'limdagi shartnoma-view'lar.
 - ERP status ro'yxati, formasi, sahifasi yo'q.
 - `api/erp/` paketi yo'q (ajratishda o'chirildi).
 - `components/erp/` yo'q; `types.ts` va `api.ts` da ERP turlari yo'q.

@@ -195,6 +195,8 @@ JOIN erp.opportunity o ON o.id = r.opportunity_id
 WHERE (%(opportunity_id)s::int IS NULL OR r.opportunity_id = %(opportunity_id)s)
   AND (%(product_id)s::int IS NULL OR r.product_id = %(product_id)s)
   AND (%(only_held)s IS FALSE OR r.status = 'held')
+  -- EGALIK: rezerv KARTAGA qo'yiladi (api/erp/egalik.py).
+  AND (%(owner_broker_id)s::int IS NULL OR o.broker_id = %(owner_broker_id)s)
 ORDER BY r.created_at DESC, r.id DESC
 """
 
@@ -480,11 +482,12 @@ def seed_opening(created_by: Optional[str] = None) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 def reserves(*, opportunity_id: Optional[int] = None,
              product_id: Optional[int] = None,
-             only_held: bool = False) -> List[Dict[str, Any]]:
+             only_held: bool = False,
+             owner_broker_id: Optional[int] = None) -> List[Dict[str, Any]]:
     _need_schema()
     return [shape_reserve(r) for r in db.query(RESERVES_SQL, {
         "opportunity_id": opportunity_id, "product_id": product_id,
-        "only_held": bool(only_held)})]
+        "only_held": bool(only_held), "owner_broker_id": owner_broker_id})]
 
 
 def add_reserve(opportunity_id: int, data: Dict[str, Any]) -> Dict[str, Any]:

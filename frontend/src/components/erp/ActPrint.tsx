@@ -39,8 +39,7 @@ export default function ActPrint({ act, onClose }: {
         </Button>
         <Button size="sm" variant="ghost" onClick={onClose}>Yopish</Button>
         <span className="text-caption text-muted-foreground">
-          Bu shakl imzolatish uchun. Elektron dalolatnoma operator orqali
-          yuboriladi.
+          Bu shakl imzolatish uchun.
         </span>
       </div>
 

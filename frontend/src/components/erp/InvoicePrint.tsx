@@ -43,8 +43,7 @@ export default function InvoicePrint({ inv, onClose }: {
         </Button>
         <Button size="sm" variant="ghost" onClick={onClose}>Yopish</Button>
         <span className="text-caption text-muted-foreground">
-          Chop etish oynasida "PDF ga saqlash" ham bor. Bu shakl yuridik
-          hujjat emas — elektron faktura operator orqali yuboriladi.
+          Chop etish oynasida "PDF ga saqlash" ham bor.
         </span>
       </div>
 

@@ -51,8 +51,7 @@ export default function AuditPanel() {
       {/* Yig'ma javob — ro'yxatni o'qimasdan holat ma'lum bo'lsin. */}
       {d.clean ? (
         <p className="mb-3 text-caption text-ok-strong">
-          Shubhali o'zgarish yo'q: {s.n} ta yozuvning hammasi ERP orqali va
-          hujjat qoralama holatida qilingan.
+          Shubhali o'zgarish yo'q — {s.n} ta yozuv tekshirildi.
         </p>
       ) : (
         <p className="mb-3 text-caption text-urgent-strong">
@@ -116,8 +115,7 @@ export default function AuditPanel() {
       )}
 
       <p className={cn('mt-2 text-micro text-muted-foreground')}>
-        Jurnalni bazaning o'zi yozadi (trigger), ERP kodi emas — qo'lda
-        yozilgan SQL ham shu yerga tushadi. Yozuvni o'zgartirib bo'lmaydi.
+        Jurnalni baza o'zi yozadi — uni o'zgartirib bo'lmaydi.
       </p>
     </section>
   )

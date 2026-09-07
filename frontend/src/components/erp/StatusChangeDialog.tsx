@@ -29,9 +29,17 @@ export default function StatusChangeDialog(
   const [note, setNote] = useState('')
   const [reason, setReason] = useState<string | null>(null)
   const reopening = o.is_final && !to.final
-  // Yutqazish sababi MAJBURIY: "nega yutqazdik?" degan savolga javob bo'lmasa
-  // keyingi tahlil ham bo'lmaydi. Sabab — ro'yxatdan, erkin matn emas.
-  const needReason = to.code === 'lost' && !!lostReasons?.length
+  // SABAB MAJBURIY: "nega yutqazdik / to'xtatdik / ulgurmadik?" degan
+  // savolga javob bo'lmasa keyingi tahlil ham bo'lmaydi. Sabab —
+  // ro'yxatdan, erkin matn emas.
+  //
+  // Ilgari faqat `lost` da so'ralardi va "to'xtatildi, nega — noma'lum"
+  // degan ko'r nuqta qolardi. Server ham SHU UCH holatni talab qiladi
+  // (`opportunity.SABAB_HOLATLARI`) — bu yerdagi shart uni takrorlamaydi,
+  // xatoni OLDINDAN ko'rsatadi: 400 olib qaytgandan ko'ra tugma o'chiq
+  // turgani tushunarliroq.
+  const SABABLI = ['lost', 'rejected', 'ulgurmadik']
+  const needReason = SABABLI.includes(to.code) && !!lostReasons?.length
   const canSave = (!reopening || note.trim().length > 0) && (!needReason || !!reason)
 
   return (
@@ -57,7 +65,7 @@ export default function StatusChangeDialog(
               <div className="mb-1 text-caption font-semibold text-muted-foreground">
                 Yutqazish sababi
               </div>
-              <Select value={reason ?? undefined} onValueChange={setReason}>
+              <Select value={reason ?? ''} onValueChange={setReason}>
                 <SelectTrigger className="h-9 w-full bg-card text-body">
                   <SelectValue placeholder="Tanlang" />
                 </SelectTrigger>
@@ -79,7 +87,7 @@ export default function StatusChangeDialog(
           />
 
           <div className="mt-4 flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={onCancel}>Bekor qilish</Button>
+            <Button variant="outline" size="sm" onClick={onCancel}>Bekor</Button>
             <Button size="sm" disabled={!canSave}
               onClick={() => onConfirm(note.trim() || null, reason)}>
               Tasdiqlash

@@ -99,6 +99,12 @@ WHERE (%(status)s::text IS NULL OR a.status = %(status)s)
   AND (%(client_id)s::int IS NULL OR a.client_id = %(client_id)s)
   AND (%(invoice_id)s::int IS NULL OR a.invoice_id = %(invoice_id)s)
   AND (%(opportunity_id)s::int IS NULL OR a.opportunity_id = %(opportunity_id)s)
+  -- EGALIK — fakturadagi bilan bir xil qoida (api/erp/egalik.py).
+  AND (%(owner_broker_id)s::int IS NULL OR o.broker_id = %(owner_broker_id)s
+       OR (a.opportunity_id IS NULL AND EXISTS (
+             SELECT 1 FROM erp.opportunity oo
+              WHERE oo.client_id = a.client_id
+                AND oo.broker_id = %(owner_broker_id)s)))
 ORDER BY a.act_date DESC NULLS FIRST, a.id DESC
 """
 
@@ -213,14 +219,16 @@ def shape(r: Dict[str, Any], *, lines=None) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 def list_(status: Optional[str] = None, client_id: Optional[int] = None,
           invoice_id: Optional[int] = None,
-          opportunity_id: Optional[int] = None) -> List[Dict[str, Any]]:
+          opportunity_id: Optional[int] = None,
+          owner_broker_id: Optional[int] = None) -> List[Dict[str, Any]]:
     _need_schema()
     if status and status not in STATUS_LABEL:
         raise ErpError("Noma'lum status.")
     out = []
     for r in db.query(ACT_LIST_SQL, {"status": status, "client_id": client_id,
                                      "invoice_id": invoice_id,
-                                     "opportunity_id": opportunity_id}):
+                                     "opportunity_id": opportunity_id,
+                                     "owner_broker_id": owner_broker_id}):
         out.append(shape(r, lines=db.query(LINES_SQL, {"id": r["id"]})))
     return out
 

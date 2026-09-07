@@ -12,10 +12,15 @@ import { cn } from '@/lib/utils'
 // har bir tugma ostidagi soya shovqin: ekranда bir vaqtning o'zida
 // o'nlab tugma turadi. Chegara va fon farqi yetarli.
 //
-// O'LCHAMLAR TEGISHGA MOSLANDI. `sm` avval 32px balandlikda edi; barmoq
-// uchun tavsiya etilgan eng kichik nishon 44px, lekin zich jadval
-// interfeysida bu real emas — shuning uchun 34px va tugmalar orasida
-// yetarli oraliq. Sensorli qurilmada `icon` o'lchami 40px.
+// O'LCHAMLAR TEGISHGA MOSLANDI (`DESIGN.md` -> "Tegish va fokus").
+//
+// Zich jadval interfeysida ish stolida 34-36px real o'lcham: tugmalar
+// yonma-yon turadi va 44px ular orasidagi oraliqni yeb qo'yardi.
+//
+// LEKIN BU FAQAT SICHQON UCHUN. Barmoq nishoni boshqa: avval `icon`
+// o'lchamigina sensorli ekranda 40px ga o'sardi, MATNLI tugma esa 34px
+// bo'yicha qolardi — ya'ni "Saqlash" va "Bekor" yonma-yon turgan joyda
+// barmoq noto'g'risini bosardi. Endi HAMMA o'lcham `max-sm` da 40px.
 const buttonVariants = cva('cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-body font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0', {
     variants: {
         variant: {
@@ -27,8 +32,8 @@ const buttonVariants = cva('cursor-pointer inline-flex items-center justify-cent
             link: 'text-primary underline-offset-4 hover:underline',
         },
         size: {
-            default: 'h-9 px-4 py-2',
-            sm: 'h-[2.125rem] rounded-md px-3',
+            default: 'h-9 max-sm:h-10 px-4 py-2',
+            sm: 'h-[2.125rem] max-sm:h-10 rounded-md px-3',
             lg: 'h-10 rounded-md px-6',
             icon: 'size-9 max-sm:size-10',
         },

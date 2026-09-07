@@ -80,8 +80,7 @@ export default function MyPasswordPanel({ userId, onClose }: {
         </div>
 
         <p className="mt-3 text-micro text-muted-foreground">
-          Almashtirgandan keyin boshqa qurilmalardagi sessiyalaringiz
-          yopiladi — shu yerdagisi qoladi.
+          Boshqa qurilmalardagi sessiyalar yopiladi, shu yerdagisi qoladi.
         </p>
 
         {error && (

@@ -141,7 +141,7 @@ export default function ContractList(
                 <div className="mb-1 text-micro text-muted-foreground">
                   Qaysi taklif asosida (ixtiyoriy)
                 </div>
-                <Select value={add.submission_id ? String(add.submission_id) : undefined}
+                <Select value={add.submission_id ? String(add.submission_id) : ''}
                   onValueChange={(v) => setAdd({ ...add, submission_id: Number(v) })}>
                   <SelectTrigger className="h-9 w-full bg-card text-body">
                     <SelectValue placeholder="—" />
@@ -182,9 +182,15 @@ export default function ContractList(
                   imzolandi {f.dateFmt(k.signed_at)}
                 </span>
               )}
-              {k.ends_at && (
+              {/* MUDDAT ikki uchli: boshlanishi ham, tugashi ham.
+                  Ilgari faqat "gacha" ko'rinardi — kiritilgan
+                  "Boshlanishi" sanasi hech qayerda chiqmasdi va
+                  shartnoma qachondan kuchga kirgani noma'lum qolardi. */}
+              {(k.starts_at || k.ends_at) && (
                 <span className="tabular text-caption text-muted-foreground">
-                  · {f.dateFmt(k.ends_at)} gacha
+                  · {k.starts_at ? f.dateFmt(k.starts_at) : '…'}
+                  {' — '}
+                  {k.ends_at ? f.dateFmt(k.ends_at) : '…'}
                 </span>
               )}
               {k.submission && (

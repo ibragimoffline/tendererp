@@ -97,7 +97,7 @@ export default function TaskList({ oppId, brokers, createdBy }: TaskListProps) {
               <div className="mb-1 text-micro text-muted-foreground">
                 Mas'ul (bo'sh — kartaning brokeri)
               </div>
-              <Select value={add.assignee_broker_id ? String(add.assignee_broker_id) : undefined}
+              <Select value={add.assignee_broker_id ? String(add.assignee_broker_id) : ''}
                 onValueChange={(v) => setAdd({ ...add, assignee_broker_id: Number(v) })}>
                 <SelectTrigger className="h-9 w-full bg-card text-body">
                   <SelectValue placeholder="—" />

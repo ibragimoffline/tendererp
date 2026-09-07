@@ -3,7 +3,7 @@ import { useFormat, DEADLINE_CLASS } from '@/format'
 import { cn } from '@/lib/utils'
 import type { ErpStatus, Opportunity } from '@/types'
 import StatusChangeDialog from './StatusChangeDialog'
-import { OPP_LABEL, PriorityBadge } from './erpShared'
+import { OPP_LABEL, PriorityBadge, can } from './erpShared'
 
 // KANBAN — 9 ustun, ustunlar `/erp/meta` dan (frontendda ro'yxat takrorlanmaydi).
 //
@@ -43,6 +43,10 @@ export default function OpportunityBoard(
     const o = items.find((x) => x.id === dragId)
     setDragId(null)
     if (!o || o.status === to.code) return
+    // Yakuniy ustunga tashlash — `karta.yopish` huquqi (kompaniya
+    // sozlamasi bilan brokerdan olinishi mumkin). Huquq bo'lmasa
+    // karta O'Z JOYIDA qoladi: server ham 403 berardi.
+    if ((to.final || o.is_final) && !can('karta.yopish')) return
     if (to.final || o.is_final) { setAsk({ o, to }); return }
     move(o, to, null)
   }
@@ -109,6 +113,16 @@ export default function OpportunityBoard(
                       <div className="mt-1.5 flex items-baseline justify-between gap-2">
                         <span className="line-clamp-1 text-micro text-muted-foreground">
                           {o.broker?.name || '—'}
+                          {/* JAMOA SONI (28-patch): "Karimov +2".
+                              Avatarlar EMAS — kartada joy kam va
+                              uchta doira nomni siqib chiqarardi
+                              (§14: kartani ortiqcha yuklamaslik). */}
+                          {!!o.jamoa_soni && (
+                            <span data-testid={`jamoa-soni-${o.id}`}
+                              className="ml-1 text-primary">
+                              +{o.jamoa_soni}
+                            </span>
+                          )}
                         </span>
                         <span className="tabular text-micro">
                           {f.shortMoney(o.tender.start_price, o.tender.currency)}

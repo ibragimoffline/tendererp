@@ -157,6 +157,13 @@ SOURCE_URL = {
     "xt-xarid": "https://xt-xarid.uz/procedure/{id}/core",
     "uzex":     "https://etender.uzex.uz/lot/{id}",
 }
+# ^^^ ESKIRGAN (2026-09-02). Bu lug'at O'CHIRILDI: u tender-ai dagi
+# `v_tender_manba` view i bilan IKKINCHI NUSXA edi va ular ajralib
+# ketishi mumkin edi (yangi platforma yoki manba manzili o'zgarsa).
+# Endi havola BAZADAN olinadi:
+#     MANBA_SQL = "SELECT ommaviy_url FROM v_tender_manba
+#                   WHERE ichki_id = %(id)s"
+# Sabab va sinov: `erp_rollar.md` §10, `_tests/erp_test.py`.
 
 
 class ErpError(Exception):
@@ -620,6 +627,18 @@ def erp_stats_view(days: int = Query(7, ge=1, le=90)):
 > Marshrut to'qnashuvi yo'q: `/tenders/{id}/take` va
 > `/tenders/{id}/opportunities` — mavjud `/tenders/{id}/compliance`,
 > `/pricing`, `/stock-check` bilan bir qatorda, boshqa nom.
+
+> **YANGILANDI (2026-09-02).** Bu ikki marshrut ERP ajratilgandan
+> keyin `/erp/...` ostiga ko'chdi va auth bilan yopildi. Asosiy
+> yo'l esa butunlay boshqacha: tender ERP kartasiga **Tender-AI
+> navbatidagi "Olindi" qarori** orqali aylanadi — HTTP'siz,
+> `public.tender_topshiriq` → `v_erp_topshiriq` → ERP `LISTEN`
+> (`erp_integratsiya_7.md`).
+>
+> * `POST /erp/tenders/{id}/take` — QO'LDA karta uchun qoladi
+>   (Tender-AI'siz kelgan tender). Endi rahbar-menejer huquqi.
+> * `GET /erp/tenders/{id}/opportunities` — faqat ERP interfeysi
+>   uchun; tender-ai `erp.v_tender_status` view ini o'qiydi.
 
 ### Javob shakli — `GET /erp/opportunities/{id}`
 

@@ -3,6 +3,7 @@ import { api, getToken, setUnauthorizedHandler } from '@/api'
 import Icon from './components/Icon'
 import Dashboard from './components/erp/Dashboard'
 import OpportunitiesPage from './components/erp/OpportunitiesPage'
+import Muloqot from './components/erp/Muloqot'
 import ClientsPage from './components/erp/ClientsPage'
 import MyTasksPage from './components/erp/MyTasksPage'
 import OwnCompanyPage from './components/erp/OwnCompanyPage'
@@ -12,12 +13,13 @@ import InvoicePage from './components/erp/InvoicePage'
 import LoginPage from './components/erp/LoginPage'
 import MyPasswordPanel from './components/erp/MyPasswordPanel'
 import TakeTenderDialog from './components/erp/TakeTenderDialog'
-import { ErpError, SchemaMissing } from './components/erp/erpShared'
+import { ErpError, SchemaMissing, can, permLevel, roleAtLeast, setPerms } from './components/erp/erpShared'
+import NotificationBell from './components/erp/NotificationBell'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/theme'
 import type { Theme } from '@/theme'
-import type { AuthUser, ErpBroker, ErpHealth } from '@/types'
+import type { AuthUser, ErpBroker, ErpHealth, ErpUnread } from '@/types'
 
 // TENDER-AI ERP — alohida ilova.
 //
@@ -32,7 +34,7 @@ import type { AuthUser, ErpBroker, ErpHealth } from '@/types'
 // yetarli (tender-ai dagi bilan bir xil qaror).
 
 type View = 'dashboard' | 'opportunities' | 'mytasks' | 'clients' | 'company'
-  | 'stock' | 'invoices' | 'staff'
+  | 'stock' | 'invoices' | 'staff' | 'muloqot'
 
 // MENYU GURUHLARGA BO'LINGAN. Yetti bandli tekis ro'yxatda ko'z har
 // safar boshidan qidiradi; uch guruhda esa "pul bilan ishlayapman"
@@ -61,6 +63,11 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
         hint: 'Kartalar, bosqichlar va tahlil' },
       { key: 'clients', icon: 'user', label: 'Mijoz korxonalar',
         hint: 'Passport, rekvizitlar, hujjatlar' },
+      // MULOQOT — hodim bilan hodim. Tender-AI dagi "AI chat" EMAS;
+      // nom ham ataylab boshqa, aks holda ikkala ilovada ikkita
+      // "Chat" bo'lib qaysi biri nima ekani tushunarsiz bo'lardi.
+      { key: 'muloqot', icon: 'bell', label: 'Muloqot',
+        hint: "Umumiy chat va karta bo'yicha yozishmalar" },
     ],
   },
   {
@@ -98,7 +105,15 @@ function initials(name: string): string {
 
 /** MAVZU ALMASHTIRGICH — uchta holat, ikkita emas.
  *  "Tizim" alohida qiymat: kompyuter kechqurun qorong'iga o'tsa, ERP
- *  ham o'tishi kerak (`theme.ts`). */
+ *  ham o'tishi kerak (`theme.ts`).
+ *
+ *  TEGISH NISHONI: tugmalar avval 22px balandlikda edi — tavsiya etilgan
+ *  eng kichik nishon 24px dan ham past, sensorli ekranda esa uchtasi
+ *  yonma-yon turgani uchun barmoq deyarli har safar qo'shnisini bosardi.
+ *  Endi 28px, sensorli ekranda 44px (`DESIGN.md` -> "Tegish va fokus").
+ *
+ *  NOMI ham bor: `Icon` `aria-hidden`, ya'ni `aria-label` siz bu
+ *  tugmaning ekran o'quvchisi uchun nomi UMUMAN yo'q edi. */
 function ThemeSwitch({ theme, onChange }: {
   theme: Theme
   onChange: (t: Theme) => void
@@ -113,8 +128,8 @@ function ThemeSwitch({ theme, onChange }: {
       className="mx-2.5 my-1.5 flex gap-0.5 rounded-md bg-muted p-0.5">
       {opts.map((o) => (
         <button key={o.key} type="button" onClick={() => onChange(o.key)}
-          title={o.label} aria-pressed={theme === o.key}
-          className={cn('flex flex-1 items-center justify-center rounded-[5px] py-1 transition-colors',
+          title={o.label} aria-label={o.label} aria-pressed={theme === o.key}
+          className={cn('flex h-7 max-sm:h-11 flex-1 items-center justify-center rounded-sm transition-colors',
             theme === o.key
               ? 'bg-card text-foreground shadow-sm'
               : 'text-muted-foreground hover:text-foreground')}>
@@ -148,6 +163,10 @@ export default function App() {
   // Chuqur havolalar — faqat birinchi yuklashda o'qiladi
   const [takeTender] = useState<number | null>(() => readParam('take'))
   const [oppFocus, setOppFocus] = useState<number | null>(() => readParam('opp'))
+  // Bildirishnomadan kelgan chat. `null` — oddiy holat (ro'yxatdan
+  // tanlanadi).
+  const [chatFocus, setChatFocus] = useState<number | null>(null)
+  const [unread, setUnread] = useState<ErpUnread | null>(null)
   const [takeOpen, setTakeOpen] = useState<boolean>(() => readParam('take') !== null)
 
   // Brokerlar ro'yxati bir marta: "Mening ishlarim" filtri uchun.
@@ -159,8 +178,17 @@ export default function App() {
   // KIRISH. `undefined` — hali tekshirilmadi (token bor, so'rov ketyapti);
   // `null` — kirilmagan. Ikkisini ajratmasak, sahifa har yangilanganda
   // kirish ekrani bir lahza chaqnab ketardi.
-  const [user, setUser] = useState<AuthUser | null | undefined>(
+  const [user, setUserState] = useState<AuthUser | null | undefined>(
     () => (getToken() ? undefined : null))
+
+  /** Foydalanuvchi bilan birga uning HUQUQLAR kesimi ham saqlanadi
+   *  (`erpShared.setPerms`). Ikkisi bitta joyda o'rnatiladi: aks holda
+   *  kirish bir yo'ldan (login), huquq boshqasidan (me) kelib, ular
+   *  ajralib qolishi mumkin edi. */
+  function setUser(u: AuthUser | null | undefined) {
+    setPerms(u && typeof u === 'object' ? u.perms : null)
+    setUserState(u)
+  }
 
   useEffect(() => {
     // 401 — sessiya tugadi: kirish ekraniga qaytamiz (api.ts chaqiradi).
@@ -180,6 +208,24 @@ export default function App() {
     clearQuery()
   }, [user])
 
+  // HISOBLAGICHLAR — YAGONA MANBA (`GET /erp/unread`).
+  //
+  // Ilgari qo'ng'iroq o'z sonini, chat ekrani o'zinikini so'rardi va
+  // ular ajralib ketardi: yon panelda "3" turardi, chat ochilganda
+  // esa hech narsa yo'q edi. Endi ikkala raqam BITTA javobdan
+  // keladi va bir vaqtda yangilanadi.
+  //
+  // 60 soniya: chat ekranining o'z so'rovi 5 soniyada yuradi
+  // (`Muloqot.tsx`), bu esa faqat yon paneldagi belgi uchun.
+  const HISOBLAGICH_MS = 60_000
+  useEffect(() => {
+    if (!user) return
+    const yukla = () => { void api.unread().then(setUnread).catch(() => {}) }
+    yukla()
+    const t = window.setInterval(yukla, HISOBLAGICH_MS)
+    return () => window.clearInterval(t)
+  }, [user])
+
   async function logout() {
     await api.logout().catch(() => {})
     setUser(null); setHealth(null); setBrokers([])
@@ -194,15 +240,26 @@ export default function App() {
     setTimeout(() => setOppFocus(oppId), 0)
   }
 
+  /** Bildirishnomadan AYNAN O'SHA chatga (§15).
+   *  Umumiy panelga olib bormaydi: kontekst bor ekan, odam uni
+   *  qaytadan qidirmasligi kerak. */
+  function openChat(chatId: number) {
+    setChatFocus(null)
+    setView('muloqot')
+    setTimeout(() => setChatFocus(chatId), 0)
+  }
+
   // Token tekshirilmaguncha bo'sh ekran — kirish formasi chaqnamasin
   if (user === undefined) return <div className="min-h-screen bg-background" />
   if (!user) return <LoginPage onLogin={setUser} />
 
   // Tahlil odamlar haqidagi ko'rsatkichni ham beradi — brokerga ko'rsatilmaydi
-  const isManager = user.role === 'manager' || user.role === 'admin'
-  // Hodimlar ekrani — parol va rol; faqat administrator.
+  const isManager = roleAtLeast(user.role, 'menejer')
+  // Bo'limlar HUQUQ bo'yicha yashiriladi (rol bo'yicha emas): "kim
+  // ko'radi" degan qaror serverdagi matritsada, bu yerda faqat uning
+  // natijasi ishlatiladi.
   const nav = NAV.filter((n) => (n.key !== 'company' || isManager)
-    && (n.key !== 'staff' || user.role === 'admin'))
+    && (n.key !== 'staff' || can('tizim.hodim')))
   const current = NAV.find((n) => n.key === view)
 
   return (
@@ -243,6 +300,15 @@ export default function App() {
                     <Icon name={n.icon} size={17}
                       className={view === n.key ? '' : 'text-muted-foreground'} />
                     <span className="flex-1 truncate">{n.label}</span>
+                    {/* O'QILMAGAN XABARLAR — bo'lim yonida. Odam yon
+                        panelga qarab "menga yozishganmi" degan savolga
+                        javob topishi kerak, bo'limni ochib emas. */}
+                    {n.key === 'muloqot' && !!unread?.xabarlar && (
+                      <span data-testid="nav-chat-unread"
+                        className="rounded-full bg-primary px-1.5 text-micro font-semibold text-on-primary">
+                        {unread.xabarlar}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -265,6 +331,13 @@ export default function App() {
               </div>
             </div>
           </div>
+
+          {/* BILDIRISHNOMA — yo'naltirish oqimi kartani o'zi
+              ochadi, ya'ni "sizga ish berildi" degan gap biror
+              joyda aytilishi kerak (`api/erp/xabar.py`). */}
+          <NotificationBell onOpenOpportunity={openOpportunity}
+            onOpenChat={openChat} unread={unread?.bildirishnoma}
+            onChange={() => void api.unread().then(setUnread).catch(() => {})} />
 
           <ThemeSwitch theme={theme} onChange={setTheme} />
           {/* O'Z parolini almashtirish — HAR KIM uchun (auth-6).
@@ -316,11 +389,17 @@ export default function App() {
 
           {/* Mobil ekranda yon panel yo'q — bo'lim almashtirgich shu yerda.
               Gorizontal siljish: bandlar siqilib o'qilmas bo'lib
-              qolgandan ko'ra surilgani afzal. */}
+              qolgandan ko'ra surilgani afzal.
+
+              Bu tasma FAQAT sensorli ekranda ko'rinadi (`md:hidden`),
+              ya'ni uni har doim barmoq bosadi. Avvalgi 26px balandlik
+              barmoq uchun juda kichik edi — 44px ga o'stirildi
+              (`DESIGN.md` -> "Tegish va fokus"). */}
           <div className="-mx-4 mt-3 flex gap-1 overflow-x-auto px-4 pb-1 md:hidden">
             {nav.map((n) => (
-              <button key={n.key} onClick={() => setView(n.key)}
-                className={cn('shrink-0 rounded-md px-2.5 py-1 text-caption transition-colors',
+              <button key={n.key} type="button" onClick={() => setView(n.key)}
+                aria-current={view === n.key ? 'page' : undefined}
+                className={cn('flex min-h-11 shrink-0 items-center rounded-md px-3 text-caption transition-colors',
                   view === n.key
                     ? 'bg-secondary font-semibold text-primary'
                     : 'text-muted-foreground hover:bg-accent')}>
@@ -331,6 +410,17 @@ export default function App() {
         </header>
 
         {error && <ErpError msg={error} />}
+
+        {/* EGALIK: "o'z ishlarim" HISOB HODIMGA bog'langanda ishlaydi
+            (`api/erp/egalik.py`). Bog'lanmagan bo'lsa ro'yxatlar bo'sh
+            keladi — sababini AYTAMIZ, aks holda odam "ma'lumot
+            yo'qoldi" deb o'ylardi. */}
+        {permLevel('karta.korish') === 'own' && !user.broker_id && (
+          <div className="mb-3 rounded-lg border border-soon/40 bg-soon-soft px-3 py-2.5 text-body text-soon-strong">
+            <span className="font-semibold">Hisobingiz hodimga bog'lanmagan.</span>{' '}
+            Ro'yxatlar bo'sh bo'lib ko'rinadi. Administratorga murojaat qiling.
+          </div>
+        )}
 
         {/* Tender-AI yiqilgan bo'lsa ERP ISHLAYVERADI: mavjud kartalar
             ochiladi, faqat cheklist va yangi karta olish ishlamaydi. Buni
@@ -364,15 +454,31 @@ export default function App() {
           {view === 'company' && (
             <OwnCompanyPage onOpenOpportunity={openOpportunity} />
           )}
+          {view === 'muloqot' && (
+            <Muloqot chatId={chatFocus ?? undefined}
+              onUnreadChange={() => void api.unread().then(setUnread)
+                .catch(() => {})} />
+          )}
           {view === 'stock' && <StockPage />}
           {view === 'invoices' && <InvoicePage />}
-          {view === 'staff' && user.role === 'admin' && <StaffPage />}
+          {view === 'staff' && can('tizim.hodim') && <StaffPage />}
         </>)}
       </main>
 
       {/* Tender-AI dan "ERP da ishga olish" bilan kelingan bo'lsa forma
           darhol ochiladi — foydalanuvchi tenderni qidirib o'tirmasin. */}
-      {takeOpen && takeTender !== null && (
+      {/* Karta yaratish — rahbar-menejer amali (`karta.yaratish`).
+          Tender-AI dan "ERP da ishga olish" havolasi bilan kelgan
+          brokerga forma OCHILMAYDI: u to'ldirib bo'lib, oxirida 403
+          olardi. Buning o'rniga nima qilish kerakligi aytiladi. */}
+      {takeOpen && takeTender !== null && !can('karta.yaratish') && (
+        <div className="fixed inset-x-0 bottom-4 mx-auto w-fit rounded-lg border bg-card px-4 py-3 text-body shadow">
+          Tenderni ishga olish — rahbar yoki menejer huquqi.
+          <button type="button" className="ml-3 text-caption underline"
+            onClick={() => setTakeOpen(false)}>yopish</button>
+        </div>
+      )}
+      {takeOpen && takeTender !== null && can('karta.yaratish') && (
         <TakeTenderDialog
           tenderId={takeTender}
           onClose={() => setTakeOpen(false)}

@@ -22,12 +22,14 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # fixture.py
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except (AttributeError, ValueError):            # pragma: no cover
     pass
 
+import fixture as FIX                   # status yo'li (24-patch)
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -55,7 +57,6 @@ TEST_USER = {"id": 0, "username": "zztest", "full_name": "ZZTEST Sinov",
 def _auth_override(app):
     from api import main as _main
     app.dependency_overrides[_main.me] = lambda: TEST_USER
-    app.dependency_overrides[_main.manager] = lambda: TEST_USER
 # Sinov INN'lari — haqiqiy korxonalarniki bilan to'qnashmasligi uchun
 # 999 bilan boshlanadi.
 INN_A = "999000111"
@@ -337,7 +338,10 @@ def test_db():
                     eq("mavjud bo'lmagan karta -> 404",
                        c.get("/erp/opportunities/999999999/compliance").status_code, 404)
 
-                c.patch(f"/erp/opportunities/{opps[0]}/status", json={"status": "won"})
+                # `won` ga SAKRAB bo'lmaydi (24-patch): yo'l FIX.yol() da.
+                for st in FIX.yol("won"):
+                    c.patch(f"/erp/opportunities/{opps[0]}/status",
+                            json={"status": st})
 
                 page = c.get(f"/erp/clients/{a['id']}").json()
                 eq("mijoz sahifasida 1 karta", page["summary"]["opp_n"], 1)
@@ -345,6 +349,28 @@ def test_db():
                 eq("kartalar tarixi ko'rinadi", len(page["opportunities"]), 1)
                 eq("kartada mas'ul ko'rsatilgan",
                    page["opportunities"][0]["broker_name"], PREFIX + "Broker")
+                # STATUS YORLIG'I SERVERDAN: ekranda `won` emas,
+                # "Yutildi" ko'rinishi kerak va ro'yxat frontendда
+                # takrorlanmasligi kerak.
+                eq("kartada status yorlig'i o'zbekcha",
+                   page["opportunities"][0]["status_label"], "Yutildi")
+                # RAD ETILGANLAR alohida sanaladi: ular `win_rate`
+                # maxrajiga kirmaydi (qatnashmadik — yutqazmadik), lekin
+                # ko'rsatilmasa "1 ta karta, yutish 100%" degan qator
+                # qayerdan kelgani tushunarsiz qolardi.
+                check("rejected_n" in page["summary"],
+                      "yig'mada rad etilganlar soni bor",
+                      str(page["summary"]))
+                eq("rad etilgan yo'q", page["summary"]["rejected_n"], 0)
+                if len(opps) > 1:
+                    c.patch(f"/erp/opportunities/{opps[1]}/status",
+                            json={"status": "rejected"})
+                    p2 = c.get(f"/erp/clients/{a['id']}").json()
+                    eq("rad etilgan sanaldi", p2["summary"]["rejected_n"],
+                       sum(1 for o in p2["opportunities"]
+                           if o["status"] == "rejected"))
+                    eq("rad etilgan YUTISH FOIZIGA ta'sir qilmadi",
+                       p2["summary"]["win_rate"], 100)
 
                 st = c.get("/erp/stats").json()
                 row = next(x for x in st["by_client"] if x["id"] == a["id"])

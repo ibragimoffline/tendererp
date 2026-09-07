@@ -45,6 +45,19 @@ export interface ErpMeta {
   payment_methods?: { code: string; label: string }[]
   /** BO'SH = eksport formati sozlanmagan; interfeys tugmani ko'rsatmaydi */
   invoice_export_formats?: { code: string; label: string }[]
+  /** false = schema_patch_erp_24.sql qo'llanmagan (sabab hujjati yo'q) */
+  fayl_ready?: boolean
+  /** Fayl BIRIKTIRILADIGAN holatlar — SERVERDAN. Ekran o'z ro'yxatini
+   *  tutmaydi: ikki ro'yxat vaqt o'tib ajralib ketardi. */
+  fayl_holatlar?: string[]
+  /** Ruxsat etilgan kengaytmalar (`.pdf`, `.docx`...) — `<input accept>` */
+  fayl_turlar?: string[]
+  /** Bir fayl uchun chegara, baytda */
+  fayl_max_hajm?: number
+  /** false = schema_patch_erp_25.sql qo'llanmagan (muloqot yo'q) */
+  chat_ready?: boolean
+  /** bir xabarning eng katta uzunligi (belgi) */
+  chat_max_matn?: number
   auth_ready?: boolean
   /** tender-ai interfeysining manzili — kartadagi havola uchun */
   tender_web?: string
@@ -86,6 +99,9 @@ export interface Opportunity {
   tender_id: number
   tender: OpportunitySnapshot
   broker: Nullable<OpportunityRef>
+  /** Asosiy mas'uldan TASHQARI jamoa a'zolari soni (28-patch).
+   *  Kanban kartasida "Karimov +2" bo'lib ko'rinadi. */
+  jamoa_soni: number
   client: Nullable<OpportunityRef>
   priority: string
   priority_label: Nullable<string>
@@ -287,6 +303,9 @@ export interface ClientOpportunity {
   tender_id: number
   tender_ref: Nullable<string>
   status: string
+  /** Odam o'qiydigan nomi — SERVERDAN (`api/erp/opportunity.py`).
+   *  Frontendда ikkinchi ro'yxat saqlanmaydi. */
+  status_label: string
   start_price: Nullable<number>
   currency: Nullable<string>
   deadline_at: Nullable<string>
@@ -303,6 +322,10 @@ export interface ClientFull extends ClientPassport {
     opp_n: number
     won_n: number
     lost_n: number
+    /** Rad etilganlar. `win_rate` MAXRAJIGA kirmaydi (biz qatnashmadik —
+     *  yutqazmadik), lekin ekranda ko'rsatiladi: aks holda "1 ta karta,
+     *  yutish 100%" degan qator qayerdan kelgani tushunarsiz qoladi. */
+    rejected_n: number
     open_n: number
     /** Aralash valyutada `null` — summalar qo'shilmaydi */
     won_total: Nullable<number>
@@ -506,18 +529,38 @@ export interface TaskAssignee {
   name: Nullable<string>
 }
 
+/** Vazifa holati (28-patch). KECHIKKAN bu yerda YO'Q va bu ongli
+ *  qaror: u `due_at` va holatdan HISOBLANADI (`overdue`). Ikkinchi
+ *  haqiqat manbai bo'lsa, uni har kecha yangilab turadigan skript
+ *  kerak bo'lardi va u bir kun yurmasa ekran yolg'on gapirardi. */
+export type TaskStatus = 'yangi' | 'bajarilmoqda' | 'bajarildi' | 'bekor'
+
+/** Vazifa konteksti: tenderga bog'langanmi yoki umumiymi. */
+export type TaskKontekst = 'umumiy' | 'karta'
+
 export interface OpportunityTask {
   id: number
-  opportunity_id: number
+  /** `null` — UMUMIY vazifa (tenderga bog'liq emas) */
+  opportunity_id: Nullable<number>
   title: string
   assignee: Nullable<TaskAssignee>
   due_at: Nullable<string>
+  /** `status` ning KO'ZGUSI (serverdagi trigger yuritadi) */
   done: boolean
   done_at: Nullable<string>
+  cancelled_at: Nullable<string>
   note: Nullable<string>
   reminded_at: Nullable<string>
   created_by: Nullable<string>
   created_at: Nullable<string>
+  updated_at: Nullable<string>
+  status: TaskStatus
+  status_label: Nullable<string>
+  priority: string
+  priority_label: Nullable<string>
+  kontekst: TaskKontekst
+  /** `yangi` yoki `bajarilmoqda` — diqqat talab qiladi */
+  ochiq: boolean
   /** kechikkanini SERVER hisoblaydi — brauzer soati noto'g'ri bo'lishi mumkin */
   overdue: boolean
 }
@@ -527,12 +570,69 @@ export interface TaskInput {
   assignee_broker_id?: Nullable<number>
   due_at?: Nullable<string>
   note?: Nullable<string>
+  priority?: Nullable<string>
+  /** Berilmasa — UMUMIY vazifa */
+  opportunity_id?: Nullable<number>
   created_by?: Nullable<string>
 }
 
-/** "Mening ishlarim" — vazifa + karta konteksti */
+/** Vazifa tarixi — MAVJUD jurnaldan (`erp.doc_audit`).
+ *  `actor: null` = "ERP dan tashqarida o'zgartirilgan". */
+export interface TaskHistoryRow {
+  id: number
+  action: string
+  field: Nullable<string>
+  old_value: Nullable<string>
+  new_value: Nullable<string>
+  actor: Nullable<string>
+  at: Nullable<string>
+}
+
+/** Hodim yuklamasi (§21). Bu BAHO EMAS: reyting yoki "samaradorlik"
+ *  hisoblanmaydi — bunday ko'rsatkich odamni ishni tez yopishga
+ *  undardi, sifatga emas. */
+export interface Yuklama {
+  broker_id: number
+  full_name: string
+  active: boolean
+  ochiq_vazifa: number
+  kechikkan: number
+  bajarilgan: number
+  ochiq_karta: number
+}
+
+/** Karta jamoasi a'zosi (28-patch).
+ *  `asosiy: true` — kartaning mas'uli; u `opportunity.broker_id` dan
+ *  keladi, jamoa jadvalidan emas. */
+export interface JamoaAzo {
+  broker_id: number
+  full_name: string
+  active: boolean
+  app_user_id: Nullable<number>
+  rol: string
+  rol_label: Nullable<string>
+  asosiy: boolean
+  izoh: Nullable<string>
+  added_at: Nullable<string>
+  added_by_name: Nullable<string>
+  removed_at: Nullable<string>
+}
+
+export interface Jamoa {
+  opportunity_id: number
+  asosiy_broker_id: Nullable<number>
+  azolar: JamoaAzo[]
+  /** faol a'zolar soni — kanban kartasi uchun ("Karimov +2") */
+  soni: number
+  rollar: { kod: string; label: string }[]
+}
+
+/** "Mening ishlarim" — vazifa + karta konteksti.
+ *  `opportunity: null` — UMUMIY vazifa. Bo'sh maydonlarga to'la
+ *  obyekt EMAS: ekran "tender ko'rsatilmagan" bilan "tenderga
+ *  tegishli emas" ni ajrata olishi kerak. */
 export interface MyTask extends OpportunityTask {
-  opportunity: {
+  opportunity: Nullable<{
     id: number
     title: Nullable<string>
     status: string
@@ -542,7 +642,7 @@ export interface MyTask extends OpportunityTask {
     deadline_at: Nullable<string>
     start_price: Nullable<number>
     currency: Nullable<string>
-  }
+  }>
 }
 
 export interface MyTasks {
@@ -730,8 +830,14 @@ export interface StageTime {
   avg_days: Nullable<number>
   median_days: Nullable<number>
   max_days: Nullable<number>
-  /** hozir shu bosqichda turgan ochiq kartalar */
+  /** hozir shu bosqichda turgan ochiq kartalar (= faol_n + kechikkan_n) */
   ongoing_n: number
+  /** shulardan HAQIQATAN ishlanayotgani: muddati hali o'tmagan */
+  faol_n: number
+  /** muddati O'TGAN, lekin yopilmagan — ular "ishlanmoqda" EMAS.
+   *  Tizim kartani o'zi yopmaydi (qaror odamniki), shuning uchun ular
+   *  yopilmaguncha shu yerda turadi va ko'rsatkichni shishiradi. */
+  kechikkan_n: number
   oldest_days: Nullable<number>
   final: boolean
 }
@@ -783,12 +889,20 @@ export interface ErpAnalytics {
 // Kimlik (auth) — foydalanuvchilar TENDER-AI da, ERP faqat tekshiradi
 // ===========================================================================
 
+/** Huquq darajasi (`api/erp/perm.py`): to'liq / faqat o'ziniki / faqat
+ *  o'qish / yo'q. */
+export type PermLevel = 'full' | 'own' | 'read' | null
+
 export interface AuthUser {
   id: number
   username: string
   full_name: string
-  role: 'admin' | 'manager' | 'broker'
+  role: 'admin' | 'rahbar' | 'menejer' | 'broker'
   role_label: Nullable<string>
+  /** Serverdagi HUQUQLAR MATRITSASINING shu odam uchun kesimi
+   *  (`GET /erp/auth/me`). Interfeys tugmani shundan hal qiladi —
+   *  o'z ro'yxatini tutmaydi. */
+  perms?: Record<string, PermLevel>
   /** erp.broker.id bilan bog'lanish (bo'lsa) */
   broker_id: Nullable<number>
   email: Nullable<string>
@@ -1230,9 +1344,142 @@ export interface LoginAttempt {
 export interface StaffAccount {
   id: number
   username: string
-  role: 'admin' | 'manager' | 'broker'
+  role: 'admin' | 'rahbar' | 'menejer' | 'broker'
   active: boolean
   last_login_at: Nullable<string>
+}
+
+/** TAHLIL bo'limi. Yiqilgan bo'lim YASHIRILMAYDI: `ok=false` va
+ *  `xato` bilan keladi (Tender-AI `api/topshiriq.py`). */
+export interface TahlilBolim<T = unknown> {
+  ok: boolean
+  data?: T
+  xato?: string
+}
+
+/** TENDER-AI TAHLILI — qaror paytidagi SNAPSHOT
+ *  (`erp.opportunity_analysis`). ERP uni qayta hisoblamaydi. */
+export interface ErpTahlil {
+  id: number
+  topshiriq_id: Nullable<number>
+  /** Qaror qanchalik ishonchli edi (Tender-AI lug'ati) */
+  ishonch: Nullable<string>
+  captured_at: Nullable<string>
+  payload: Record<string, TahlilBolim | string | number>
+}
+
+/** BILDIRISHNOMA (`erp.notification`). Hodimga qaratilgan: Tender-AI
+ *  dagi xabar KOMPANIYA darajasida va odamni bilmaydi. */
+/** KLIK MANZILI — bildirishnoma bosilganda nima ochiladi.
+ *  Serverda hisoblanadi (`api/erp/xabar.py` -> `_nishon`): ekran
+ *  o'z qoidasini tutmasin, aks holda ikkalasi ajralib ketardi va
+ *  yangi hodisa turi jimgina "hech qayerga olib bormaydigan"
+ *  bildirishnoma bo'lib qolardi. */
+export interface ErpNishon {
+  turi: Nullable<'chat' | 'task' | 'opportunity'>
+  id: Nullable<number>
+  /** Kontekst uchun: chat/vazifa qaysi kartaga tegishli */
+  opportunity_id: Nullable<number>
+}
+
+export interface ErpNotification {
+  id: number
+  kind: string
+  /** Odam o'qiydigan tur nomi (serverdan) */
+  kind_label: string
+  matn: string
+  opportunity_id: Nullable<number>
+  opportunity_title: Nullable<string>
+  chat_id: Nullable<number>
+  task_id: Nullable<number>
+  chat_title: Nullable<string>
+  nishon: ErpNishon
+  /** `localhost` bo'lsa serverda YOZILMAYDI — buzuq havola bermaslik uchun */
+  havola: Nullable<string>
+  created_at: string
+  read_at: Nullable<string>
+}
+
+/** Bildirishnoma ro'yxati — sahifalash bilan. */
+export interface ErpNotificationList {
+  ready: boolean
+  items: ErpNotification[]
+  unread: number
+  /** true = eskiroqlari bor (`before_id` bilan so'raladi) */
+  yana: boolean
+}
+
+/** YAGONA hisoblagich manbai (`GET /erp/unread`).
+ *  Ikki raqam ikki so'rovdan kelsa biri yangilanib ikkinchisi
+ *  qolib ketardi — foydalanuvchi "3 ta xabar" ko'rib, ochganda
+ *  hech narsa topmasdi. */
+export interface ErpUnread {
+  bildirishnoma: number
+  /** Umumiy chatdagi o'qilmagan XABARLAR */
+  umumiy: number
+  /** Karta chatlaridagi o'qilmagan xabarlar */
+  kartalar: number
+  /** O'qilmagani BOR chatlar soni */
+  chatlar: number
+  /** Jami o'qilmagan xabarlar */
+  xabarlar: number
+}
+
+/** Navbat holati (`GET /erp/notifications/health`) — §20.
+ *  `delivered` YO'Q: tashqi kanal yetib borganiga dalil bermaydi. */
+export interface ErpNavbatKanal {
+  kanal: string
+  jami: number
+  pending: number
+  sent: number
+  failed: number
+  terminal: number
+  /** Navbat TO'XTAB QOLGANINI faqat shu ko'rsatadi */
+  eng_eski_pending: Nullable<string>
+  oxirgi_yuborilgan: Nullable<string>
+  nosozlik_foiz: Nullable<number>
+}
+
+export interface ErpNavbatSogliq {
+  ready: boolean
+  kanallar: ErpNavbatKanal[]
+  jami: number
+  oqilmagan: number
+  sutkada: number
+  max_urinish: number
+}
+
+/** TENDER-AI YO'NALTIRISH OQIMINING holati
+ *  (`GET /erp/topshiriq/holat`). Sozlanmagan holat ham OCHIQ
+ *  aytiladi: `sabab` — "nega hech narsa kelmayapti" degan savolga
+ *  javob. */
+export interface TopshiriqHolat {
+  ready: boolean
+  /** Biz qaysi Tender-AI ijarachisimiz. `null` — xarita yo'q */
+  tai_company_id: Nullable<number>
+  /** Fon tinglovchisi tirikmi (`LISTEN`) */
+  tinglovchi: boolean
+  oraliq: number
+  oxirgi_xato: Nullable<string>
+  sabab?: string
+  kutayotgan?: number
+  kartalar?: number
+}
+
+/** TIZIM SOZLAMASI (`erp.setting`). Ta'rifi va STANDART qiymati
+ *  serverda (`api/erp/sozlama.py`) — ekran ro'yxatni o'zi tutmaydi. */
+export interface Setting {
+  key: string
+  value: boolean
+  /** Kod bergan standart qiymat (o'zgartirilmagan bo'lsa shu ishlaydi) */
+  default: boolean
+  label: string
+  /** "Yoqsam nima o'zgaradi" — ekranda ko'rsatiladi */
+  help: string
+  /** Bazada yozuvi bormi (ya'ni standartdan o'zgartirilganmi) */
+  changed: boolean
+  updated_by: Nullable<string>
+  updated_at: Nullable<string>
 }
 
 /** HODIM + unga bog'langan HISOB. Ikkisi alohida tushuncha: hodim
@@ -1271,4 +1518,124 @@ export interface LoginResult {
   expires_at: string
   csrf: string
   user: AuthUser
+}
+
+/** Kartaga biriktirilgan SABAB HUJJATI (24-patch).
+ *
+ *  Baytlar bu yerda YO'Q va bo'lmaydi ham: ro'yxat faqat metadata
+ *  qaytaradi, fayl alohida so'rov bilan yuklab olinadi. */
+export interface OpportunityFile {
+  id: number
+  opportunity_id: number
+  fayl_nom: string
+  mime: string
+  hajm: number
+  sha256: string
+  izoh: string | null
+  created_by: string | null
+  created_at: string | null
+}
+
+/** "Yopilgan N kartadan M tasida sabab hujjati bor". */
+export interface FaylQamrov {
+  yopiq_n: number
+  fayli_bor_n: number
+  /** null = minimal namuna yig'ilmagan (10 dan kam) — foiz BERILMAYDI */
+  foiz: number | null
+  min_namuna: number
+}
+
+/** Chat — `umumiy` (butun kompaniya) yoki `opportunity` (bitta karta).
+ *
+ *  BU TENDER-AI DAGI AI CHATI EMAS: bu odam bilan odam yozishmasi. */
+export interface ErpChat {
+  id: number
+  turi: 'umumiy' | 'opportunity'
+  opportunity_id: Nullable<number>
+  title: Nullable<string>
+  /** karta yakunlangan -> faqat o'qish */
+  arxiv: boolean
+  oqilmagan: number
+  oxirgi_at: Nullable<string>
+  /** `umumiy` da har doim true (a'zolik virtual) */
+  azoman: boolean
+}
+
+export interface ErpChatMessage {
+  id: number
+  chat_id: number
+  author_id: Nullable<number>
+  author_name: string
+  /** true = tizim xabari (status o'zgardi, hodim qo'shildi...) */
+  tizim: boolean
+  /** o'chirilganda `null` — matn oddiy foydalanuvchiga BERILMAYDI */
+  text: Nullable<string>
+  ochirilgan: boolean
+  ochirdi: Nullable<string>
+  ochirish_izohi: Nullable<string>
+  reply_to_id: Nullable<number>
+  reply?: {
+    id: number
+    author_name: string
+    text: Nullable<string>
+    ochirilgan: boolean
+  }
+  created_at: Nullable<string>
+  edited_at: Nullable<string>
+  tahrirlangan: boolean
+}
+
+/** KARTA chatining sarlavhasi: qaysi tender, holati, mas'uli, muddati.
+ *  `umumiy` chatda `null` — u yerda karta yo'q. */
+export interface ErpChatKontekst {
+  opportunity_id: number
+  title: Nullable<string>
+  status: string
+  status_label: string
+  masul: Nullable<string>
+  customer_name: Nullable<string>
+  deadline_at: Nullable<string>
+}
+
+export interface ErpChatLenta {
+  chat: {
+    id: number
+    turi: string
+    opportunity_id: Nullable<number>
+    title: Nullable<string>
+    arxiv: boolean
+    azoman: boolean
+    kontekst: Nullable<ErpChatKontekst>
+  }
+  messages: ErpChatMessage[]
+  /** Eng eski yuklangan xabar — `before_id` uchun */
+  eng_eski_id: Nullable<number>
+  /** true = ESKIROQ xabarlar bor ("yana yuklash") */
+  yana: boolean
+}
+
+export interface ErpChatMember {
+  app_user_id: number
+  full_name: string
+  username: string
+  role: string
+  active: boolean
+  added_at: Nullable<string>
+  added_by_name: Nullable<string>
+}
+
+export interface ErpChatMembers {
+  chat_id: number
+  turi: string
+  /** true = a'zolik VIRTUAL (`umumiy`): qo'shish/chiqarish yo'q */
+  virtual: boolean
+  members: ErpChatMember[]
+}
+
+export interface ErpChatHistory {
+  id: number
+  amal: 'tahrir' | 'ochirish'
+  old_text: string
+  by_name: Nullable<string>
+  at: Nullable<string>
 }

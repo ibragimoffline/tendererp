@@ -199,6 +199,25 @@ def submit(opp_id: int, data: dict) -> Dict[str, Any]:
     if price is None:
         raise ErpError("Taklif narxi ko'rsatilmagan (smeta ham yo'q).")
 
+    # STATUS O'TISHI OLDINDAN tekshiriladi (24-patch).
+    #
+    # Pastda avval taklif YOZILADI, keyin `set_status` chaqiriladi. O'tish
+    # sharti faqat o'sha yerda tekshirilsa, `409` taklif qatori yozilgandan
+    # KEYIN chiqardi va u YETIM qolardi — taklif esa ataylab muzlatilgan,
+    # o'chirilmaydi. Ya'ni har rad etilgan urinish bazada axlat qoldirardi.
+    from api.erp.opportunity import KIRISH_SHARTI, STATUS_LABEL
+    hozir = (pkg.get("opportunity") or {}).get("status") or ""
+    # `submitted` ning O'ZI ham ruxsat: taklif xato bo'lsa YANGI VERSIYA
+    # qo'shiladi (4-bosqich qoidasi — topshirilgan taklif tahrirlanmaydi,
+    # o'rniga v2 yoziladi). U yerda status o'zgarmaydi, ya'ni `set_status`
+    # ham erta qaytadi.
+    ruxsat = (KIRISH_SHARTI.get("submitted") or set()) | {"submitted"}
+    if hozir and hozir not in ruxsat:
+        kutilgan = ", ".join(sorted(STATUS_LABEL[s] for s in ruxsat))
+        raise ErpError(
+            f"Topshirishdan oldin karta '{kutilgan}' holatida bo'lishi kerak "
+            f"(hozir: '{STATUS_LABEL.get(hozir, hozir)}').", 409)
+
     version = db.query_one(NEXT_VERSION_SQL, {"id": opp_id})["v"]
     row = db.execute_returning(SUB_INSERT_SQL, {
         "opportunity_id": opp_id, "version": version,

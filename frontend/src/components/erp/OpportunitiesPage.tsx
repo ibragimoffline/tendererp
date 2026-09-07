@@ -12,7 +12,7 @@ import OpportunityBoard from './OpportunityBoard'
 import OpportunityCard from './OpportunityCard'
 import OpportunityStats from './OpportunityStats'
 import OpportunityTable from './OpportunityTable'
-import { ALL, ErpError, toFilter, toSelect } from './erpShared'
+import { ALL, ErpError, can, toFilter, toSelect } from './erpShared'
 
 // "ISHDAGI TENDERLAR" bo'limi — Kanban / Jadval / Hisobot.
 //
@@ -24,10 +24,14 @@ import { ALL, ErpError, toFilter, toSelect } from './erpShared'
 
 type View = 'board' | 'table' | 'stats'
 
-const VIEWS: { key: View; label: string }[] = [
+// HISOBOT — KOMPANIYA ko'rsatkichi (voronka, hodimlar kesimi), ya'ni
+// `hisobot.kompaniya` huquqini talab qiladi va brokerda 403 qaytaradi.
+// Ilgari tab hammaga ko'rinardi: broker uni ochardi va bo'sh ekranda
+// xato ko'rardi. Ishlamaydigan tugma — yolg'on va'da (`erpShared.can`).
+const VIEWS: { key: View; label: string; amal?: string }[] = [
   { key: 'board', label: 'Kanban' },
   { key: 'table', label: 'Jadval' },
-  { key: 'stats', label: 'Hisobot' },
+  { key: 'stats', label: 'Hisobot', amal: 'hisobot.kompaniya' },
 ]
 
 interface OpportunitiesPageProps {
@@ -52,6 +56,11 @@ export default function OpportunitiesPage({ focusId, tenderWeb }: OpportunitiesP
   const [clientId, setClientId] = useState('')
   const [q, setQ] = useState('')
   const [openOnly, setOpenOnly] = useState(true)
+  // TAQSIMLANMAGAN: Tender-AI yo'naltirishi hodimni topa olmasa
+  // karta mas'ulsiz ochiladi (`api/erp/topshiriq.py`). Bunday
+  // karta hech kimning ro'yxatida ko'rinmaydi — menejer uni
+  // aynan shu filtr bilan topadi.
+  const [unassigned, setUnassigned] = useState(false)
 
   useEffect(() => { setOpenId(focusId ?? null) }, [focusId])
 
@@ -70,8 +79,9 @@ export default function OpportunitiesPage({ focusId, tenderWeb }: OpportunitiesP
       client_id: clientId || undefined,
       q: q || undefined,
       open_only: openOnly || undefined,
+      unassigned: unassigned || undefined,
     }).then(setItems).catch((e: Error) => setError(e.message))
-  }, [meta, status, brokerId, clientId, q, openOnly])
+  }, [meta, status, brokerId, clientId, q, openOnly, unassigned])
 
   // Qidiruvda har harfga so'rov yubormaymiz — 300 ms kutamiz.
   useEffect(() => {
@@ -105,7 +115,7 @@ export default function OpportunitiesPage({ focusId, tenderWeb }: OpportunitiesP
       {/* --- Ko'rinish almashtirgichi va filtrlar --- */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex gap-1">
-          {VIEWS.map((v) => (
+          {VIEWS.filter((v) => !v.amal || can(v.amal)).map((v) => (
             <Button key={v.key} size="sm"
               variant={view === v.key ? 'default' : 'outline'}
               onClick={() => setView(v.key)}>
@@ -162,6 +172,17 @@ export default function OpportunitiesPage({ focusId, tenderWeb }: OpportunitiesP
                 onChange={(e) => setOpenOnly(e.target.checked)} />
               faqat ochiq
             </label>
+
+            {/* Faqat kartani TAQSIMLAY oladigan odamga: brokerda
+                bu filtr bo'sh ro'yxat berardi (unga baribir faqat
+                o'ziniki ko'rinadi). */}
+            {can('karta.biriktirish') && (
+              <label className="flex cursor-pointer items-center gap-1.5 text-body">
+                <input type="checkbox" checked={unassigned}
+                  onChange={(e) => setUnassigned(e.target.checked)} />
+                taqsimlanmagan
+              </label>
+            )}
           </>
         )}
       </div>
@@ -193,6 +214,7 @@ export default function OpportunitiesPage({ focusId, tenderWeb }: OpportunitiesP
           onClose={() => setOpenId(null)}
           onChanged={replace}
           tenderWeb={tenderWeb}
+          meta={meta}
         />
       )}
     </div>

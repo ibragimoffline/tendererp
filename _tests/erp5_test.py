@@ -57,7 +57,6 @@ TEST_USER = {"id": 0, "username": "zztest", "full_name": "ZZTEST Sinov",
 def _auth_override(app):
     from api import main as _main
     app.dependency_overrides[_main.me] = lambda: TEST_USER
-    app.dependency_overrides[_main.manager] = lambda: TEST_USER
 
 _fail = 0
 _pass = 0
@@ -270,8 +269,9 @@ def test_db():
             r = c.get("/erp/analytics", params={"stuck_days": 14})
             eq("tahlil -> 200", r.status_code, 200)
             an = r.json()
-            eq("bosqichlar ro'yxati to'liq", len(an["stages"]), 9)
-            eq("voronka ro'yxati to'liq", len(an["funnel"]), 9)
+            # 24-patch: `ulgurmadik` qo'shildi -> 10 bosqich.
+            eq("bosqichlar ro'yxati to'liq", len(an["stages"]), 10)
+            eq("voronka ro'yxati to'liq", len(an["funnel"]), 10)
             check(isinstance(an["by_broker"], list), "broker kesimi bor")
             check(isinstance(an["stuck"], list), "qotib qolganlar ro'yxati bor")
             eq("stuck_days javobda", an["stuck_days"], 14)

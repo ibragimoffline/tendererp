@@ -206,6 +206,13 @@ LEFT JOIN erp.contract k    ON k.id = i.contract_id
 WHERE (%(status)s::text IS NULL OR i.status = %(status)s)
   AND (%(client_id)s::int IS NULL OR i.client_id = %(client_id)s)
   AND (%(opportunity_id)s::int IS NULL OR i.opportunity_id = %(opportunity_id)s)
+  -- EGALIK (api/erp/egalik.py): karta orqali; KARTASIZ faktura esa
+  -- mijoz orqali, aks holda broker o'zi chiqargan hujjatni ko'rmasdi.
+  AND (%(owner_broker_id)s::int IS NULL OR o.broker_id = %(owner_broker_id)s
+       OR (i.opportunity_id IS NULL AND EXISTS (
+             SELECT 1 FROM erp.opportunity oo
+              WHERE oo.client_id = i.client_id
+                AND oo.broker_id = %(owner_broker_id)s)))
 ORDER BY i.issued_at DESC NULLS FIRST, i.id DESC
 """
 
@@ -442,12 +449,14 @@ def shape(r: Dict[str, Any], *, lines=None, payments=None) -> Dict[str, Any]:
 # Amallar
 # ---------------------------------------------------------------------------
 def list_(status: Optional[str] = None, client_id: Optional[int] = None,
-          opportunity_id: Optional[int] = None) -> List[Dict[str, Any]]:
+          opportunity_id: Optional[int] = None,
+          owner_broker_id: Optional[int] = None) -> List[Dict[str, Any]]:
     _need_schema()
     if status and status not in STATUS_LABEL:
         raise ErpError("Noma'lum status.")
     rows = db.query(INV_LIST_SQL, {"status": status, "client_id": client_id,
-                                   "opportunity_id": opportunity_id})
+                                   "opportunity_id": opportunity_id,
+                                   "owner_broker_id": owner_broker_id})
     out = []
     for r in rows:
         lines = db.query(LINES_SQL, {"id": r["id"]})

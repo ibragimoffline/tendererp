@@ -74,9 +74,8 @@ export default function ProfitLine({ oppId }: { oppId: number }) {
 
       {!p.complete && (
         <p className="mt-1 text-caption text-soon-strong">
-          Hisob to'liq emas: {p.unknown_cost_moves} ta chiqimning tannarxi
-          noma'lum (katalogda narx ko'rsatilmagan). Ular tannarxga
-          qo'shilmadi — ya'ni haqiqiy foyda bundan kam.
+          Hisob to'liq emas: {p.unknown_cost_moves} ta chiqimda tannarx
+          yo'q (katalogda narx ko'rsatilmagan) — haqiqiy foyda bundan kam.
         </p>
       )}
     </section>

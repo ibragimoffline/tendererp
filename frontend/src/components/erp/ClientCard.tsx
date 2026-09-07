@@ -16,7 +16,7 @@ import type {
   ClientContactInput, ClientDocument, ClientDocumentInput, ClientFull,
   ClientInput, DocumentType, ImportResult,
 } from '@/types'
-import { ErpError } from './erpShared'
+import { ErpError, can } from './erpShared'
 
 // KORXONA PASSPORTI (drawer). `id === null` bo'lsa — yangi korxona yaratish.
 //
@@ -42,7 +42,7 @@ const FIELDS: { key: keyof ClientInput; label: string; wide?: boolean }[] = [
   { key: 'name', label: 'Korxona nomi', wide: true },
   { key: 'inn', label: 'INN (9 raqam)' },
   { key: 'oked', label: 'OKED' },
-  { key: 'legal_form', label: 'Tashkiliy shakl (MCHJ / AJ / YaTT)' },
+  { key: 'legal_form', label: 'Tashkiliy shakl (MCHJ, AJ…)' },
   { key: 'tax_mode', label: 'Soliq rejimi' },
   { key: 'address_legal', label: 'Yuridik manzil', wide: true },
   { key: 'address_actual', label: 'Faktik manzil', wide: true },
@@ -101,6 +101,10 @@ export default function ClientCard({ id, onClose, onSaved, onOpenOpportunity }: 
 
   const set = (patch: Partial<ClientInput>) => setForm((x) => ({ ...x, ...patch }))
 
+  //: Passportni yozish huquqi. Server ham tekshiradi (403) — bu yerda
+  //: faqat ko'rinish: yozib bo'lmaydigan formani to'ldirtirmaslik uchun.
+  const canEdit = can('mijoz.tahrirlash')
+
   return (
     <Sheet open onOpenChange={(o) => { if (!o) onClose() }}>
       <SheetContent side="right" closeLabel="Yopish"
@@ -156,6 +160,17 @@ export default function ClientCard({ id, onClose, onSaved, onOpenOpportunity }: 
                       Ariza uchun yetishmayapti: {c.missing.map(labelOf).join(', ')}
                     </div>
                   )}
+                  {/* HUQUQ YO'Q BO'LSA — MAYDONLAR QULFLANADI.
+                      Ilgari forma to'liq tahrirlanardi, lekin "Saqlash"
+                      tugmasi ko'rinmasdi: odam butun passportni
+                      to'ldirib, oynani yopardi va hammasi yo'qolardi.
+                      Endi sabab OLDINDAN aytiladi. */}
+                  {!canEdit && (
+                    <div className="mb-3 rounded-lg border bg-muted/40 px-3 py-2 text-body text-muted-foreground">
+                      Passportni tahrirlash — rahbar yoki menejer huquqi.
+                      Ma'lumot faqat ko'rish uchun ochiq.
+                    </div>
+                  )}
                   <div className="grid gap-3 sm:grid-cols-2">
                     {FIELDS.map((fl) => (
                       <div key={fl.key} className={fl.wide ? 'sm:col-span-2' : undefined}>
@@ -163,6 +178,8 @@ export default function ClientCard({ id, onClose, onSaved, onOpenOpportunity }: 
                           {fl.label}
                         </div>
                         <Input
+                          readOnly={!canEdit}
+                          className={canEdit ? undefined : 'cursor-not-allowed opacity-70'}
                           value={(form[fl.key] as string | null) ?? ''}
                           onChange={(e) => set({ [fl.key]: e.target.value || null } as Partial<ClientInput>)}
                         />
@@ -179,6 +196,7 @@ export default function ClientCard({ id, onClose, onSaved, onOpenOpportunity }: 
                           QQS to'lovchimi
                         </div>
                         <Select
+                          disabled={!canEdit}
                           value={form.vat_payer === true ? 'yes'
                             : form.vat_payer === false ? 'no' : 'unknown'}
                           onValueChange={(v) => set({
@@ -196,9 +214,10 @@ export default function ClientCard({ id, onClose, onSaved, onOpenOpportunity }: 
                       </div>
                       <div>
                         <div className="mb-1 text-caption font-semibold text-muted-foreground">
-                          Stavka (%) — faktura qatoriga sukut
+                          Stavka (%)
                         </div>
-                        <Input inputMode="decimal" disabled={form.vat_payer !== true}
+                        <Input inputMode="decimal"
+                          disabled={!canEdit || form.vat_payer !== true}
                           value={form.vat_rate ?? ''}
                           onChange={(e) => set({
                             vat_rate: e.target.value === '' ? null : Number(e.target.value),
@@ -207,14 +226,17 @@ export default function ClientCard({ id, onClose, onSaved, onOpenOpportunity }: 
                     </div>
 
                     <label className="flex cursor-pointer items-center gap-2 text-body sm:col-span-2">
-                      <input type="checkbox" checked={form.active ?? true}
+                      <input type="checkbox" disabled={!canEdit}
+                        checked={form.active ?? true}
                         onChange={(e) => set({ active: e.target.checked })} />
                       Faol (ro'yxatlarda ko'rinadi)
                     </label>
                   </div>
-                  <Button size="sm" className="mt-4" disabled={saving} onClick={save}>
-                    {saving ? 'Saqlanmoqda…' : 'Saqlash'}
-                  </Button>
+                  {canEdit && (
+                    <Button size="sm" className="mt-4" disabled={saving} onClick={save}>
+                      {saving ? 'Saqlanmoqda…' : 'Saqlash'}
+                    </Button>
+                  )}
                 </>
               )}
 
@@ -231,6 +253,11 @@ export default function ClientCard({ id, onClose, onSaved, onOpenOpportunity }: 
                     <Stat label="Ishda" v={c.summary.open_n} />
                     <Stat label="Yutilgan" v={c.summary.won_n} />
                     <Stat label="Yutqazilgan" v={c.summary.lost_n} />
+                    {/* RAD ETILGAN alohida: u `win_rate` maxrajiga
+                        kirmaydi (biz qatnashmadik — yutqazmadik), lekin
+                        ko'rsatilmasa "1 ta karta, yutish 100%" degan
+                        qator qayerdan kelgani tushunarsiz qolardi. */}
+                    <Stat label="Rad etilgan" v={c.summary.rejected_n ?? 0} />
                     <Stat label="Yutish foizi"
                       v={c.summary.win_rate == null ? '—' : `${c.summary.win_rate}%`} />
                     {/* Aralash valyutada summa BERILMAYDI (server `null`
@@ -251,7 +278,9 @@ export default function ClientCard({ id, onClose, onSaved, onOpenOpportunity }: 
                             {o.title || `#${o.tender_ref || o.tender_id}`}
                           </span>
                           <span className="text-caption text-muted-foreground">{o.broker_name || '—'}</span>
-                          <span className="text-caption">{o.status}</span>
+                          <span className="text-caption">
+                            {o.status_label || o.status}
+                          </span>
                           <span className="tabular text-caption">
                             {f.shortMoney(o.start_price, o.currency)}
                           </span>
@@ -260,7 +289,7 @@ export default function ClientCard({ id, onClose, onSaved, onOpenOpportunity }: 
                     ))}
                     {c.opportunities.length === 0 && (
                       <li className="py-4 text-center text-body text-muted-foreground">
-                        Bu korxona nomidan hali tender ishga olinmagan.
+                        Bu korxona nomidan karta yo'q.
                       </li>
                     )}
                   </ul>
@@ -327,10 +356,12 @@ function Contacts({ c, onChanged, onError }: {
             <span className="text-caption text-muted-foreground">{k.position || '—'}</span>
             <span className="tabular text-caption">{k.phone || ''}</span>
             <span className="text-caption">{k.email || ''}</span>
-            <button type="button" className="ml-auto text-caption text-urgent-strong hover:underline"
-              onClick={() => run(api.deleteContact(k.id))}>
-              o'chirish
-            </button>
+            {can('mijoz.aloqa') && (
+              <button type="button" className="ml-auto text-caption text-urgent-strong hover:underline"
+                onClick={() => run(api.deleteContact(k.id))}>
+                o'chirish
+              </button>
+            )}
           </li>
         ))}
         {c.contacts.length === 0 && (
@@ -338,11 +369,11 @@ function Contacts({ c, onChanged, onError }: {
         )}
       </ul>
 
-      {add === null ? (
+      {add === null ? (can('mijoz.aloqa') && (
         <Button variant="outline" size="sm" onClick={() => setAdd({ full_name: '' })}>
           <Icon name="plus" size={13} /> Aloqa shaxsi
         </Button>
-      ) : (
+      )) : (
         <div className="space-y-2 rounded-md border p-3">
           <div className="grid gap-2 sm:grid-cols-2">
             <Input autoFocus placeholder="Ism familiya" value={add.full_name}
@@ -403,8 +434,8 @@ function Documents({ c, onChanged, onError }: {
   return (
     <div className="space-y-2">
       <p className="text-caption text-muted-foreground">
-        Bu hujjatlar tender cheklistida shu mijoz nomidan qatnashilganda
-        tekshiriladi. Muddat bo'sh qoldirilsa — hujjat muddatsiz deb olinadi.
+        Cheklist shu hujjatlarga qarab tekshiradi. Muddat bo'sh — muddatsiz
+        deb olinadi.
       </p>
 
       <ImportBlock clientId={c.id} onDone={reload} onError={onError} />
@@ -419,10 +450,12 @@ function Documents({ c, onChanged, onError }: {
             <span className="tabular text-caption text-muted-foreground">
               {d.valid_until ? `gacha ${d.valid_until}` : 'muddatsiz'}
             </span>
-            <button type="button" className="ml-auto text-caption text-urgent-strong hover:underline"
-              onClick={() => remove(d)}>
-              o'chirish
-            </button>
+            {can('mijoz.hujjat') && (
+              <button type="button" className="ml-auto text-caption text-urgent-strong hover:underline"
+                onClick={() => remove(d)}>
+                o'chirish
+              </button>
+            )}
           </li>
         ))}
         {c.documents.length === 0 && (
@@ -430,14 +463,14 @@ function Documents({ c, onChanged, onError }: {
         )}
       </ul>
 
-      {add === null ? (
+      {add === null ? (can('mijoz.hujjat') && (
         <Button variant="outline" size="sm" onClick={() => setAdd(EMPTY_DOC)}>
           <Icon name="plus" size={13} /> Hujjat
         </Button>
-      ) : (
+      )) : (
         <div className="space-y-2 rounded-md border p-3">
           <div className="grid gap-2 sm:grid-cols-2">
-            <Select value={add.doc_type || undefined}
+            <Select value={add.doc_type || ''}
               onValueChange={(v) => setAdd({ ...add, doc_type: v })}>
               <SelectTrigger className="h-9 bg-card text-body">
                 <SelectValue placeholder="Hujjat turi" />
@@ -535,10 +568,17 @@ function ImportBlock({ clientId, onDone, onError }: {
             .catch((e) => onError((e as Error).message))}>
           .csv
         </button>
-        <label className="ml-auto inline-flex cursor-pointer items-center gap-1.5 rounded-md border bg-card px-3 py-1.5 text-body transition-colors hover:bg-accent">
+        {/* FAYL MAYDONI `hidden` EMAS, `sr-only`.
+            `hidden` — `display: none`, ya'ni element fokus OLMAYDI: import
+            klaviatura bilan umuman ochilmasdi, faqat sichqon bilan.
+            `sr-only` esa uni ko'zdan yashiradi, lekin tab tartibida
+            qoldiradi. Fokus halqasi yorliqning o'ziga chiziladi
+            (`focus-within`) — aks holda halqa ko'rinmas elementga
+            tushib, hech narsa ko'rinmasdi. */}
+        <label className="ml-auto inline-flex min-h-9 max-sm:min-h-10 cursor-pointer items-center gap-1.5 rounded-md border bg-card px-3 py-1.5 text-body transition-colors hover:bg-accent focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
           <Icon name="plus" size={13} />
           {busy ? 'Tekshirilmoqda…' : "To'ldirilgan faylni yuklash"}
-          <input type="file" className="hidden" accept=".xlsx,.csv"
+          <input type="file" className="sr-only" accept=".xlsx,.csv"
             onChange={(e) => pick(e.target.files?.[0] ?? null)} />
         </label>
       </div>

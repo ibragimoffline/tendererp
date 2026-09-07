@@ -58,7 +58,6 @@ TEST_USER = {"id": 0, "username": "zztest", "full_name": "ZZTEST Sinov",
 def _auth_override(app):
     from api import main as _main
     app.dependency_overrides[_main.me] = lambda: TEST_USER
-    app.dependency_overrides[_main.manager] = lambda: TEST_USER
 
 
 _fail = 0
@@ -369,14 +368,15 @@ def test_db():
                    float(bal["qty"]) - float(bal["reserved"]))
 
                 # 3) Topshirilganda USHLAB TURILADI.
-                O.set_status(oid, "submitted", MARK, MARK)
+                for st in FIX.yol("submitted"):
+                    O.set_status(oid, st, MARK, MARK)
                 eq("topshirilgach ham band (farq)",
                    float(db.query_one(S.AVAILABLE_SQL,
                                       {"id": pid})["reserved"]) - res0,
                    30.0)
 
                 # 4) YUTILDI -> chiqimga aylanadi.
-                res = O.set_status(oid, "won", MARK, MARK)
+                res = O.set_status(oid, "won", MARK, MARK)   # submitted dan
                 eq("sarflandi", (res.get("stock") or {}).get("consumed"), 1)
                 bal = db.query_one(S.AVAILABLE_SQL, {"id": pid})
                 eq("qoldiq kamaydi", float(bal["qty"]), start - 30)

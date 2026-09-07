@@ -16,3 +16,12 @@ logs/
 
 # Muhit fayllari — SIR. Faqat namuna kuzatiladi.
 deploy/env/*.env
+
+# Agent vositalarining sozlamalari - kod emas, mashinaga xos
+.claude/
+.agents/
+skills-lock.json
+
+# O'lchov natijalari (olchov.py) - MA'LUMOT, kod emas. Har o'rnatmada
+# o'z raqamlari bo'ladi va ular birlashtirilmaydi.
+_olchov/
